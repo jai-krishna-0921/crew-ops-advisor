@@ -2260,6 +2260,7 @@ class Tools:
         pairing_id: str | None = None,
         flight_numbers: list[str] | None = None,
         for_crew_id: str | None = None,
+        registration: str | None = None,
         role: str | None = None,
         on_date: DateType | None = None,
         exclude_crew_ids: list[str] | None = None,
@@ -2271,17 +2272,44 @@ class Tools:
             "pairing_id": pairing_id,
             "flight_numbers": flight_numbers,
             "for_crew_id": for_crew_id,
+            "registration": registration,
             "role": role,
             "on_date": on_date,
             "exclude_crew_ids": exclude_crew_ids,
             "max_options": max_options,
             "include_rejected": include_rejected,
         }
+
+        # A controller names the metal: "cover the VT-DXF First Officer on
+        # 20 Sep". Nothing bridged a tail to a pairing, so questions phrased
+        # that way arrived here with nothing to cover and were declined.
+        if registration and not pairing_id and not flight_numbers:
+            matches = self._pairings_for_registration_on(registration, on_date)
+            if not matches:
+                when = f" on {on_date}" if on_date else ""
+                return error_envelope(
+                    "find_cover_options",
+                    args,
+                    f"{registration} flies no pairing{when}.",
+                    timer=timer,
+                )
+            if len(matches) > 1 and on_date is None:
+                return error_envelope(
+                    "find_cover_options",
+                    args,
+                    f"{registration} flies {len(matches)} pairings "
+                    f"({', '.join(matches)}). Name a date to pick one.",
+                    timer=timer,
+                )
+            pairing_id = matches[0]
+            args["pairing_id"] = pairing_id
+
         if not pairing_id and not flight_numbers and not for_crew_id:
             return error_envelope(
                 "find_cover_options",
                 args,
-                "Name a pairing_id, a set of flight_numbers, or a for_crew_id to cover.",
+                "Name a pairing_id, a set of flight_numbers, a for_crew_id, or a "
+                "registration to cover.",
                 timer=timer,
             )
         forbid = list(exclude_crew_ids or [])
@@ -3487,6 +3515,24 @@ class Tools:
             "Name a pairing_id, or flight_numbers with a date, so the assignment "
             "is unambiguous."
         )
+
+    def _pairings_for_registration_on(
+        self, registration: str, on_date: DateType | None
+    ) -> list[str]:
+        """The pairings an aircraft flies, optionally narrowed to one date.
+
+        A controller names the metal: "the VT-DXF First Officer on 20 Sep",
+        "both A320 captains (VT-DXA and VT-DXB) are sick". Nothing bridged a
+        tail to a pairing, so every one of those questions reached
+        `find_cover_options` with no pairing, no flights and no crew, and was
+        declined. `pairing.aircraft` carries the registration, so the bridge is
+        a scan over 39 pairings.
+        """
+        return [
+            pairing.pairing_id
+            for pairing in self.world.pairings_for_aircraft(registration)
+            if on_date is None or any(day.date == on_date for day in pairing.days)
+        ]
 
     def _pairing_for_crew_on(self, crew_id: str, on_date: DateType) -> str | None:
         """The pairing this crew member holds on a given date, if any.

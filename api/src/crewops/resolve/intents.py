@@ -200,7 +200,7 @@ INTENTS: Final[tuple[Intent, ...]] = (
             r"\bnow illegal under\b",
             r"\bcompliance flags?\b",
             r"\b(?:certificate|certification|licence|license|medical|recurrent[_ ]training)\b"
-            r".*\bexpired\b",
+            r".*\b(?:expired|lapsed)\b",
         ),
         requires=("crew_id",),
         template="recommendation",
@@ -247,6 +247,14 @@ INTENTS: Final[tuple[Intent, ...]] = (
                         else {}
                     ),
                     **({"exclude_crew_ids": list(e.crew_ids)} if e.crew_ids else {}),
+                    # Deliberately NOT bridging a bare tail to a pairing here.
+                    # The tool can (`registration`), and routing on it
+                    # automatically turned two clean abstentions into two wrong
+                    # answers, one of them a verdict inversion on Q37: a tail
+                    # flies several pairings across the week and picking the
+                    # one on the first date named is a guess. The agent may
+                    # pass `registration` when it has actually established
+                    # which duty is meant. The offline path abstains instead.
                     "include_rejected": True,
                 },
             )

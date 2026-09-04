@@ -378,6 +378,7 @@ class ToolSurface(Protocol):
         pairing_id: str | None = None,
         flight_numbers: list[str] | None = None,
         for_crew_id: str | None = None,
+        registration: str | None = None,
         role: str | None = None,
         on_date: date | None = None,
         exclude_crew_ids: list[str] | None = None,

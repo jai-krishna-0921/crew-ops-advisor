@@ -282,6 +282,12 @@ class FindCoverOptionsArgs(BaseModel):
     on_date: date | None = Field(
         default=None, description="Which day of the roster the gap falls on"
     )
+    registration: str | None = Field(
+        default=None,
+        description="Aircraft tail, e.g. VT-DXF. Resolves to the pairing that "
+        "tail flies on on_date, for questions that name the metal rather than "
+        "the crew or the pairing.",
+    )
     exclude_crew_ids: list[str] | None = Field(
         default=None, description="Usually the crew member who is out"
     )
