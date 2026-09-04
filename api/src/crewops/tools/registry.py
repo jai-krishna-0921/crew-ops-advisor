@@ -122,6 +122,21 @@ RULE_EXAMPLES: dict[str, str] = {
     ),
 }
 
+#: The correct `FactUnit` for each rule parameter, keyed by the name it
+#: carries in rules.json. `window_days` is a day count, not a bare "count":
+#: getting this wrong does not break grounding (the verifier matches the
+#: numeric value regardless of unit) but it does misdescribe the figure to
+#: whatever reads `Fact.unit` directly, so it is worth getting right.
+RULE_PARAM_UNITS: dict[str, FactUnit] = {
+    "base_fdp_hours": "hours",
+    "reduction_per_extra_sector_hours": "hours",
+    "free_sectors": "count",
+    "max_duty_hours": "hours",
+    "window_days": "days",
+    "max_flight_hours": "hours",
+    "min_rest_hours": "hours",
+}
+
 RuleComparison: dict[str, str] = {
     "RULE-FDP-01": "breach when the duty period is strictly greater than the limit",
     "RULE-DUTY-02": "breach when the 7 day total is strictly greater than 60 hours",
@@ -2444,6 +2459,50 @@ class Tools:
             timer=timer,
         )
 
+    def _rulebook_facts(self) -> list[Fact]:
+        """Every rule id, the rule count and every threshold, as Facts.
+
+        Both `get_world_summary` and `explain_rule` surface rulebook content
+        in prose (a rule id named for contrast, the total rule count, a
+        window length quoted from a rule's own text), and any of that can end
+        up in a rendered answer regardless of which single rule a caller
+        happened to ask about. Rather than ground only the one rule a call
+        named, this covers the whole shipped rulebook so nothing about it can
+        be an unattested figure. Rule content read from rules.json is
+        Provenance.DATASET, never computed: nothing here is arithmetic.
+        """
+        rulebook = self.world.rules
+        facts: list[Fact] = [
+            dataset_fact(
+                "rulebook.count",
+                "Number of rules",
+                len(rulebook.rules),
+                "count",
+                "rules.json#rules",
+            )
+        ]
+        for rule in rulebook.rules:
+            facts.append(
+                dataset_fact(
+                    f"rulebook.{rule.rule_id}.id",
+                    "Rule id",
+                    rule.rule_id,
+                    "rule_id",
+                    f"rules.json#{rule.rule_id}",
+                )
+            )
+            for name, value in (rule.params or {}).items():
+                facts.append(
+                    dataset_fact(
+                        f"rulebook.{rule.rule_id}.param.{name}",
+                        f"{rule.rule_id} {name.replace('_', ' ')}",
+                        value,
+                        RULE_PARAM_UNITS.get(name, "count"),
+                        f"rules.json#{rule.rule_id}/params/{name}",
+                    )
+                )
+        return facts
+
     def get_world_summary(self) -> ToolEnvelope:
         timer = ToolTimer()
         first, last = self.world.date_range
@@ -2496,6 +2555,10 @@ class Tools:
                 "duty_clocks.json#as_of_utc",
             )
         )
+        # The coverage note names every rule and the total rule count, so the
+        # whole rulebook has to be grounded here too, not just the dataset
+        # shape figures above.
+        facts.extend(self._rulebook_facts())
         return ok_envelope(
             "get_world_summary",
             {},
@@ -2540,11 +2603,16 @@ class Tools:
                     f"{rule_id}.param.{name}",
                     name.replace("_", " "),
                     value,
-                    "hours" if "hour" in name else "count",
+                    RULE_PARAM_UNITS.get(name, "count"),
                     f"rules.json#{rule_id}/params/{name}",
                 )
                 for name, value in params.items()
             ],
+            # The worked example and the comparison text both name other
+            # rules and other thresholds for contrast (RULE-FLT-03's 28 day
+            # window against this rule's 7 day one, the total rule count),
+            # so the whole rulebook is grounded here too, not just this rule.
+            *self._rulebook_facts(),
         ]
         return ok_envelope(
             "explain_rule",
