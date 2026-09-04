@@ -23,7 +23,7 @@ export function Pill({
     <span
       title={title}
       className={cx(
-        "inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-2xs font-semibold tracking-wide uppercase",
+        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold tracking-wider uppercase",
         TONE[tone].chip,
         className,
       )}
@@ -33,7 +33,20 @@ export function Pill({
   );
 }
 
-/** A monospace identifier. Crew ids, flight numbers, pairing ids, rule ids. */
+/**
+ * An identifier: a crew id, a flight number, a pairing, a rule id.
+ *
+ * THIS USED TO BE A MONOSPACE CHIP with a tinted ground and a ring, and it
+ * appears several hundred times across an answer. At that count it was not
+ * marking identifiers, it was tiling the page with small grey rectangles, and
+ * the monospace made every one of them read as a code sample.
+ *
+ * What the treatment actually has to do is make `C-3310` read as a token
+ * rather than as a word, so it is not skimmed as prose and cannot be misread
+ * as `C-3301`. Weight, tabular figures and a hair of tracking do that inside
+ * the body face, and the identifier then sits in the sentence it belongs to
+ * instead of interrupting it.
+ */
 export function Token({
   children,
   className,
@@ -44,16 +57,21 @@ export function Token({
   title?: string;
 }) {
   return (
-    <span
-      title={title}
-      className={cx(
-        "num rounded-xs bg-inset px-1 py-px text-sm text-ink ring-1 ring-line",
-        className,
-      )}
-    >
+    <span title={title} className={cx("ident", className)}>
       {children}
     </span>
   );
+}
+
+/** A genuine machine string: a tool name, a payload, a rule's arithmetic. */
+export function Mono({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <span className={cx("mono", className)}>{children}</span>;
 }
 
 /* ----------------------------------------------------------------- panel */
@@ -68,17 +86,20 @@ export function Panel({
   as?: "section" | "div" | "article" | "aside";
 }) {
   return (
-    <Tag
-      className={cx(
-        "rounded-md bg-surface hairline overflow-hidden",
-        className,
-      )}
-    >
+    <Tag className={cx("overflow-hidden rounded-md bg-surface hairline", className)}>
       {children}
     </Tag>
   );
 }
 
+/**
+ * A panel's heading.
+ *
+ * No rule under it and no tinted ground behind it. The space below the title
+ * separates it from the body perfectly well, and a filled bar with a line
+ * under it is the single most reliable way to make a panel look like a
+ * table widget from 2011.
+ */
 export function PanelHead({
   title,
   meta,
@@ -91,7 +112,7 @@ export function PanelHead({
   icon?: ReactNode;
 }) {
   return (
-    <header className="flex items-center gap-2 border-b border-line bg-inset/60 px-3 py-2">
+    <header className="flex items-center gap-2 px-4 pt-3 pb-1.5">
       {icon ? <span className="text-ink-3">{icon}</span> : null}
       <h3 className="text-base font-semibold text-ink">{title}</h3>
       {meta ? <span className="text-xs text-ink-3">{meta}</span> : null}
@@ -118,20 +139,20 @@ export function Disclosure({
   const [open, setOpen] = useState(defaultOpen);
   const id = useId();
   return (
-    <div className="rounded-sm">
+    <div>
       <button
         type="button"
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-base text-ink-2 transition-colors duration-100 hover:bg-hover hover:text-ink"
+        className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-base text-ink-2 hover:bg-hover hover:text-ink"
       >
         <CaretRightIcon
           size={12}
           weight="bold"
           aria-hidden
           className={cx(
-            "shrink-0 transition-transform duration-150 ease-out-quint",
+            "shrink-0 transition-transform duration-200 ease-out-quint",
             open && "rotate-90",
           )}
         />
@@ -139,8 +160,8 @@ export function Disclosure({
         {count !== undefined ? (
           <span
             className={cx(
-              "num ml-1 rounded-xs px-1 text-2xs",
-              tone ? TONE[tone].chip : "bg-inset text-ink-3 ring-1 ring-line",
+              "num ml-1 rounded-full px-1.5 text-2xs font-semibold",
+              tone ? TONE[tone].chip : "bg-na-tint text-ink-3",
             )}
           >
             {count}
@@ -154,7 +175,7 @@ export function Disclosure({
   );
 }
 
-/* ----------------------------------------------------------- segmented */
+/* ------------------------------------------------------------- segmented */
 
 export function Segmented<T extends string>({
   options,
@@ -171,7 +192,7 @@ export function Segmented<T extends string>({
     <div
       role="tablist"
       aria-label={label}
-      className="inline-flex items-center gap-0.5 rounded-sm bg-inset p-0.5 ring-1 ring-line"
+      className="inline-flex items-center gap-0.5 rounded-full bg-inset p-0.5"
     >
       {options.map((option) => {
         const active = option.value === value;
@@ -183,10 +204,8 @@ export function Segmented<T extends string>({
             type="button"
             onClick={() => onChange(option.value)}
             className={cx(
-              "rounded-xs px-2 py-1 text-xs font-medium transition-colors duration-100",
-              active
-                ? "bg-surface text-ink hairline"
-                : "text-ink-3 hover:text-ink-2",
+              "rounded-full px-2.5 py-1 text-xs font-medium",
+              active ? "bg-surface text-ink hairline" : "text-ink-3 hover:text-ink-2",
             )}
           >
             {option.label}
@@ -200,7 +219,7 @@ export function Segmented<T extends string>({
   );
 }
 
-/* --------------------------------------------------------------- gauge */
+/* ----------------------------------------------------------------- gauge */
 
 /**
  * Margin against a limit, drawn as a signed bar around a zero line.
@@ -226,30 +245,36 @@ export function MarginGauge({
   const over = margin < 0;
   return (
     <div
-      className="flex h-1.5 w-full items-stretch overflow-hidden rounded-xs bg-inset ring-1 ring-line-soft"
+      className="flex h-1.5 w-full items-stretch overflow-hidden rounded-full bg-inset"
       role="img"
       aria-label={label}
     >
       <div className="flex w-1/2 justify-end">
         {over ? (
-          <span className={cx("block h-full rounded-l-xs", TONE[tone].fill)} style={{ width }} />
+          <span
+            className={cx("block h-full rounded-l-full", TONE[tone].fill)}
+            style={{ width }}
+          />
         ) : null}
       </div>
       <span className="w-px shrink-0 bg-line-strong" aria-hidden />
       <div className="flex w-1/2 justify-start">
         {!over ? (
-          <span className={cx("block h-full rounded-r-xs", TONE[tone].fill)} style={{ width }} />
+          <span
+            className={cx("block h-full rounded-r-full", TONE[tone].fill)}
+            style={{ width }}
+          />
         ) : null}
       </div>
     </div>
   );
 }
 
-/* ----------------------------------------------------------------- misc */
+/* ------------------------------------------------------------------ misc */
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="rounded-xs bg-inset px-1 py-px text-2xs text-ink-3 ring-1 ring-line">
+    <kbd className="rounded-xs bg-inset px-1.5 py-px text-2xs text-ink-3">
       {children}
     </kbd>
   );
@@ -276,10 +301,8 @@ export function IconButton({
       aria-pressed={active}
       onClick={onClick}
       className={cx(
-        "inline-flex h-7 w-7 items-center justify-center rounded-sm transition-colors duration-100",
-        active
-          ? "bg-accent-tint text-accent"
-          : "text-ink-3 hover:bg-hover hover:text-ink",
+        "inline-flex h-8 w-8 items-center justify-center rounded-full",
+        active ? "bg-accent-tint text-accent-ink" : "text-ink-3 hover:bg-hover hover:text-ink",
         className,
       )}
     >
@@ -298,7 +321,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-start gap-2 rounded-md border border-dashed border-line-strong px-4 py-6">
+    <div className="flex flex-col items-start gap-2 rounded-md bg-inset px-4 py-6">
       <p className="text-base font-medium text-ink-2">{title}</p>
       <p className="max-w-prose text-base text-ink-3">{detail}</p>
       {action}
@@ -307,12 +330,7 @@ export function EmptyState({
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return (
-    <div
-      aria-hidden
-      className={cx("provisional h-3 rounded-xs bg-inset", className)}
-    />
-  );
+  return <div aria-hidden className={cx("provisional h-3 rounded-xs bg-inset", className)} />;
 }
 
 /** Section eyebrow. Used only for column groups and panel sub headings. */

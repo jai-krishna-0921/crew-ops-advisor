@@ -13,16 +13,33 @@ import { ArrowRightIcon, WarningIcon } from "@phosphor-icons/react/dist/ssr";
 
 import type { Reply } from "@/lib/contracts";
 import { collectFacts } from "@/lib/fact-link";
-import { latency, MODE_LABEL, MODE_NOTE } from "@/lib/format";
 import { AbstentionCard } from "@/components/answer/abstention";
 import { RecommendationView } from "@/components/answer/cover-options";
 import { DataTable } from "@/components/answer/data-table";
 import { Markdown } from "@/components/answer/markdown";
 import { ImpactReportView } from "@/components/answer/impact-report";
 import { RuleTraceCard } from "@/components/answer/rule-trace";
-import { VerificationBadge, VerificationPanel } from "@/components/answer/verification";
-import { Eyebrow, Pill } from "@/components/ui/primitives";
-import { TIER_CHIP } from "@/components/ui/tone";
+import { VerificationPanel } from "@/components/answer/verification";
+import { Disclosure, Eyebrow } from "@/components/ui/primitives";
+
+/** Beyond this many rows, the working is a wall and folds itself away. */
+const TRACE_WALL = 8;
+
+function TraceList({ traces }: { traces: Reply["rule_traces"] }) {
+  return (
+    <div>
+      {traces.map((trace, index) => (
+        // Traces from every candidate land in one flat list, so rule id plus
+        // date repeats. Keep the index in the key or React omits rows that
+        // differ only by which crew member they describe.
+        <RuleTraceCard
+          key={`${trace.rule_id}-${trace.duty_date ?? "any"}-${index}`}
+          trace={trace}
+        />
+      ))}
+    </div>
+  );
+}
 
 export function AnswerBody({
   reply,
@@ -37,34 +54,14 @@ export function AnswerBody({
   );
   const failed = reply.verification.status === "rejected";
 
+  const traces = reply.rule_traces;
+  const showTraces = traces.length > 0 && !reply.recommendation;
+
   return (
     <div className="space-y-4">
-      <header className="space-y-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {reply.tier ? (
-            <span
-              className={`rounded-sm px-1.5 py-0.5 text-2xs font-semibold tracking-wide uppercase ${TIER_CHIP[reply.tier]}`}
-            >
-              Tier {reply.tier}
-            </span>
-          ) : null}
-          <Pill tone="na" title={MODE_NOTE[reply.mode]}>
-            {MODE_LABEL[reply.mode]}
-          </Pill>
-          <VerificationBadge report={reply.verification} />
-          <span className="num text-xs text-ink-3">
-            {latency(reply.timings.total_ms)} · {reply.timings.tool_calls} tool
-            {reply.timings.tool_calls === 1 ? "" : "s"} · {reply.timings.model_calls}{" "}
-            model call{reply.timings.model_calls === 1 ? "" : "s"}
-          </span>
-        </div>
-
-        {reply.headline ? (
-          <h2 className="max-w-[62ch] text-xl leading-snug font-semibold text-ink">
-            {reply.headline}
-          </h2>
-        ) : null}
-      </header>
+      {reply.headline ? (
+        <h2 className="macro max-w-[52ch] text-xl text-ink">{reply.headline}</h2>
+      ) : null}
 
       {reply.text ? <Markdown text={reply.text} facts={facts} /> : null}
 
@@ -77,23 +74,6 @@ export function AnswerBody({
       ) : null}
 
       {failed ? <VerificationPanel report={reply.verification} /> : null}
-
-      {reply.rule_traces.length > 0 ? (
-        <section aria-label="Rule traces" className="space-y-1.5">
-          <Eyebrow>Rules evaluated</Eyebrow>
-          <div className="divide-y divide-line-soft">
-            {reply.rule_traces.map((trace, index) => (
-              // Traces from every candidate land in one flat list, so rule id
-              // plus date repeats. Keep the index in the key or React omits
-              // rows that differ only by which crew member they describe.
-              <RuleTraceCard
-                key={`${trace.rule_id}-${trace.duty_date ?? "any"}-${index}`}
-                trace={trace}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
 
       {reply.tables.map((table) => (
         <DataTable key={table.title} table={table} />
@@ -110,6 +90,28 @@ export function AnswerBody({
           ) : null}
           <RecommendationView recommendation={reply.recommendation} />
         </>
+      ) : null}
+
+      {/* THE WORKING GOES UNDER THE ANSWER, NOT OVER IT. `rule_traces` is
+          every trace from every candidate flattened into one list, so a
+          ranked recommendation over twenty candidates put roughly two hundred
+          rule rows between the headline and the option a controller is
+          supposed to act on. Explainability was never the problem; ordering
+          was. Each option already carries its own legality report, so when
+          there is a recommendation this list is a duplicate and is dropped
+          outright. Otherwise it stays, and folds itself away once it is long
+          enough to be a wall. */}
+      {showTraces ? (
+        traces.length > TRACE_WALL ? (
+          <Disclosure summary="Every rule evaluated" count={traces.length}>
+            <TraceList traces={traces} />
+          </Disclosure>
+        ) : (
+          <section aria-label="Rule traces" className="space-y-1.5">
+            <Eyebrow>Rules evaluated</Eyebrow>
+            <TraceList traces={traces} />
+          </section>
+        )
       ) : null}
 
       {reply.caveats.length > 0 ? (

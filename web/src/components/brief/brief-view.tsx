@@ -119,11 +119,11 @@ export function BriefView() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <div className="anim-fade-up mx-auto max-w-5xl px-6 pt-10 pb-14 sm:px-10">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <Eyebrow>Proactive watchlist</Eyebrow>
-            <h1 className="mt-1 text-xl font-semibold text-ink">
+            <h1 className="mt-1 text-2xl font-medium text-ink">
               Morning brief, {longDate(date)}
             </h1>
             {watchlist ? (
@@ -144,7 +144,7 @@ export function BriefView() {
             <select
               value={date}
               onChange={(event) => setDate(event.target.value)}
-              className="num rounded-sm bg-inset px-2 py-1 text-base text-ink ring-1 ring-line outline-none"
+              className="num rounded-sm bg-inset px-2 py-1 text-base text-ink outline-none"
             >
               {DATES.map((value) => (
                 <option key={value} value={value}>
@@ -249,7 +249,7 @@ function AlertRow({ alert }: { alert: Alert }) {
       </p>
 
       {alert.suggested_question ? (
-        <div className="border-t border-line-soft px-3 py-2">
+        <div className="px-3 py-2">
           <Link
             href={`/?q=${encodeURIComponent(alert.suggested_question)}`}
             className="group inline-flex items-center gap-1.5 text-base text-accent"

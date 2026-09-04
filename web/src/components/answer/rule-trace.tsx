@@ -121,7 +121,7 @@ export function RuleTraceCard({
           <GroundedText text={trace.arithmetic} facts={trace.inputs} />
         </p>
         {trace.note && !compact ? (
-          <p className="mt-1.5 border-l-2 border-line-strong pl-2 text-xs text-ink-3">
+          <p className="mt-2 rounded-sm bg-inset px-2 py-1.5 text-xs text-ink-3">
             {trace.note}
           </p>
         ) : null}
@@ -176,7 +176,7 @@ export function DayLegalityBlock({ day }: { day: DayLegality }) {
             : ", none breached"}
         </span>
       </div>
-      <div className="divide-y divide-line-soft">
+      <div>
         {day.traces.map((trace, index) => (
           // The index is part of the key because one turn flattens the traces
           // of every candidate into one list, so a rule id and a date together

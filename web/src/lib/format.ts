@@ -271,6 +271,42 @@ export function joinParts(parts: (string | null | undefined)[]): string {
 }
 
 /** "3 flights" / "1 flight". Pluralisation, not counting. */
+/**
+ * A timestamp as an unambiguous instant.
+ *
+ * ECMAScript parses a date-time with no offset on it as LOCAL time. The API
+ * now always sends the offset, and this is the belt to that braces: a value
+ * that predates the fix, or one that reaches here from storage, still resolves
+ * as the UTC it has always been rather than as whatever zone the reader
+ * happens to be in.
+ */
+function asInstant(iso: string): string {
+  const zoned = /(?:Z|[+-]\d{2}:?\d{2})$/.test(iso);
+  return zoned ? iso : `${iso}Z`;
+}
+
+/**
+ * Coarse relative time, for a thread list.
+ *
+ * Deliberately coarse. "15h ago" is the resolution somebody scanning their own
+ * conversations needs, and a live-updating minute counter on a list of twenty
+ * rows is twenty re-renders a minute for information nobody reads.
+ */
+export function ago(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const then = Date.parse(asInstant(iso));
+  if (Number.isNaN(then)) return "";
+  const seconds = Math.max(0, (Date.now() - then) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return shortDate(iso);
+}
+
 export function plural(n: number, one: string, many = `${one}s`): string {
   return `${grouped(n)} ${n === 1 ? one : many}`;
 }

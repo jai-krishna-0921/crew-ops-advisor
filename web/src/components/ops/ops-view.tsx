@@ -119,10 +119,10 @@ export function OpsView() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <div className="anim-fade-up mx-auto max-w-5xl px-6 pt-10 pb-14 sm:px-10">
         <header>
           <Eyebrow>Deterministic panels</Eyebrow>
-          <h1 className="mt-1 text-xl font-semibold text-ink">Operations</h1>
+          <h1 className="mt-1 text-2xl font-medium text-ink">Operations</h1>
           <p className="mt-1 max-w-[72ch] text-md text-ink-2">
             Nothing on this page calls a language model. These routes are the
             engine the agent reaches through, exposed directly so the rules can
@@ -230,7 +230,7 @@ function RulesPanel() {
       </p>
       {rules.map((rule) => (
         <article key={rule.rule_id} className="rounded-md bg-surface hairline">
-          <header className="flex flex-wrap items-center gap-2 border-b border-line-soft px-3 py-2">
+          <header className="flex flex-wrap items-center gap-2 px-3 py-2">
             <Token>{rule.rule_id}</Token>
             <h2 className="text-md font-medium text-ink">{rule.title}</h2>
             {rule.limit !== null && rule.limit !== undefined ? (
@@ -241,7 +241,7 @@ function RulesPanel() {
           </header>
           <p className="px-3 py-2 text-base text-ink">{rule.constraint}</p>
           {rule.detail ? (
-            <p className="max-w-[72ch] whitespace-pre-line border-t border-line-soft px-3 py-2 text-base leading-relaxed text-ink-2">
+            <p className="max-w-[72ch] whitespace-pre-line px-3 py-2 text-base leading-relaxed text-ink-2">
               {rule.detail}
             </p>
           ) : null}
@@ -284,7 +284,7 @@ function LegalityPanel() {
             <select
               value={crewId}
               onChange={(event) => setCrewId(event.target.value)}
-              className="num w-72 rounded-sm bg-inset px-2 py-1 text-base text-ink ring-1 ring-line outline-none"
+              className="num w-72 rounded-sm bg-inset px-2 py-1 text-base text-ink outline-none"
             >
               {CREW.map((crew) => (
                 <option key={crew.id} value={crew.id}>
@@ -297,7 +297,7 @@ function LegalityPanel() {
             <input
               value={assignment}
               onChange={(event) => setAssignment(event.target.value)}
-              className="num w-32 rounded-sm bg-inset px-2 py-1 text-base text-ink ring-1 ring-line outline-none"
+              className="num w-32 rounded-sm bg-inset px-2 py-1 text-base text-ink outline-none"
             />
           </Field>
           <button
@@ -366,7 +366,7 @@ function CoverPanel() {
             <input
               value={pairing}
               onChange={(event) => setPairing(event.target.value)}
-              className="num w-32 rounded-sm bg-inset px-2 py-1 text-base text-ink ring-1 ring-line outline-none"
+              className="num w-32 rounded-sm bg-inset px-2 py-1 text-base text-ink outline-none"
             />
           </Field>
           <button
@@ -437,7 +437,7 @@ function SimulatePanel() {
             <input
               value={crewId}
               onChange={(event) => setCrewId(event.target.value)}
-              className="num w-32 rounded-sm bg-inset px-2 py-1 text-base text-ink ring-1 ring-line outline-none"
+              className="num w-32 rounded-sm bg-inset px-2 py-1 text-base text-ink outline-none"
             />
           </Field>
           <Field label="From date">
@@ -445,7 +445,7 @@ function SimulatePanel() {
               type="date"
               value={fromDate}
               onChange={(event) => setFromDate(event.target.value)}
-              className="num rounded-sm bg-inset px-2 py-1 text-base text-ink ring-1 ring-line outline-none"
+              className="num rounded-sm bg-inset px-2 py-1 text-base text-ink outline-none"
             />
           </Field>
           <button

@@ -35,7 +35,18 @@ Mode = Literal["agent", "deterministic"]
 
 
 def _utcnow() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
+    """Now, in UTC, WITH the zone left on it.
+
+    This used to strip the tzinfo, which made every timestamp this system
+    emits serialise as a bare `2026-09-04T10:25:57`. ECMAScript parses a
+    date-time with no offset as LOCAL time, so a browser outside UTC read
+    every thread timestamp hours early: the conversation list said "5h ago"
+    about a conversation created one second before. The stored value was
+    never wrong. The wire format threw the zone away and let the reader
+    guess, which on a product whose dataset is emphatically all-UTC is the
+    same class of defect as a report time in the wrong zone.
+    """
+    return datetime.now(UTC)
 
 
 class Advisor:

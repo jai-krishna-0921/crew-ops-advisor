@@ -11,10 +11,28 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+from crewops.agent.reply import collect_tables
 from crewops.contracts import VerificationStatus
 from crewops.resolve.render import render
 from crewops.tools.registry import Tools
 from crewops.verify import Verifier
+
+
+def _answer(template: str, envelope, question: str) -> tuple[str, list]:
+    """The prose and the tables a turn would actually put on screen.
+
+    A test that only looks at `render()` is testing half the answer. Result
+    sets now leave the tool as a `Table` (see `agent/tabulate.py`), so "every
+    reserve is named with its window" is a claim about the reply, not about
+    the paragraph: asserting it against the prose alone would either fail on a
+    correct answer or push the rows back into a run-on sentence to keep a test
+    green.
+    """
+    return render(template, [envelope], question), collect_tables([envelope])
+
+
+def _cells(tables: list) -> set[str]:
+    return {str(cell) for table in tables for row in table.rows for cell in row}
 
 
 def _verified(verifier: Verifier, text: str, envelopes: list) -> None:
@@ -31,12 +49,55 @@ def test_reserves_names_every_reserve_with_a_window(
     """Q01 shape: a reserve listing must carry crew id, rank and window."""
     envelope = tools.list_reserves(on_date=date(2026, 9, 15), base="BLR")
     assert envelope.ok
-    text = render("reserves", [envelope], "who is on reserve at BLR")
+    text, tables = _answer("reserves", envelope, "who is on reserve at BLR")
 
+    cells = _cells(tables)
     for reserve in envelope.payload.reserves:
-        assert reserve.crew_id in text
-        assert reserve.window_start in text
-        assert reserve.window_end in text
+        assert reserve.crew_id in cells
+        assert f"{reserve.window_start} to {reserve.window_end}" in cells
+
+    # And the count, which is the thing somebody asked for, stays in the prose.
+    assert str(envelope.payload.total_matched) in text
+    _verified(verifier, text, [envelope])
+
+
+def test_impact_does_not_state_the_same_figure_twice(
+    tools: Tools, verifier: Verifier
+) -> None:
+    """The impact prose said "Pairings broken" on two consecutive lines.
+
+    The renderer named the pairings, then walked the facts for "the passenger
+    count" with the test `key.endswith("passengers_affected") or unit ==
+    "count"`. No fact key ends in `passengers_affected` (they are
+    `passengers_immediate` and `passengers_total`), so the intended branch
+    never fired and the loose one matched whatever counted first, which is
+    `pairings_broken`. The answer read:
+
+        Pairings broken: P-2291. Pairings broken: 1.
+
+    Both lines are true and grounded, which is exactly why no verifier was
+    ever going to catch it. Repetition is a rendering defect, and the only
+    thing that catches it is a test that reads the output as prose.
+    """
+    envelope = tools.simulate_absence(
+        crew_id="C-1042",
+        from_date=date(2026, 9, 15),
+        to_date=date(2026, 9, 15),
+        reason="sick call",
+    )
+    assert envelope.ok
+    text = render("impact", [envelope], "which flights are immediately uncrewed")
+
+    labels = [
+        line.split(":", 1)[0].strip()
+        for line in text.splitlines()
+        if ":" in line and not line.startswith("  ")
+    ]
+    assert len(labels) == len(set(labels)), f"a label is stated twice:\n{text}"
+
+    # And the figures a controller acts on are still there.
+    assert "486" in text
+    assert "P-2291" in text
 
     _verified(verifier, text, [envelope])
 
@@ -71,12 +132,13 @@ def test_certifications_names_the_crew_id_on_every_row(
         within_days=30, as_of=date(2026, 9, 15)
     )
     assert envelope.ok
-    text = render(
-        "certifications", [envelope], "list certifications expiring within 30 days"
+    text, tables = _answer(
+        "certifications", envelope, "list certifications expiring within 30 days"
     )
 
+    cells = _cells(tables)
     for cert in envelope.payload.certifications:
-        assert cert.crew_id in text
+        assert cert.crew_id in cells
 
     _verified(verifier, text, [envelope])
 
@@ -100,11 +162,12 @@ def test_crew_list_names_the_matched_crew(tools: Tools, verifier: Verifier) -> N
     """Q11 shape, and the CLAUDE.md anchor: C-2210 is DEL based."""
     envelope = tools.find_crew(base="DEL", rank="Captain")
     assert envelope.ok
-    text = render("crew_list", [envelope], "how many captains are based at DEL")
+    text, tables = _answer("crew_list", envelope, "how many captains are based at DEL")
 
-    assert "C-2210" in text
+    cells = _cells(tables)
+    assert "C-2210" in cells
     for member in envelope.payload.crew:
-        assert member.crew_id in text
+        assert member.crew_id in cells
 
     _verified(verifier, text, [envelope])
 

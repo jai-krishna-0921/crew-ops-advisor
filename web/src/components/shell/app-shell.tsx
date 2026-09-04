@@ -1,7 +1,13 @@
 "use client";
 
 /**
- * The console shell: header, command palette, and the page beneath.
+ * The console shell: the page, and a section rail down its right edge.
+ *
+ * There is no header. A full-width bar cut a horizontal line across every page
+ * and made the content under it the second band of a stacked layout, which is
+ * what an admin template looks like. Moving the four destinations to a
+ * vertical rail costs 56px of a very wide axis instead of 48px of the short
+ * one, and gives the conversation the entire height of the window.
  *
  * The palette lives here rather than on the Advisor page so cmd-K works from
  * the brief, the operations panels and the architecture page too. Asking a
@@ -18,7 +24,7 @@ import {
   CommandPalette,
   useCommandPalette,
 } from "@/components/shell/command-palette";
-import { TopBar } from "@/components/shell/top-bar";
+import { SectionRail } from "@/components/shell/section-rail";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -57,9 +63,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
-      <TopBar onOpenPalette={() => setOpen(true)} />
-      <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
+    <div className="flex h-dvh overflow-hidden">
+      <main className="min-w-0 flex-1 overflow-hidden">{children}</main>
+      <SectionRail onOpenPalette={() => setOpen(true)} />
       <CommandPalette
         open={open}
         onClose={() => setOpen(false)}

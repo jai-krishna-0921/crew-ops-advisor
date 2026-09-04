@@ -4,12 +4,19 @@
  * Written as full literal class strings rather than composed at runtime, so
  * Tailwind sees every one of them. Colour is never the only signal: every
  * place that uses a tone also renders a word and, where it matters, a glyph.
+ *
+ * THE RINGS ARE GONE. Every chip used to carry `ring-1 ring-X-line` on top of
+ * its tint, which put a coloured outline around a coloured fill: two edges
+ * describing the same shape. On a page with a dozen chips on it that reads as
+ * a wireframe of chips rather than as chips. The tint alone separates them
+ * from the surface, and dropping the ring is most of what makes a row of
+ * pills settle down.
  */
 
 import type { Tone } from "@/lib/format";
 
 export interface ToneClasses {
-  /** Tinted fill plus a matching hairline. For pills and badges. */
+  /** Tinted fill. For pills and badges. */
   chip: string;
   /** Text only. For inline emphasis inside prose or a table cell. */
   text: string;
@@ -21,38 +28,38 @@ export interface ToneClasses {
 
 export const TONE: Record<Tone, ToneClasses> = {
   pass: {
-    chip: "bg-pass-tint text-pass ring-1 ring-pass-line",
+    chip: "bg-pass-tint text-pass",
     text: "text-pass",
     edge: "border-l-2 border-l-pass",
     fill: "bg-pass",
   },
   breach: {
-    chip: "bg-breach-tint text-breach ring-1 ring-breach-line",
+    chip: "bg-breach-tint text-breach",
     text: "text-breach",
     edge: "border-l-2 border-l-breach",
     fill: "bg-breach",
   },
   caution: {
-    chip: "bg-caution-tint text-caution ring-1 ring-caution-line",
+    chip: "bg-caution-tint text-caution",
     text: "text-caution",
     edge: "border-l-2 border-l-caution",
     fill: "bg-caution",
   },
   unknown: {
-    chip: "bg-unknown-tint text-unknown ring-1 ring-unknown-line",
+    chip: "bg-unknown-tint text-unknown",
     text: "text-unknown",
     edge: "border-l-2 border-l-unknown",
     fill: "bg-unknown",
   },
   na: {
-    chip: "bg-na-tint text-na ring-1 ring-na-line",
+    chip: "bg-na-tint text-ink-2",
     text: "text-na",
     edge: "border-l-2 border-l-na",
     fill: "bg-na",
   },
   accent: {
-    chip: "bg-accent-tint text-accent ring-1 ring-accent-line",
-    text: "text-accent",
+    chip: "bg-accent-tint text-accent-ink",
+    text: "text-accent-ink",
     edge: "border-l-2 border-l-accent",
     fill: "bg-accent",
   },
@@ -60,9 +67,9 @@ export const TONE: Record<Tone, ToneClasses> = {
 
 /** Tier badge colours. Tier is a scope marker, not a verdict, so it stays neutral. */
 export const TIER_CHIP: Record<number, string> = {
-  1: "bg-inset text-ink-2 ring-1 ring-line",
-  2: "bg-inset text-ink-2 ring-1 ring-line-strong",
-  3: "bg-accent-tint text-accent ring-1 ring-accent-line",
+  1: "bg-na-tint text-ink-2",
+  2: "bg-na-tint text-ink-2",
+  3: "bg-accent-tint text-accent-ink",
 };
 
 export function cx(...parts: (string | false | null | undefined)[]): string {

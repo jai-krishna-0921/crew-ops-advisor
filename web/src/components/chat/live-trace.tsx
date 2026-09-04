@@ -1,11 +1,17 @@
 "use client";
 
 /**
- * The live agent trace.
+ * The live agent trace, built from the reference library's task rows.
  *
  * A controller watches the system decide rather than waiting on a black box:
- * the plan appears before the work, tool chips resolve one at a time with
- * their latency, then the draft streams.
+ * the plan appears before the work, each tool lands as a row with its own
+ * status and latency, then the draft streams.
+ *
+ * The rows are the reference's Task Rows and they are bound to real work: a
+ * row's subtitle is the tool's own one-line summary of what it returned, not
+ * the word "completed", because the glyph already carries the status and a
+ * subtitle that repeats it is a wasted line on the only surface that shows
+ * what the agent actually did.
  *
  * The streamed draft is rendered in a visibly provisional state and is never
  * presented as final. That is an honesty requirement from the contract, not a
@@ -13,18 +19,19 @@
  * as a dotted underline rather than being switched off with the animation.
  */
 
-import {
-  CheckCircleIcon,
-  CircleDashedIcon,
-  ListChecksIcon,
-  ShieldCheckIcon,
-} from "@phosphor-icons/react/dist/ssr";
+import { ListChecksIcon, ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr";
 
-import { latency, TOOL_TIER_LABEL } from "@/lib/format";
+import { latency, TOOL_TIER_LABEL, toolLabel } from "@/lib/format";
 import { phaseOf, type TurnState } from "@/lib/turn";
 import { VerificationBadge } from "@/components/answer/verification";
-import { Eyebrow, Pill, Token } from "@/components/ui/primitives";
-import { cx } from "@/components/ui/tone";
+import {
+  ElapsedLoader,
+  StreamingText,
+  TaskList,
+  TaskRow,
+  ToolChip,
+} from "@/components/ai/elements";
+import { Eyebrow, Pill } from "@/components/ui/primitives";
 
 const PHASE_LABEL: Record<string, string> = {
   opening: "Opening the turn",
@@ -38,39 +45,35 @@ const PHASE_LABEL: Record<string, string> = {
 
 export function LiveTrace({ turn }: { turn: TurnState }) {
   const phase = phaseOf(turn);
+  const running = phase !== "settled" && phase !== "failed";
 
   return (
     <div className="space-y-3" aria-live="polite" aria-atomic="false">
-      <div className="flex items-center gap-2">
-        <CircleDashedIcon
-          size={13}
-          weight="bold"
-          aria-hidden
-          className="anim-spin text-accent"
-        />
-        <span className="text-base text-ink-2">{PHASE_LABEL[phase]}</span>
-        {turn.mode ? (
-          <Pill tone="na">{turn.mode === "agent" ? "Agent" : "Deterministic"}</Pill>
-        ) : null}
-      </div>
+      {running ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <ElapsedLoader label={PHASE_LABEL[phase]} since={turn.startedAt} />
+          {turn.mode ? (
+            <Pill tone="na">{turn.mode === "agent" ? "Agent" : "Deterministic"}</Pill>
+          ) : null}
+        </div>
+      ) : null}
 
       {turn.plan ? (
-        <section
-          aria-label="Plan"
-          className="rounded-md bg-surface px-3 py-2.5 hairline"
-        >
+        <section aria-label="Plan" className="rounded-md bg-inset/70 px-3.5 py-3">
           <div className="flex items-center gap-1.5">
             <ListChecksIcon size={12} weight="bold" aria-hidden className="text-ink-3" />
             <Eyebrow>Plan</Eyebrow>
-            {turn.plan.tier ? <Pill tone="accent">Tier {turn.plan.tier}</Pill> : null}
+            {turn.plan.tier ? (
+              <span className="text-xs text-ink-3">
+                routed as tier {turn.plan.tier}
+              </span>
+            ) : null}
           </div>
-          <p className="mt-1.5 max-w-[68ch] text-base text-ink">{turn.plan.intent}</p>
+          <p className="mt-1.5 text-base text-ink">{turn.plan.intent}</p>
           <ol className="mt-2 space-y-1">
             {turn.plan.steps.map((step, index) => (
-              <li key={step} className="flex gap-2 text-base text-ink-2">
-                <span className="num w-4 shrink-0 text-2xs text-ink-3">
-                  {index + 1}
-                </span>
+              <li key={step} className="flex gap-2.5 text-base text-ink-2">
+                <span className="num w-3 shrink-0 text-2xs text-ink-3">{index + 1}</span>
                 <span>{step}</span>
               </li>
             ))}
@@ -79,79 +82,73 @@ export function LiveTrace({ turn }: { turn: TurnState }) {
       ) : null}
 
       {turn.tools.length > 0 ? (
-        <ul aria-label="Tool calls" className="space-y-1">
+        <TaskList label="Tool calls">
           {turn.tools.map((run, index) => {
             const settled = run.result !== null;
+            const failed = settled && run.result?.ok === false;
             return (
-              <li
+              <TaskRow
                 key={`${run.call.tool}-${index}`}
-                className={cx(
-                  "anim-fade-up flex flex-wrap items-center gap-2 rounded-sm bg-surface px-2.5 py-1.5 hairline",
-                  !settled && "anim-pulse-ring",
-                )}
-              >
-                {settled ? (
-                  <CheckCircleIcon
-                    size={13}
-                    weight="fill"
-                    aria-hidden
-                    className={run.result?.ok ? "text-pass" : "text-breach"}
-                  />
-                ) : (
-                  <CircleDashedIcon
-                    size={13}
-                    weight="bold"
-                    aria-hidden
-                    className="anim-spin text-accent"
-                  />
-                )}
-                <Token>{run.call.tool}</Token>
-                <Pill tone="na">{TOOL_TIER_LABEL(run.call.tool)}</Pill>
-                <span className="min-w-0 flex-1 truncate text-base text-ink-2">
-                  {settled ? run.result?.summary : run.call.label}
-                </span>
-                <span className="num shrink-0 text-xs text-ink-3">
-                  {settled ? latency(run.result?.latency_ms ?? 0) : "running"}
-                </span>
-              </li>
+                index={index}
+                status={!settled ? "running" : failed ? "failed" : "done"}
+                title={toolLabel(run.call.tool)}
+                detail={settled ? run.result?.summary : run.call.label}
+                meta={
+                  settled
+                    ? latency(run.result?.latency_ms ?? 0)
+                    : TOOL_TIER_LABEL(run.call.tool)
+                }
+              />
             );
           })}
-        </ul>
+        </TaskList>
       ) : null}
 
       {turn.draft ? (
         <section aria-label="Provisional answer" className="space-y-1.5">
-          <div className="flex items-center gap-1.5">
-            <Eyebrow>Provisional, not yet checked</Eyebrow>
-          </div>
-          <div className="max-w-[68ch] space-y-2 text-md leading-relaxed">
-            {turn.draft.split(/\n{2,}/).map((paragraph, index) => (
-              <p key={index} className="provisional">
-                {paragraph}
-              </p>
-            ))}
-          </div>
+          <Eyebrow>Provisional, not yet checked</Eyebrow>
+          <StreamingText text={turn.draft} />
         </section>
       ) : null}
 
       {turn.verifyingAtoms !== null || turn.verification ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-sm bg-surface px-2.5 py-1.5 hairline">
+        <div className="flex flex-wrap items-center gap-2 rounded-md bg-inset/70 px-3 py-2">
           <ShieldCheckIcon size={13} weight="fill" aria-hidden className="text-accent" />
           <span className="text-base text-ink-2">
             {turn.verification
               ? "Grounding check complete"
               : `Checking ${turn.verifyingAtoms} atoms against tool output`}
           </span>
-          {turn.verification ? (
-            <VerificationBadge report={turn.verification} />
-          ) : null}
+          {turn.verification ? <VerificationBadge report={turn.verification} /> : null}
         </div>
       ) : null}
     </div>
   );
 }
 
-/** Compact summary of a finished trace, shown above a settled answer. */
+/**
+ * The settled trace, folded down to the chips.
+ *
+ * Once an answer exists, the interesting question about the work is no longer
+ * "what is it doing" but "what did it touch". Six tool chips answer that at a
+ * glance and the full rows are one click away.
+ */
+export function TraceChips({ turn }: { turn: TurnState }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {turn.tools.map((run, index) => (
+        <ToolChip
+          key={`${run.call.tool}-${index}`}
+          tool={run.call.tool}
+          ok={run.result?.ok !== false}
+          ms={run.result?.latency_ms}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Compact summary of a finished trace, shown beside the disclosure. */
 export function TraceSummary({ turn }: { turn: TurnState }) {
   const tools = turn.tools.length;
   const ms = turn.totalMs ?? turn.reply?.timings.total_ms ?? 0;

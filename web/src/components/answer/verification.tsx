@@ -62,7 +62,7 @@ export function VerificationPanel({ report }: { report: VerificationReport }) {
       aria-label="Grounding check"
       className="rounded-md bg-surface hairline"
     >
-      <header className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
+      <header className="flex flex-wrap items-center gap-2 px-3 py-2">
         <h3 className="text-base font-semibold text-ink">Grounding check</h3>
         <VerificationBadge report={report} />
         {report.repair_attempts > 0 ? (
@@ -78,13 +78,13 @@ export function VerificationPanel({ report }: { report: VerificationReport }) {
       </p>
 
       {report.note ? (
-        <p className="border-t border-line-soft px-3 py-2 text-base text-ink-2">
+        <p className="px-3 py-2 text-base text-ink-2">
           {report.note}
         </p>
       ) : null}
 
       {report.unattested.length > 0 ? (
-        <div className="border-t border-line-soft px-2 py-1.5">
+        <div className="px-2 py-1.5">
           <Disclosure
             summary="Atoms the guard could not attest"
             count={report.unattested.length}

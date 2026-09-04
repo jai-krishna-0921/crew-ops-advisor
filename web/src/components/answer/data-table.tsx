@@ -41,8 +41,8 @@ export function DataTable({ table }: { table: Table }) {
   };
 
   return (
-    <figure className="rounded-md bg-surface hairline">
-      <figcaption className="flex flex-wrap items-baseline gap-x-2 border-b border-line px-3 py-2">
+    <figure className="anim-fade-up overflow-hidden rounded-md bg-surface hairline lg:-mx-14 xl:-mx-24">
+      <figcaption className="flex flex-wrap items-baseline gap-x-2 px-4 pt-3 pb-1">
         <span className="text-base font-semibold text-ink">{table.title}</span>
         <span className="text-xs text-ink-3">{plural(table.rows.length, "row")}</span>
       </figcaption>
@@ -50,7 +50,7 @@ export function DataTable({ table }: { table: Table }) {
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-base">
           <thead>
-            <tr className="border-b border-line">
+            <tr className="border-b border-line-soft">
               {table.columns.map((column, index) => {
                 const active = sort?.column === index;
                 const Icon = !active
@@ -74,7 +74,7 @@ export function DataTable({ table }: { table: Table }) {
                     <button
                       type="button"
                       onClick={() => toggle(index)}
-                      className="label-micro flex w-full items-center gap-1 px-3 py-1.5 text-left transition-colors duration-100 hover:bg-hover hover:text-ink-2"
+                      className="label-micro flex w-full items-center gap-1 px-4 py-2 text-left hover:bg-hover hover:text-ink-2"
                     >
                       {column}
                       <Icon
@@ -93,13 +93,13 @@ export function DataTable({ table }: { table: Table }) {
             {rows.map(({ row, index }) => (
               <tr
                 key={table.row_ids[index] ?? index}
-                className="border-b border-line-soft last:border-0 transition-colors duration-100 hover:bg-hover"
+                className="border-b border-line-soft last:border-0 hover:bg-hover"
               >
                 {row.map((cell, cellIndex) => (
                   <td
                     key={cellIndex}
                     className={cx(
-                      "px-3 py-1.5 align-top whitespace-nowrap",
+                      "px-4 py-2 align-top whitespace-nowrap",
                       cellIndex === 0 ? "num text-ink" : "text-ink-2",
                       isNumeric(cell) && "num text-right",
                     )}
@@ -114,7 +114,7 @@ export function DataTable({ table }: { table: Table }) {
       </div>
 
       {table.caption ? (
-        <p className="border-t border-line px-3 py-1.5 text-xs text-ink-3">
+        <p className="px-4 pt-2 pb-3 text-xs text-ink-3">
           {table.caption}
         </p>
       ) : null}

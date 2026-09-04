@@ -197,13 +197,13 @@ export function ArchitectureView() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <div className="anim-fade-up mx-auto max-w-5xl px-6 pt-10 pb-14 sm:px-10">
         <header>
           <Eyebrow>The boundary</Eyebrow>
-          <h1 className="mt-1 text-xl font-semibold text-ink">
+          <h1 className="mt-1 text-2xl font-medium text-ink">
             The model plans and explains. It never produces a fact.
           </h1>
-          <p className="mt-1.5 max-w-[72ch] text-md text-ink-2">
+          <p className="mt-2 max-w-[72ch] text-md text-ink-2">
             Legality is exact arithmetic against a rulebook. A model that
             approximates a duty hour calculation produces answers that are
             fluent, confident and wrong, which is operationally worse than no
@@ -367,7 +367,7 @@ export function ArchitectureView() {
           </nav>
 
           <article className="rounded-md bg-surface hairline">
-            <header className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
+            <header className="flex flex-wrap items-center gap-2 px-3 py-2">
               <h2 className="text-md font-semibold text-ink">{node.title}</h2>
               <Pill
                 tone={
@@ -385,7 +385,7 @@ export function ArchitectureView() {
             <p className="max-w-[68ch] px-3 py-2.5 text-base leading-relaxed text-ink-2">
               {node.summary}
             </p>
-            <div className="grid gap-x-5 gap-y-3 border-t border-line-soft px-3 py-3 sm:grid-cols-2">
+            <div className="grid gap-x-5 gap-y-3 px-3 py-3 sm:grid-cols-2">
               <div>
                 <Eyebrow>May</Eyebrow>
                 <ul className="mt-1.5 space-y-1">
@@ -589,8 +589,8 @@ function Legend({ zone, icon }: { zone: Zone; icon: React.ReactNode }) {
             : zone === "guard"
               ? "bg-pass-tint text-pass"
               : zone === "deterministic"
-                ? "bg-surface text-ink-2 ring-1 ring-line-strong"
-                : "bg-inset text-ink-3 ring-1 ring-line",
+                ? "bg-surface text-ink-2"
+                : "bg-inset text-ink-3",
         )}
       >
         {icon}

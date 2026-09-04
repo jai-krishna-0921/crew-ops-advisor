@@ -86,7 +86,7 @@ export function EvidenceDrawer({
       aria-label="Evidence"
       className="flex h-full min-h-0 w-full flex-col bg-canvas"
     >
-      <header className="flex items-center gap-2 border-b border-line px-3 py-2">
+      <header className="flex items-center gap-2 px-3 py-2">
         <h2 className="text-base font-semibold text-ink">Evidence</h2>
         <span className="num text-xs text-ink-3">
           {facts.length} facts · {tools.length} tool calls
@@ -98,7 +98,7 @@ export function EvidenceDrawer({
         </div>
       </header>
 
-      <div className="border-b border-line px-3 py-2">
+      <div className="px-3 py-2">
         <Segmented
           label="Evidence view"
           value={view}
@@ -114,7 +114,7 @@ export function EvidenceDrawer({
       <div className="min-h-0 flex-1 overflow-y-auto">
         {view === "facts" ? (
           <>
-            <div className="sticky top-0 z-10 border-b border-line bg-canvas px-3 py-2">
+            <div className="sticky top-0 z-10 bg-canvas px-3 py-2">
               <Segmented
                 label="Filter by provenance"
                 value={filter}
@@ -135,7 +135,7 @@ export function EvidenceDrawer({
                 />
               </div>
             ) : (
-              <ul className="divide-y divide-line-soft">
+              <ul className="rules mx-3 mb-3">
                 {visible.map((fact) => (
                   <FactRow key={fact.key} fact={fact} />
                 ))}
@@ -242,7 +242,7 @@ export function ToolTimeline({ tools }: { tools: ToolRun[] }) {
   }
 
   return (
-    <ol className="divide-y divide-line-soft">
+    <ol className="rules m-3">
       {tools.map((run, index) => {
         const ok = run.result?.ok ?? null;
         const envelope = run.result?.envelope ?? null;
@@ -352,7 +352,7 @@ function CitationList({ citations }: { citations: Citation[] }) {
     );
   }
   return (
-    <ul className="divide-y divide-line-soft">
+    <ul className="rules m-3">
       {citations.map((citation, index) => (
         <li key={`${citation.file}-${index}`} className="px-3 py-2">
           <p className="num text-base text-ink">{citation.file}</p>

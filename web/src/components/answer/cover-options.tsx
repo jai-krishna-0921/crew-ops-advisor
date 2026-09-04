@@ -31,14 +31,8 @@ import {
   RuleTraceCard,
   VerdictPill,
 } from "@/components/answer/rule-trace";
-import {
-  Disclosure,
-  Eyebrow,
-  Panel,
-  PanelHead,
-  Pill,
-  Token,
-} from "@/components/ui/primitives";
+import { ConfidenceMeter } from "@/components/ai/elements";
+import { Disclosure, Eyebrow, Pill, Token } from "@/components/ui/primitives";
 import { cx } from "@/components/ui/tone";
 
 const KIND_ICON: Record<CoverKind, typeof AirplaneTakeoffIcon> = {
@@ -67,7 +61,7 @@ export function RecommendationView({
   return (
     <section className="space-y-3" aria-label="Cover options">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3 className="text-lg font-semibold text-ink">
+        <h3 className="macro text-xl text-ink">
           {options.length === 1
             ? "One legal option"
             : `${options.length} legal options`}
@@ -78,7 +72,7 @@ export function RecommendationView({
         </p>
       </div>
 
-      <p className="max-w-[68ch] rounded-md bg-inset px-3 py-2 text-base text-ink-2 hairline">
+      <p className="max-w-[68ch] text-base text-ink-2">
         <span className="label-micro mr-2 inline">Ranked by</span>
         {recommendation.ranking_basis}
       </p>
@@ -108,18 +102,20 @@ export function RecommendationView({
       ) : null}
 
       {recommendation.notification_draft ? (
-        <Panel>
-          <PanelHead
-            title="Draft callout"
-            meta="Deterministic template, filled from computed facts"
-          />
-          <p className="num px-3 py-2.5 text-base leading-relaxed text-ink-2">
+        <section className="rounded-md bg-inset px-4 py-3">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <h4 className="text-base font-semibold text-ink">Draft callout</h4>
+            <span className="text-xs text-ink-3">
+              Deterministic template, filled from computed facts
+            </span>
+          </div>
+          <p className="mt-1.5 text-base leading-relaxed text-ink-2">
             <GroundedText
               text={recommendation.notification_draft}
               facts={recommendation.facts}
             />
           </p>
-        </Panel>
+        </section>
       ) : null}
     </section>
   );
@@ -130,25 +126,29 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
   const best = option.rank === 1;
 
   return (
+    /* Rank 1 is marked by elevation and a solid edge, not by an outline. An
+       outlined card among shadowed ones reads as a different KIND of object;
+       the same object sitting higher reads as the same kind, ranked first,
+       which is what it is. */
     <article
       className={cx(
-        "rounded-md bg-surface",
-        best ? "ring-1 ring-accent-line" : "hairline",
+        "overflow-hidden rounded-lg bg-surface",
+        best ? "shadow-raised" : "hairline",
       )}
     >
-      <header className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-line-soft px-3 py-2.5">
+      {best ? <span aria-hidden className="block h-1 w-full bg-accent" /> : null}
+
+      <header className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-4 pt-3.5">
         <span
           aria-label={`Rank ${option.rank}`}
           className={cx(
-            "num flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-base font-semibold",
-            best
-              ? "bg-accent text-page"
-              : "bg-inset text-ink-2 ring-1 ring-line",
+            "num flex size-6 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+            best ? "bg-accent text-page" : "bg-inset text-ink-2",
           )}
         >
           {option.rank}
         </span>
-        <h4 className="text-lg font-semibold text-ink">
+        <h4 className="macro text-lg text-ink">
           <GroundedText text={option.action} facts={option.facts} />
         </h4>
         <Pill tone="na">
@@ -161,7 +161,11 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
         </span>
       </header>
 
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-2 px-3 py-2.5 sm:grid-cols-4">
+      <div className="px-4 pt-2">
+        <ConfidenceMeter confidence={option.confidence} />
+      </div>
+
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-3.5 sm:grid-cols-4">
         <Stat label="Crew">
           <Token>{option.crew_id}</Token>
           <span className="ml-1.5 text-ink-2">{option.crew_name}</span>
@@ -178,7 +182,7 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
       </dl>
 
       {option.delay_minutes > 0 || option.uncovered_flights.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 border-t border-line-soft px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
           {option.delay_minutes > 0 ? (
             <Pill tone="caution">
               <ClockCountdownIcon size={11} weight="bold" aria-hidden />
@@ -186,14 +190,19 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
             </Pill>
           ) : null}
           {option.uncovered_flights.length > 0 ? (
-            <Pill tone="caution">
-              Opens a gap: {option.uncovered_flights.join(", ")}
-            </Pill>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+              <Pill tone="caution">
+                Opens a gap on {plural(option.uncovered_flights.length, "leg")}
+              </Pill>
+              <span className="num min-w-0 text-xs text-ink-2">
+                {option.uncovered_flights.join(", ")}
+              </span>
+            </div>
           ) : null}
         </div>
       ) : null}
 
-      <div className="border-t border-line-soft px-3 py-2.5">
+      <div className="px-4 pb-3.5">
         <Eyebrow>Reasoning</Eyebrow>
         <p className="mt-1 max-w-[68ch] text-base leading-relaxed text-ink-2">
           <GroundedText text={option.reasoning} facts={option.facts} />
@@ -201,12 +210,12 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
       </div>
 
       {option.cost.line_items.length > 0 ? (
-        <div className="border-t border-line-soft px-3 py-2.5">
+        <div className="mx-4 mb-3.5 rounded-md bg-inset px-3 py-2.5">
           <Eyebrow>Cost</Eyebrow>
-          <table className="mt-1 w-full text-base">
+          <table className="mt-1.5 w-full table-auto text-base">
             <tbody>
               {option.cost.line_items.map((line) => (
-                <tr key={line.label} className="border-b border-line-soft last:border-0">
+                <tr key={line.label} className="last:border-0">
                   <td className="py-1 pr-2 align-top text-ink-2">{line.label}</td>
                   <td className="num py-1 pr-2 align-top text-xs text-ink-3">
                     {line.basis}
@@ -224,7 +233,7 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
               <tr>
                 <td className="py-1 pr-2 font-medium text-ink">Total</td>
                 <td />
-                <td className="num py-1 text-right font-semibold text-ink">
+                <td className="num py-1 text-right font-semibold whitespace-nowrap text-ink">
                   {inr(option.cost.total_inr)}
                 </td>
               </tr>
@@ -237,7 +246,7 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
       ) : null}
 
       {option.tradeoffs.length > 0 ? (
-        <div className="border-t border-line-soft px-3 py-2.5">
+        <div className="px-4 pb-3.5">
           <Eyebrow>Trade-offs</Eyebrow>
           <ul className="mt-1 space-y-1">
             {option.tradeoffs.map((tradeoff) => (
@@ -255,7 +264,7 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
         </div>
       ) : null}
 
-      <div className="border-t border-line-soft px-2 py-1.5">
+      <div className="px-2 pb-2">
         <Disclosure
           summary="All seven rules, per duty day"
           count={option.legality.per_day.length}
@@ -272,8 +281,8 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
 function RejectedCard({ option }: { option: CoverOption }) {
   const breach = firstBreach(option.legality);
   return (
-    <article className="rounded-md bg-surface hairline">
-      <header className="flex flex-wrap items-center gap-2 border-b border-line-soft px-3 py-2">
+    <article className="rounded-md bg-surface flat">
+      <header className="flex flex-wrap items-center gap-2 px-4 pt-3">
         <XCircleIcon size={14} weight="fill" aria-hidden className="text-breach" />
         <Token>{option.crew_id}</Token>
         <span className="text-base text-ink-2">{option.crew_name}</span>
@@ -284,7 +293,7 @@ function RejectedCard({ option }: { option: CoverOption }) {
           <VerdictPill verdict={option.legality.overall} />
         </span>
       </header>
-      <div className="px-3 py-2.5">
+      <div className="px-4 pt-1.5 pb-2">
         <p className="max-w-[68ch] text-base leading-relaxed text-ink-2">
           <GroundedText text={option.reasoning} facts={option.facts} />
         </p>
@@ -294,7 +303,7 @@ function RejectedCard({ option }: { option: CoverOption }) {
           <RuleTraceCard trace={breach} compact />
         </div>
       ) : null}
-      <div className="border-t border-line-soft px-2 py-1.5">
+      <div className="px-2 pb-2">
         <Disclosure summary="Every rule that was checked">
           <div className="px-1 pb-2">
             <LegalityReportView report={option.legality} />

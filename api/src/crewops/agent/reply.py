@@ -13,6 +13,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Any
 
+from crewops.agent.tabulate import tabulate
 from crewops.contracts import (
     Abstention,
     AnswerMode,
@@ -179,10 +180,24 @@ def collect_citations(envelopes: Sequence[ToolEnvelope]) -> list[Citation]:
 
 
 def collect_tables(envelopes: Sequence[ToolEnvelope]) -> list[Table]:
+    """Every result set in this turn, as a table.
+
+    A payload that IS a table passes through. A payload that is a result set of
+    some other shape (reserves, crew, flights, a roster, expiring certificates)
+    is projected into one by `tabulate`, which copies fields and computes
+    nothing. Before that projection existed these reached the screen as prose,
+    and a twelve row result set rendered as a ninety word sentence.
+    """
     tables: list[Table] = []
     for envelope in envelopes:
-        if envelope.ok and isinstance(envelope.payload, Table):
+        if not envelope.ok:
+            continue
+        if isinstance(envelope.payload, Table):
             tables.append(envelope.payload)
+            continue
+        projected = tabulate(envelope.payload)
+        if projected is not None:
+            tables.append(projected)
     return tables
 
 

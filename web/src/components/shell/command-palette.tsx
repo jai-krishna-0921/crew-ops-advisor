@@ -144,7 +144,7 @@ function PaletteBody({
       }}
     >
       <div className="anim-fade-up w-full max-w-2xl overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-pop)] hairline-strong">
-        <div className="flex items-center gap-2 border-b border-line px-3 py-2.5">
+        <div className="flex items-center gap-2 px-3 py-2.5">
           <CompassIcon size={14} weight="bold" aria-hidden className="text-ink-3" />
           <input
             ref={inputRef}
@@ -224,7 +224,7 @@ function PaletteBody({
           )}
         </ul>
 
-        <footer className="flex items-center gap-3 border-t border-line px-3 py-1.5 text-2xs text-ink-3">
+        <footer className="flex items-center gap-3 px-3 py-1.5 text-2xs text-ink-3">
           <span className="flex items-center gap-1">
             <Kbd>↑</Kbd>
             <Kbd>↓</Kbd> move

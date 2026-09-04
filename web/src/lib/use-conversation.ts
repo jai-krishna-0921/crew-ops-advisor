@@ -34,6 +34,13 @@ import { emptyTurn, reduceTurn } from "@/lib/turn";
 
 export interface Conversation extends ConversationState {
   memory: ThreadMemory | null;
+  /**
+   * Whether the stored session has been read back yet.
+   *
+   * Exposed because anything that asks a question on mount has to wait for
+   * it. See the restore effect for what goes wrong otherwise.
+   */
+  hydrated: boolean;
   ask: (question: string) => void;
   stop: () => void;
   newThread: () => void;
@@ -64,14 +71,25 @@ export function useConversation(mode: AnswerMode | "auto"): Conversation {
    * the server render and blow up hydration. Restoring persisted state in an
    * effect is the documented way round that, which is why the cascading-render
    * rule is waived here specifically.
+   *
+   * IT NEVER OVERWRITES LIVE STATE, and that guard is load bearing. Opening
+   * `/?q=...` fires a question from another effect on the same mount, and
+   * effects run in an order this hook does not control. When restore won that
+   * race it replaced the whole state, the just-appended turn went with it, and
+   * the stream that was already running wrote every event into a turn list
+   * that no longer had its localId in it. The answer arrived and landed
+   * nowhere: no error, no spinner, an empty page. Restoring into a
+   * conversation that has already started is always wrong, so it does not.
    */
   useEffect(() => {
     const restored = loadSession();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount rehydration, see above
-    setState((current) =>
-      restored.turns.length > 0 || restored.threadId ? restored : current,
-    );
-    if (restored.threadId) setMemory(loadMemory(restored.threadId));
+    if (restored.turns.length > 0 || restored.threadId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount rehydration, see above
+      setState((current) =>
+        current.turns.length > 0 || current.threadId ? current : restored,
+      );
+      if (restored.threadId) setMemory(loadMemory(restored.threadId));
+    }
     setHydrated(true);
   }, []);
 
@@ -256,12 +274,13 @@ export function useConversation(mode: AnswerMode | "auto"): Conversation {
     () => ({
       ...state,
       memory,
+      hydrated,
       ask,
       stop,
       newThread,
       openThread,
       dismissLoadError,
     }),
-    [state, memory, ask, stop, newThread, openThread, dismissLoadError],
+    [state, memory, hydrated, ask, stop, newThread, openThread, dismissLoadError],
   );
 }

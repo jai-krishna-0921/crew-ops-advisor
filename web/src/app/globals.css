@@ -3,100 +3,154 @@
 /* ==========================================================================
    Crew Ops Advisor, design tokens.
 
-   Theme rule, followed exactly: the complete palette is defined on bare
-   `:root`. Dark overrides only redefine tokens, once under
-   `@media (prefers-color-scheme: dark)` guarded by
-   `:root:not([data-theme="light"])`, and once under `:root[data-theme="dark"]`
-   so an explicit choice wins in both directions. No colour is ever defined
-   only inside a media query.
+   THE CORRECTION THIS FILE CARRIES: the surface was drawn in lines.
 
-   Components never use Tailwind's `dark:` variant. They reference semantic
-   tokens, and the tokens flip. One code path, two themes.
+   Every panel, row, chip, table cell and header was separated by a 1px rule,
+   because a hairline is the cheapest way to say "these are two things". Do it
+   everywhere and the page stops being a document and becomes a wireframe: a
+   rule-trace card sat inside a bordered section inside a bordered panel, three
+   rectangles deep, and the eye spends its budget on the frames rather than on
+   the numbers inside them.
 
-   Colour is oklch throughout so that lightness is perceptually even between
-   the two themes and the semantic hues stay distinguishable at 11px.
+   Depth now comes from three stacked ambient shadows and a ground that is
+   genuinely darker than the surfaces on it. Surfaces mostly have no border at
+   all. Where a grid genuinely needs division, `.rules` draws it with a 1px
+   GRID GAP showing the ground through, so the divisions stay mathematically
+   exact and there are no borders to keep in sync.
+
+   THE GROUND IS WARM. A cool grey-blue console is the default admin theme and
+   reads as one. Bone with a warm near-black on it is what a page of numbers
+   somebody reads for eight hours should look like.
+
+   THERE IS ONE THEME. A dark mode was carried here for a while and it was
+   two hundred lines of tokens, a toggle, a pre-paint script and a second
+   set of shadow values, to serve a preference nobody expressed for a tool
+   that is used on a lit operations floor. Every surface worth copying in
+   this category ships one considered ground rather than two adequate ones.
+   If it comes back it comes back as a request, not as a default.
    ========================================================================== */
 
 :root {
   color-scheme: light;
 
-  /* ---- neutral ramp -------------------------------------------------- */
-  --page: oklch(98.4% 0.002 264);
-  --canvas: oklch(96.6% 0.003 264);
-  --surface: oklch(100% 0 0);
-  --inset: oklch(97.6% 0.003 264);
-  --hover: oklch(95.8% 0.004 264);
-  --hover-2: oklch(92.8% 0.005 264);
-  --field: oklch(97.8% 0.002 264);
+  /* ---- ground and surface --------------------------------------------
+     The page is bone, the panel is white, and that gap is what lets a
+     shadow read as elevation without a border under it. */
+  --page: oklch(97.4% 0.0055 84);
+  --canvas: oklch(95.5% 0.008 84);
+  --surface: oklch(99.6% 0.002 84);
+  --inset: oklch(96.4% 0.0065 84);
+  --hover: oklch(94.4% 0.008 84);
+  --hover-2: oklch(91.6% 0.01 82);
+  --field: oklch(99.6% 0.002 84);
 
-  --ink: oklch(23.5% 0.008 264);
-  --ink-2: oklch(49.5% 0.013 264);
-  --ink-3: oklch(66.5% 0.012 264);
+  /* Ink runs warm rather than neutral. A pure grey text on a bone ground
+     reads as two systems; a near-black carrying the ground's hue reads as
+     one. */
+  --ink: oklch(24.5% 0.011 62);
+  --ink-2: oklch(47.5% 0.013 64);
+  --ink-3: oklch(62.5% 0.013 68);
 
-  --line: oklch(92.2% 0.004 264);
-  --line-strong: oklch(86.5% 0.007 264);
-  --line-soft: oklch(95.2% 0.003 264);
+  /* Lines survive only inside `.rules` and as the odd separator gap. They
+     are not the separation system any more. */
+  --line: oklch(89.8% 0.008 82);
+  --line-strong: oklch(84.5% 0.01 82);
+  --line-soft: oklch(93.4% 0.007 84);
 
-  /* ---- accent, quiet on purpose -------------------------------------- */
-  --accent: oklch(56% 0.146 249);
-  --accent-ink: oklch(48% 0.152 250);
-  --accent-tint: oklch(56% 0.146 249 / 0.1);
-  --accent-line: oklch(56% 0.146 249 / 0.34);
+  /* ---- accent ---------------------------------------------------------
+     Deep navy, not the reflexive SaaS blue. Two reasons. It is the finance
+     and infrastructure colour, which is the register an airline operations
+     desk sits in, and it stays a long way from the breach red on a page
+     where red has exactly one meaning. */
+  --accent: oklch(40% 0.077 258);
+  --accent-ink: oklch(35% 0.082 258);
+  --accent-tint: oklch(40% 0.077 258 / 0.08);
+  --accent-line: oklch(40% 0.077 258 / 0.22);
 
-  /* ---- verdict semantics --------------------------------------------- */
-  --pass: oklch(49% 0.122 152);
-  --pass-tint: oklch(49% 0.122 152 / 0.1);
-  --pass-line: oklch(49% 0.122 152 / 0.32);
+  /* ---- verdict semantics ---------------------------------------------- */
+  --pass: oklch(47% 0.108 154);
+  --pass-tint: oklch(47% 0.108 154 / 0.1);
+  --pass-line: oklch(47% 0.108 154 / 0.26);
 
-  --breach: oklch(52% 0.204 26);
-  --breach-tint: oklch(52% 0.204 26 / 0.1);
-  --breach-line: oklch(52% 0.204 26 / 0.36);
-  --breach-wash: oklch(52% 0.204 26 / 0.055);
+  --breach: oklch(50% 0.158 28);
+  --breach-tint: oklch(50% 0.158 28 / 0.1);
+  --breach-line: oklch(50% 0.158 28 / 0.26);
+  --breach-wash: oklch(50% 0.158 28 / 0.055);
 
-  --caution: oklch(53% 0.135 68);
-  --caution-tint: oklch(53% 0.135 68 / 0.11);
-  --caution-line: oklch(53% 0.135 68 / 0.34);
+  --caution: oklch(54% 0.118 66);
+  --caution-tint: oklch(54% 0.118 66 / 0.11);
+  --caution-line: oklch(54% 0.118 66 / 0.26);
 
   /* Insufficient data is deliberately not grey. Silence about a rule is
      not compliance with it, and it must never read as "fine". */
-  --unknown: oklch(48% 0.166 296);
-  --unknown-tint: oklch(48% 0.166 296 / 0.1);
-  --unknown-line: oklch(48% 0.166 296 / 0.32);
+  --unknown: oklch(47% 0.142 300);
+  --unknown-tint: oklch(47% 0.142 300 / 0.1);
+  --unknown-line: oklch(47% 0.142 300 / 0.26);
 
   --na: var(--ink-3);
-  --na-tint: oklch(66.5% 0.012 264 / 0.12);
-  --na-line: oklch(66.5% 0.012 264 / 0.3);
+  --na-tint: oklch(62.5% 0.013 68 / 0.12);
+  --na-line: oklch(62.5% 0.013 68 / 0.24);
 
   /* ---- provenance ----------------------------------------------------- */
   --prov-dataset: var(--ink-2);
   --prov-computed: var(--accent);
   --prov-assumed: var(--caution);
 
-  /* ---- shape, one radius system -------------------------------------- */
-  --r-xs: 4px;
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 14px;
+  /* ---- shape ----------------------------------------------------------
+     Concentric, not arbitrary. A shell at 18 holds a core at 12, a core at
+     12 holds a control at 8, and the arithmetic is what makes nested
+     corners look machined rather than coincidental. 4px on a 1px edge
+     reads as square, which is how a considered interface ends up looking
+     like a wireframe. */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-xl: 26px;
+  --r-full: 999px;
 
-  /* ---- elevation, a hairline ring rather than a drop shadow ---------- */
-  --ring-hairline: 0 0 0 1px var(--line);
-  --ring-strong: 0 0 0 1px var(--line-strong);
-  --shadow-pop: 0 12px 32px -12px oklch(23.5% 0.008 264 / 0.28),
-    0 2px 6px -2px oklch(23.5% 0.008 264 / 0.14);
+  /* ---- elevation ------------------------------------------------------
+     Diffused, not drawn. Three stacked ambient layers plus a ring so faint
+     it holds an edge against white without describing a rectangle. This is
+     the thing that replaced every border in the product. */
+  --ring-faint: 0 0 0 1px oklch(24.5% 0.011 62 / 0.05);
+  --shadow-panel: 0 1px 2px oklch(24.5% 0.011 62 / 0.04),
+    0 4px 12px -4px oklch(24.5% 0.011 62 / 0.07),
+    0 12px 28px -12px oklch(24.5% 0.011 62 / 0.08);
+  --shadow-raised: 0 1px 2px oklch(24.5% 0.011 62 / 0.05),
+    0 10px 24px -8px oklch(24.5% 0.011 62 / 0.11),
+    0 28px 56px -24px oklch(24.5% 0.011 62 / 0.14);
+  --shadow-pop: 0 2px 4px oklch(24.5% 0.011 62 / 0.06),
+    0 16px 36px -12px oklch(24.5% 0.011 62 / 0.18),
+    0 40px 80px -32px oklch(24.5% 0.011 62 / 0.22);
+  /* The composer, which floats over scrolling content and needs to read as
+     nearer than anything behind it. */
+  --shadow-float: 0 1px 2px oklch(24.5% 0.011 62 / 0.05),
+    0 8px 20px -6px oklch(24.5% 0.011 62 / 0.1),
+    0 24px 48px -20px oklch(24.5% 0.011 62 / 0.14);
 
-  /* ---- type ----------------------------------------------------------- */
-  --font-display: var(--font-app-display), var(--font-app-sans), ui-sans-serif,
-    system-ui, sans-serif;
+  /* ---- type -----------------------------------------------------------
+     ONE FAMILY, TWO ROLES. This has now been wrong twice in opposite
+     directions. It was two grotesques of near identical width and skeleton
+     (Bricolage over Plus Jakarta), which is not a pairing: the eye reads
+     two near-identical faces as one face rendering inconsistently. The fix
+     for that was a serif, which is a real pairing and is also a different
+     product: an editorial voice on a page whose job is to be boring and
+     correct at six in the morning.
+
+     So `display` is the same family at 800 with the tracking pulled in.
+     A grotesque at 800 set at default tracking reads as shouting; pulled
+     in, it reads as a headline, and the heading and the paragraph under it
+     share a skeleton so the jump reads as emphasis rather than as a
+     different document. */
+  --font-display: var(--font-app-sans), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-app-sans), ui-sans-serif, system-ui, "Segoe UI",
-    Roboto, sans-serif;
-  --font-mono: var(--font-app-mono), ui-monospace, "SF Mono", "Cascadia Mono",
-    "Roboto Mono", monospace;
+    sans-serif;
+  --font-mono: var(--font-app-mono), ui-monospace, "SF Mono", monospace;
 
   /* The scale is set from the conversation outwards. Prose is the thing a
-     controller actually reads, so it gets a comfortable 16px, and everything
-     else is sized in relation to it. An earlier pass had prose at 14px with
-     11px meta and 10px labels, which is cockpit density: correct for a
-     telemetry panel, wrong for something you read a paragraph of at 6 a.m. */
+     controller actually reads, so it gets a comfortable 16px, and
+     everything else is sized in relation to it. */
   --t-2xs: 0.6875rem; /* 11px, micro labels */
   --t-xs: 0.75rem; /* 12px, meta */
   --t-sm: 0.8125rem; /* 13px, table cells, chips */
@@ -105,125 +159,23 @@
   --t-lg: 1.125rem; /* 18px, answer headline */
   --t-xl: 1.375rem; /* 22px, page title */
   --t-2xl: 1.75rem; /* 28px, figures */
+  --t-3xl: 2.5rem; /* 40px, the greeting */
 
   /* ---- motion, communicates state and nothing else ------------------- */
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-  --dur-fast: 110ms;
-  --dur: 180ms;
-  --dur-slow: 320ms;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.5, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 340ms;
 
   /* ---- layout --------------------------------------------------------- */
   --rail-w: 17rem;
   --drawer-w: 24rem;
-  --topbar-h: 3rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-
-    --page: oklch(17.8% 0.006 264);
-    --canvas: oklch(20.8% 0.006 264);
-    --surface: oklch(23.6% 0.007 266);
-    --inset: oklch(21.8% 0.006 264);
-    --hover: oklch(26.8% 0.008 266);
-    --hover-2: oklch(30.4% 0.009 268);
-    --field: oklch(25.4% 0.008 266);
-
-    --ink: oklch(95.6% 0.003 250);
-    --ink-2: oklch(72.4% 0.011 260);
-    --ink-3: oklch(54.6% 0.013 264);
-
-    --line: oklch(28.6% 0.008 260);
-    --line-strong: oklch(34.6% 0.01 262);
-    --line-soft: oklch(25.2% 0.007 260);
-
-    --accent: oklch(70% 0.132 244);
-    --accent-ink: oklch(80% 0.098 242);
-    --accent-tint: oklch(70% 0.132 244 / 0.16);
-    --accent-line: oklch(70% 0.132 244 / 0.42);
-
-    --pass: oklch(73% 0.152 155);
-    --pass-tint: oklch(73% 0.152 155 / 0.15);
-    --pass-line: oklch(73% 0.152 155 / 0.4);
-
-    --breach: oklch(70% 0.176 22);
-    --breach-tint: oklch(70% 0.176 22 / 0.16);
-    --breach-line: oklch(70% 0.176 22 / 0.46);
-    --breach-wash: oklch(70% 0.176 22 / 0.08);
-
-    --caution: oklch(80% 0.148 78);
-    --caution-tint: oklch(80% 0.148 78 / 0.15);
-    --caution-line: oklch(80% 0.148 78 / 0.4);
-
-    --unknown: oklch(74% 0.132 296);
-    --unknown-tint: oklch(74% 0.132 296 / 0.15);
-    --unknown-line: oklch(74% 0.132 296 / 0.4);
-
-    --na: oklch(54.6% 0.013 264);
-    --na-tint: oklch(54.6% 0.013 264 / 0.2);
-    --na-line: oklch(54.6% 0.013 264 / 0.42);
-
-    --prov-dataset: var(--ink-2);
-    --prov-computed: var(--accent);
-    --prov-assumed: var(--caution);
-
-    --shadow-pop: 0 14px 36px -14px oklch(0% 0 0 / 0.72),
-      0 2px 8px -3px oklch(0% 0 0 / 0.5);
-  }
-}
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-
-  --page: oklch(17.8% 0.006 264);
-  --canvas: oklch(20.8% 0.006 264);
-  --surface: oklch(23.6% 0.007 266);
-  --inset: oklch(21.8% 0.006 264);
-  --hover: oklch(26.8% 0.008 266);
-  --hover-2: oklch(30.4% 0.009 268);
-  --field: oklch(25.4% 0.008 266);
-
-  --ink: oklch(95.6% 0.003 250);
-  --ink-2: oklch(72.4% 0.011 260);
-  --ink-3: oklch(54.6% 0.013 264);
-
-  --line: oklch(28.6% 0.008 260);
-  --line-strong: oklch(34.6% 0.01 262);
-  --line-soft: oklch(25.2% 0.007 260);
-
-  --accent: oklch(70% 0.132 244);
-  --accent-ink: oklch(80% 0.098 242);
-  --accent-tint: oklch(70% 0.132 244 / 0.16);
-  --accent-line: oklch(70% 0.132 244 / 0.42);
-
-  --pass: oklch(73% 0.152 155);
-  --pass-tint: oklch(73% 0.152 155 / 0.15);
-  --pass-line: oklch(73% 0.152 155 / 0.4);
-
-  --breach: oklch(70% 0.176 22);
-  --breach-tint: oklch(70% 0.176 22 / 0.16);
-  --breach-line: oklch(70% 0.176 22 / 0.46);
-  --breach-wash: oklch(70% 0.176 22 / 0.08);
-
-  --caution: oklch(80% 0.148 78);
-  --caution-tint: oklch(80% 0.148 78 / 0.15);
-  --caution-line: oklch(80% 0.148 78 / 0.4);
-
-  --unknown: oklch(74% 0.132 296);
-  --unknown-tint: oklch(74% 0.132 296 / 0.15);
-  --unknown-line: oklch(74% 0.132 296 / 0.4);
-
-  --na: oklch(54.6% 0.013 264);
-  --na-tint: oklch(54.6% 0.013 264 / 0.2);
-  --na-line: oklch(54.6% 0.013 264 / 0.42);
-
-  --prov-dataset: var(--ink-2);
-  --prov-computed: var(--accent);
-  --prov-assumed: var(--caution);
-
-  --shadow-pop: 0 14px 36px -14px oklch(0% 0 0 / 0.72),
-    0 2px 8px -3px oklch(0% 0 0 / 0.5);
+  --topbar-h: 3.25rem;
+  /* The conversation measure. Wider than a book column because answers
+     carry tables and option cards, narrower than the window because a
+     94-character line is not readable at speed. */
+  --measure: 46rem;
 }
 
 /* ==========================================================================
@@ -287,22 +239,26 @@
   --text-lg: var(--t-lg);
   --text-xl: var(--t-xl);
   --text-2xl: var(--t-2xl);
+  --text-3xl: var(--t-3xl);
 
   --radius-xs: var(--r-xs);
   --radius-sm: var(--r-sm);
   --radius-md: var(--r-md);
   --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+
+  --shadow-panel: var(--shadow-panel);
+  --shadow-raised: var(--shadow-raised);
+  --shadow-pop: var(--shadow-pop);
+  --shadow-float: var(--shadow-float);
 
   --ease-out-quint: var(--ease);
+  --ease-spring: var(--ease-spring);
 }
 
 /* ========================================================================== */
 
 @layer base {
-  * {
-    border-color: var(--line);
-  }
-
   html {
     -webkit-text-size-adjust: 100%;
   }
@@ -313,14 +269,20 @@
     font-family: var(--font-sans);
     font-size: var(--t-md);
     line-height: 1.6;
-    letter-spacing: -0.006em;
+    letter-spacing: -0.004em;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    font-variant-numeric: tabular-nums;
   }
 
-  /* Identifiers, times and figures are monospace everywhere, without
-     exception. A controller reads a crew id as a token, not as a word. */
+  /* Mono is for strings a MACHINE reads, and nothing else: a tool
+     identifier, a JSON payload, a rule's arithmetic. It used to carry every
+     figure, time and identifier in the product, which is a few hundred
+     sites, and at that count a monospace is not a register change, it is
+     the voice: the whole surface reads as a terminal printing a report
+     rather than as an interface presenting one.
+
+     Column alignment was the real requirement behind most of those, and
+     `tabular-nums` is the direct way to get it. See `.num`. */
   code,
   kbd,
   samp,
@@ -334,8 +296,35 @@
   h3,
   h4 {
     font-family: var(--font-display);
-    letter-spacing: -0.022em;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: -0.018em;
+    line-height: 1.16;
+  }
+
+  /* Controls are soft objects, not boxed ones. The radius and the family
+     are set once here so a field on one page cannot look different from a
+     field on another. */
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+    border-radius: var(--r-sm);
+  }
+
+  button:not(:disabled) {
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease),
+      box-shadow var(--dur-fast) var(--ease),
+      opacity var(--dur-fast) var(--ease),
+      transform var(--dur-fast) var(--ease);
+  }
+
+  /* Physical press. The single micro-interaction that most makes a control
+     feel like a control, and it costs one GPU-only property. */
+  button:not(:disabled):active {
+    transform: scale(0.985);
   }
 
   :focus-visible {
@@ -348,7 +337,7 @@
     background: var(--accent-tint);
   }
 
-  /* Scrollbars sized for a dense console rather than a document. */
+  /* Scrollbars that do not draw a channel down the side of the page. */
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--line-strong) transparent;
@@ -376,41 +365,120 @@
    Utilities. Small, named for what they mean in this product.
    ========================================================================== */
 
+/* A compartment lifted off the ground. No border: an almost invisible ring
+   holds the edge against white and the shadow does the actual work.
+
+   `hairline` is kept as a name because it is applied at ~40 sites, but it no
+   longer draws a hairline. Renaming it would have been a rename commit
+   pretending to be a design commit. */
 @utility hairline {
-  box-shadow: var(--ring-hairline);
+  box-shadow: var(--ring-faint), var(--shadow-panel);
 }
 
 @utility hairline-strong {
-  box-shadow: var(--ring-strong);
+  box-shadow: var(--ring-faint), var(--shadow-raised);
 }
 
-/* Uppercase micro label. Used for column heads and section eyebrows only. */
+/* Flat compartment: sits ON the ground rather than above it. For rows and
+   chips inside an already-elevated panel, where a second shadow would stack
+   into mud. */
+@utility flat {
+  box-shadow: var(--ring-faint);
+}
+
+/* THE DOUBLE BEZEL. A tray holding a plate: an outer shell in a tint of the
+   ground at radius 18, an inner core at 12, and the 6px difference between
+   them is exactly the shell's padding, so the two curves are concentric
+   rather than two radii that happen to be near each other. This is what
+   makes a card read as an object instead of a div. */
+@utility tray {
+  background: linear-gradient(
+    180deg,
+    oklch(24.5% 0.011 62 / 0.045),
+    oklch(24.5% 0.011 62 / 0.018)
+  );
+  border-radius: var(--r-lg);
+  padding: 6px;
+  box-shadow: var(--ring-faint);
+}
+
+/* Hairline grid drawn by a 1px GAP, so the divisions are the ground showing
+   through rather than borders that have to be kept in sync, deduplicated at
+   the seams, and cleared off the last child. */
+@utility rules {
+  display: grid;
+  gap: 1px;
+  background: var(--line-soft);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: var(--ring-faint), var(--shadow-panel);
+
+  & > * {
+    background: var(--surface);
+  }
+}
+
+/* The display face, used where a line is read as a statement rather than as
+   text: the greeting, an answer headline, a page title. */
+@utility macro {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.028em;
+  line-height: 1.08;
+}
+
+/* Uppercase micro label. Sans, not mono: this is applied at every column
+   head and section eyebrow in the product, and a monospace at that count
+   stops being an exception and becomes the voice. Weight carries the
+   presence the wider mono letterforms used to supply. */
 @utility label-micro {
   font-size: var(--t-2xs);
   line-height: 1.2;
   font-weight: 600;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);
 }
 
+/* Numerals that line up down a column. ALIGNMENT was the requirement and
+   mono was only ever one way to get it. A figure in the body face also sits
+   with the words around it, which a mono numeral inside a sans sentence
+   never did. */
 @utility num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: 0;
+}
+
+/* An identifier: a crew id, a flight number, a pairing, a rule. Read as a
+   token rather than as a word, which is a weight and a hair of tracking,
+   not a second typeface and not a bordered chip. */
+@utility ident {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+/* Genuinely machine-read strings: tool names, payloads, a rule's
+   arithmetic. The register change here is information. */
+@utility mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "zero";
-  letter-spacing: -0.01em;
+  letter-spacing: -0.012em;
 }
 
-/* The dotted separator between console regions, borrowed in spirit from
-   the reference library's section rules. */
-@utility rule-dotted {
-  background-image: linear-gradient(
-    to right,
-    var(--line-strong) 0 2px,
-    transparent 2px 5px
+/* The fade under a floating composer. The scroll region runs to the bottom
+   of the window and the page colour is drawn back over it, so content
+   dissolves rather than colliding with a rule. */
+@utility veil {
+  background: linear-gradient(
+    to bottom,
+    oklch(97.4% 0.0055 84 / 0),
+    var(--page) 62%
   );
-  background-size: 5px 1px;
-  background-repeat: repeat-x;
 }
 
 /* ==========================================================================
@@ -421,7 +489,7 @@
 @keyframes co-fade-up {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translate3d(0, 6px, 0);
   }
   to {
     opacity: 1;
@@ -452,10 +520,10 @@
 @keyframes co-pulse-ring {
   0%,
   100% {
-    box-shadow: 0 0 0 0 var(--accent-tint);
+    box-shadow: var(--ring-faint), 0 0 0 0 var(--accent-tint);
   }
   50% {
-    box-shadow: 0 0 0 4px var(--accent-tint);
+    box-shadow: var(--ring-faint), 0 0 0 4px var(--accent-tint);
   }
 }
 
@@ -474,6 +542,41 @@
   }
 }
 
+/* The sheet, and the composer on first paint. Slides from its own edge so
+   the motion says where the thing came from. */
+@keyframes co-slide-left {
+  from {
+    opacity: 0;
+    transform: translate3d(-14px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes co-slide-right {
+  from {
+    opacity: 0;
+    transform: translate3d(14px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes co-slide-down {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .anim-fade-up {
   animation: co-fade-up var(--dur) var(--ease) both;
 }
@@ -488,6 +591,23 @@
 }
 .anim-pulse-ring {
   animation: co-pulse-ring 1.6s var(--ease) infinite;
+}
+.anim-slide-left {
+  animation: co-slide-left var(--dur) var(--ease) both;
+}
+.anim-slide-right {
+  animation: co-slide-right var(--dur) var(--ease) both;
+}
+.anim-slide-down {
+  animation: co-slide-down var(--dur) var(--ease-spring) both;
+}
+
+/* Staggered arrival for a list that appears at once. Expressed as a custom
+   property so a caller sets `--i` on the row and nothing computes a delay in
+   JavaScript. */
+.anim-stagger {
+  animation: co-fade-up var(--dur) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
 }
 
 /* Provisional text: streamed tokens are dimmed and carry a slow travelling

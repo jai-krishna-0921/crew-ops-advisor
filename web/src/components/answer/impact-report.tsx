@@ -20,7 +20,7 @@ import {
   shortDate,
 } from "@/lib/format";
 import { GroundedText } from "@/components/answer/grounded-prose";
-import { Panel, PanelHead, Pill, Token } from "@/components/ui/primitives";
+import { Pill, Token } from "@/components/ui/primitives";
 import { cx, TONE } from "@/components/ui/tone";
 
 export function ImpactReportView({ impact }: { impact: ImpactReport }) {
@@ -54,33 +54,43 @@ export function ImpactReportView({ impact }: { impact: ImpactReport }) {
       </div>
 
       {impact.uncrewed_flights.length > 0 ? (
-        <Panel>
-          <PanelHead
-            title="Uncrewed"
-            meta={impact.trigger}
-          />
-          <ul className="divide-y divide-line-soft">
+        <div className="space-y-1.5">
+          <SectionHead title="Uncrewed" meta={impact.trigger} />
+          {/* A gap grid, not a bordered list. The divisions are the ground
+              showing between the rows, so there is nothing to keep in sync
+              and nothing to clear off the last child. */}
+          <ul className="rules">
             {impact.uncrewed_flights.map((flight) => (
               <FlightRow key={flight.flight_no} flight={flight} />
             ))}
           </ul>
-        </Panel>
+        </div>
       ) : null}
 
       {risks.length > 0 ? (
-        <Panel>
-          <PanelHead
+        <div className="space-y-1.5">
+          <SectionHead
             title="Downstream risk"
             meta="The consequences a single day view misses"
           />
-          <ul className="divide-y divide-line-soft">
+          <ul className="rules">
             {risks.map((risk, index) => (
               <RiskRow key={index} risk={risk} facts={impact.facts} />
             ))}
           </ul>
-        </Panel>
+        </div>
       ) : null}
     </section>
+  );
+}
+
+/** A heading that sits above a block rather than inside a frame on top of it. */
+function SectionHead({ title, meta }: { title: string; meta?: string }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-2 px-0.5">
+      <h4 className="text-base font-semibold text-ink">{title}</h4>
+      {meta ? <span className="text-xs text-ink-3">{meta}</span> : null}
+    </div>
   );
 }
 
@@ -98,7 +108,7 @@ function Metric({
   factKey?: string;
 }) {
   return (
-    <div className="rounded-md bg-surface px-3 py-2 hairline">
+    <div className="rounded-md bg-surface px-3.5 py-2.5 hairline">
       <p className="label-micro">{label}</p>
       <p
         className={cx(

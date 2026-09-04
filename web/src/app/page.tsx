@@ -13,17 +13,10 @@ export default function AdvisorPage() {
 
 function ConsoleFallback() {
   return (
-    <div className="flex h-full">
-      <div className="hidden w-[17rem] shrink-0 space-y-2 border-r border-line p-3 lg:block">
-        <Skeleton className="w-1/2" />
-        <Skeleton className="w-full" />
-        <Skeleton className="w-4/5" />
-      </div>
-      <div className="flex-1 space-y-3 p-6">
-        <Skeleton className="w-1/3" />
-        <Skeleton className="w-2/3" />
-        <Skeleton className="w-1/2" />
-      </div>
+    <div className="mx-auto w-full max-w-[var(--measure)] space-y-3 px-6 pt-20">
+      <Skeleton className="w-1/3" />
+      <Skeleton className="w-2/3" />
+      <Skeleton className="w-1/2" />
     </div>
   );
 }

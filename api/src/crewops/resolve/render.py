@@ -141,10 +141,20 @@ def _render_impact(envelopes: Sequence[ToolEnvelope], question: str) -> str:
         lines.append(f"\nUncrewed: {legs}.")
     if report.pairings_broken:
         lines.append("Pairings broken: " + ", ".join(report.pairings_broken) + ".")
-    for fact in report.facts:
-        if fact.key.endswith("passengers_affected") or fact.unit == "count":
-            lines.append(f"{fact.label}: {fact.rendered()}.")
-            break
+    # THE PASSENGER FIGURE, AND ONLY IF THE EXPLANATION HAS NOT ALREADY GIVEN
+    # IT. This used to match `key.endswith("passengers_affected") or unit ==
+    # "count"`. No fact key ends in `passengers_affected` (they are
+    # `passengers_immediate` and `passengers_total`), so the intended branch
+    # never fired and the loose one matched whatever counted first, which is
+    # `pairings_broken`. The answer then read "Pairings broken: P-2291."
+    # followed by "Pairings broken: 1.": two true, grounded, attested lines
+    # saying the same thing, which is why no verifier was ever going to catch
+    # it.
+    if not report.explanation:
+        for fact in report.facts:
+            if "passengers" in fact.key:
+                lines.append(f"{fact.label}: {fact.rendered()}.")
+                break
 
     if report.downstream_risks:
         lines.append("\nDownstream:")
@@ -372,16 +382,26 @@ def _render_reserves(envelopes: Sequence[ToolEnvelope], question: str) -> str:
     lines = [f"{payload.total_matched} reserve(s) on call for {payload.on_date}."]
     if not payload.reserves:
         return "\n".join(lines)
-    lines.append("")
-    for reserve in payload.reserves:
-        covers = ""
-        if reserve.covers_time is not None:
-            covers = " (covers the queried time)" if reserve.covers_time else ""
-        lines.append(
-            f"  {reserve.crew_id}  {reserve.rank}  base {reserve.base}  "
-            f"window {reserve.window_start} to {reserve.window_end}  "
-            f"reachable in {reserve.reachability_minutes} min{covers}"
-        )
+
+    # The rows are the table's job now, so the prose says only what the table
+    # cannot: which of these rows answer the narrower question that was asked.
+    # This used to dump every reserve as an indented line, and because a single
+    # newline is a soft break in markdown they arrived on screen as one
+    # ninety word sentence with fourteen clock times in it.
+    if payload.at_time is not None:
+        covering = [
+            reserve.crew_id for reserve in payload.reserves if reserve.covers_time
+        ]
+        lines.append("")
+        if covering:
+            lines.append(
+                f"Covering {payload.at_time:%H:%M}Z: " + ", ".join(covering) + "."
+            )
+        else:
+            lines.append(f"None of them covers {payload.at_time:%H:%M}Z.")
+    if payload.note:
+        lines.append("")
+        lines.append(payload.note)
     return "\n".join(lines)
 
 
@@ -404,12 +424,9 @@ def _render_certifications(envelopes: Sequence[ToolEnvelope], question: str) -> 
     ]
     if not payload.certifications:
         return "\n".join(lines)
-    lines.append("")
-    for cert in payload.certifications:
-        lines.append(
-            f"  {cert.crew_id}  {cert.cert_type}  valid to {cert.valid_to}  "
-            f"({cert.days_remaining} days remaining)"
-        )
+    if payload.note:
+        lines.append("")
+        lines.append(payload.note)
     return "\n".join(lines)
 
 
@@ -479,16 +496,15 @@ def _render_crew_list(envelopes: Sequence[ToolEnvelope], question: str) -> str:
     lines = [f"{payload.total_matched} crew match the filter."]
     if not payload.crew:
         return "\n".join(lines)
-    lines.append("")
-    for member in payload.crew:
-        lines.append(
-            f"  {member.crew_id}  {member.rank}  base {member.base}  "
-            f"rated {', '.join(member.ratings) or 'none on file'}"
-        )
+
+    # The matched rows are in the table. What the table cannot show is the
+    # tail: ids that matched but were capped out of the detailed rows. Naming
+    # them keeps the answer complete without printing the whole roster.
     shown = {member.crew_id for member in payload.crew}
     remaining = [crew_id for crew_id in payload.all_crew_ids if crew_id not in shown]
     if remaining:
-        lines.append("  ... plus: " + ", ".join(remaining))
+        lines.append("")
+        lines.append("Also matching: " + ", ".join(remaining) + ".")
     return "\n".join(lines)
 
 
@@ -501,15 +517,8 @@ def _render_roster(envelopes: Sequence[ToolEnvelope], question: str) -> str:
         f"{len(payload.duties)} duty day(s), {_num(payload.total_duty_hours)}h duty, "
         f"{_num(payload.total_block_hours)}h block."
     ]
-    if payload.duties:
-        lines.append("\nDuties:")
-        for duty in payload.duties:
-            flights = ", ".join(duty.flight_numbers)
-            lines.append(
-                f"  {duty.duty_date}  {duty.pairing_id}  duty {_num(duty.duty_hours)}h  "
-                f"block {_num(duty.block_hours)}h  sectors {duty.sectors}  "
-                f"flights {flights}"
-            )
+    # The duty days are the table. Days off are not, because they are the
+    # absence of a row and a table cannot show an absence.
     if payload.days_off:
         lines.append("\nDays off: " + ", ".join(str(day) for day in payload.days_off))
     return "\n".join(lines)
@@ -555,17 +564,14 @@ def _render_flights(envelopes: Sequence[ToolEnvelope], question: str) -> str:
     # DX412" shape, where the type is the answer. A multi-row listing does
     # not need the type repeated on every line to be useful, and the tail
     # number already identifies the airframe precisely.
-    show_type = len(flights) == 1
-    lines.append("\nFlights:")
-    for flight in flights[:_FLIGHT_LIST_CAP]:
-        detail = f"{flight.aircraft} ({flight.aircraft_type})" if show_type else flight.aircraft
+    if len(flights) == 1:
+        flight = flights[0]
         lines.append(
-            f"  {flight.flight_no}  {flight.dep_station}-{flight.arr_station}  "
-            f"dep {flight.dep_utc:%H:%M}Z  block {_num(flight.block_hours)}h  "
-            f"seats {flight.seats}  {detail}"
+            f"\n{flight.flight_no} runs {flight.dep_station} to {flight.arr_station}, "
+            f"departing {flight.dep_utc:%H:%M}Z and arriving {flight.arr_utc:%H:%M}Z, "
+            f"block {_num(flight.block_hours)}h, on {flight.aircraft} "
+            f"({flight.aircraft_type}), {flight.seats} seats."
         )
-    if len(flights) > _FLIGHT_LIST_CAP:
-        lines.append("  ... plus the remaining matches, omitted here for length")
     return "\n".join(lines)
 
 

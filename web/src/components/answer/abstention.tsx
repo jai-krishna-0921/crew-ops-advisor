@@ -31,7 +31,7 @@ export function AbstentionCard({
       aria-label="The advisor declined to answer"
       className="rounded-md bg-surface hairline"
     >
-      <header className="flex flex-wrap items-center gap-2 border-b border-line bg-inset/60 px-3 py-2">
+      <header className="flex flex-wrap items-center gap-2 px-3 py-2">
         <ShieldCheckIcon size={15} weight="fill" aria-hidden className="text-unknown" />
         <h3 className="text-base font-semibold text-ink">No answer given</h3>
         <Pill tone="unknown">{ABSTENTION_LABEL[abstention.reason]}</Pill>
@@ -43,7 +43,7 @@ export function AbstentionCard({
         </p>
       </div>
 
-      <div className="grid gap-x-6 gap-y-3 border-t border-line-soft px-3 py-3 sm:grid-cols-2">
+      <div className="grid gap-x-6 gap-y-3 px-3 py-3 sm:grid-cols-2">
         {abstention.missing.length > 0 ? (
           <div>
             <Eyebrow>What was missing</Eyebrow>
@@ -84,7 +84,7 @@ export function AbstentionCard({
       </div>
 
       {abstention.suggestions.length > 0 ? (
-        <div className="border-t border-line-soft px-3 py-3">
+        <div className="px-3 py-3">
           <Eyebrow>Try instead</Eyebrow>
           <ul className="mt-1.5 flex flex-wrap gap-1.5">
             {abstention.suggestions.map((suggestion) => (
@@ -93,7 +93,7 @@ export function AbstentionCard({
                   type="button"
                   onClick={() => onAsk?.(suggestion)}
                   disabled={!onAsk}
-                  className="group inline-flex items-center gap-1.5 rounded-sm bg-inset px-2 py-1 text-base text-ink-2 ring-1 ring-line transition-colors duration-100 hover:bg-hover hover:text-ink disabled:cursor-default disabled:opacity-70"
+                  className="group inline-flex items-center gap-1.5 rounded-sm bg-inset px-2 py-1 text-base text-ink-2 transition-colors duration-100 hover:bg-hover hover:text-ink disabled:cursor-default disabled:opacity-70"
                 >
                   {suggestion}
                   {onAsk ? (
