@@ -1,0 +1,121 @@
+{
+  "//": "Project-scope MCP servers. Commit this so every contributor gets the same set.",
+  "//secrets": "Real tokens go in env vars, never in this file. This file is committed.",
+  "//git": "uvx, not npx: @modelcontextprotocol/server-git is a 404 on npm and the real package is PyPI mcp-server-git. No --repository, because it resolves against the SERVER cwd, which is wherever the client started; tools take repo_path per call. KNOWN BROKEN upstream as of 2026-08-18: every published version crashes on start with \"Server object has no attribute list_tools\" against the mcp SDK uvx resolves. Our client skips it and serves the other thirteen.",
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ]
+    },
+    "git": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-git"
+      ]
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "memory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    "excel": {
+      "command": "uvx",
+      "args": [
+        "excel-mcp-server",
+        "stdio"
+      ]
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ]
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "shadcn@latest",
+        "mcp"
+      ]
+    },
+    "docs-langchain": {
+      "type": "http",
+      "url": "https://docs.langchain.com/mcp"
+    },
+    "reference-langchain": {
+      "type": "http",
+      "url": "https://reference.langchain.com/mcp"
+    },
+    "mlflow-mcp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--with",
+        "mlflow[mcp]>=3.5.1",
+        "mlflow",
+        "mcp",
+        "run"
+      ],
+      "env": {
+        "MLFLOW_TRACKING_URI": "http://localhost:5000"
+      }
+    },
+    "clearml": {
+      "command": "uvx",
+      "args": [
+        "clearml-mcp"
+      ]
+    },
+    "colab-proxy-mcp": {
+      "command": "uvx",
+      "args": [
+        "git+https://github.com/googlecolab/colab-mcp"
+      ],
+      "timeout": 30000
+    },
+    "revenue-intelligence": {
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "-m",
+        "comarketer.revenue_intel.mcp_server",
+        "--client",
+        "demo-atlas"
+      ]
+    }
+  },
+  "//ria": "revenue-intelligence serves ONE client, named on the command line. No tool takes a client id, so another tenant needs another server, which is a decision taken here rather than by a model mid-sentence."
+}

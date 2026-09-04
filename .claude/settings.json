@@ -1,0 +1,27 @@
+{
+  "//": "Project-scoped Claude Code settings. Committed so every contributor gets the same guardrails.",
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest:*)",
+      "Bash(uv run python evals/run_eval.py:*)",
+      "Bash(uv run python evals/make_samples.py:*)",
+      "Bash(uv run crewops:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv pip install:*)",
+      "Bash(make:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(python3 data/crew-ops-advisor-dataset/validate.py)",
+      "Read(//home/jk/Documents/Bessemer-Dcortex/agentic-crew-ops-dvisor/**)",
+      "Grep",
+      "Glob"
+    ],
+    "deny": [
+      "Write(//home/jk/Documents/Bessemer-Dcortex/agentic-crew-ops-dvisor/data/**)",
+      "Edit(//home/jk/Documents/Bessemer-Dcortex/agentic-crew-ops-dvisor/data/**)",
+      "Bash(python3 data/crew-ops-advisor-dataset/generate.py)"
+    ]
+  },
+  "//deny-note": "The dataset is read only. Regenerating it would silently change the answer keys the golden tests assert against, and every result in the README is quoted from the shipped pack."
+}
