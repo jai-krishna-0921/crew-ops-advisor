@@ -70,10 +70,11 @@ fails.
 |---|---|---|---|---|---|
 | deterministic (no model) | 6 | 6 | 1 | 8/14 | 7ms / 11ms |
 | agent, first measurement | 5 | 8 | **1** | 6/14 | 23.5s / 32.5s |
-| **agent, after the fixes below** | **10** | 4 | **0** | 10/14 | 18.0s / 30.6s |
+| agent, after the correctness fixes | 10 | 4 | **0** | 10/14 | 18.0s / 30.6s |
+| **agent, after cutting round trips** | **12** | 2 | **0** | 11/14 | 19.5s / 32.9s |
 
-Correctness doubled and the verdict inversion is gone. The agent path now beats
-the deterministic path on Tier 2, 10 against 6.
+Correctness more than doubled and the verdict inversion is gone. The agent path
+now beats the deterministic path on Tier 2, 12 against 6.
 
 Three things got it there, and none of them was prompting.
 
@@ -113,31 +114,48 @@ them.
 Latency came down with the round trips: average **23.5s to 18.0s**, p95
 **38.6s to 30.6s**.
 
-### Why Tier 2 is not 14 of 14, and what it would cost
+### Cutting the round trips
 
-Every remaining abstention scores **100% recall**. The system finds the right
-facts in all of them and then declines on the 30 second budget. The capability
-is complete; what is missing is time.
+Found by printing the *arguments* of every call rather than the tool names.
+Three causes, none of them a slow computation:
 
-Three consecutive runs scored 9, 10 and 10. These models do not honour
-temperature 0, so a single 14 would be luck rather than a result.
+- **A duplicate call.** Q27 called `list_reserves` four times, two of them
+  byte identical apart from key order. The tools node now keys every successful
+  call for the turn and hands a repeat its earlier envelope. It still emits an
+  envelope and a `ToolMessage`: suppressing the execution is fine, suppressing
+  the reply strands the tool call and the provider rejects the next request.
+- **One call per message.** The graph has always executed every tool call in a
+  message together, and nothing had ever asked the model to put more than one
+  there. Tools run in milliseconds, so what costs thirty seconds is ten
+  sequential model round trips.
+- **A stale planner tool list.** Hand written and six tools out of date, missing
+  both `scan_duty_headroom` and `earliest_report`. A planner that does not know
+  a tool exists plans around it, which is how "which crew have 45 or more duty
+  hours" became `find_crew` plus `get_duty_clocks` once per person when
+  `scan_duty_headroom` answers it in one call. Now derived from `TOOL_NAMES`.
 
-Getting there means one of three things, and each has a price:
+That took Tier 2 from 10 of 14 to **12 of 14**, still with nothing wrong.
 
-- **Raise the budget.** The remaining cases land at 24 to 31 seconds, so 45
-  would probably clear them. It also abandons the one latency commitment the
-  problem statement actually states, and an answer that takes 40 seconds on
-  stage reads as broken whatever the scorecard says.
-- **Cut more round trips.** Q30 makes nine `aggregate` calls to find the leg
-  with the most seats. Batching that is the same fix as `check_legality` and is
-  the honest option, but it is per-question work with no general form.
-- **Accept 10 of 14 with nothing wrong.** The rubric's own principle is that
-  correctness beats coverage, and Tier 2 currently has **zero wrong answers and
-  zero verdict inversions** across every run since the fixes.
+### Why it is not 14 of 14
 
-The recommendation is the third, with the second done opportunistically. A
-14 of 14 bought by relaxing the latency discipline would be a worse submission
-than a 10 of 14 that never lies and never stalls.
+Both remaining abstentions score **100% recall**. The system finds the right
+facts and then declines on the 30 second budget. The capability is complete;
+what is missing is seconds.
+
+Runs vary: 9, 10, 10, 12 across four measurements on identical code and
+prompts. These models do not honour temperature 0, so a single 14 would be
+luck rather than a result.
+
+What is left would cost something. Raising the budget to 45s would probably
+clear both, and would abandon the one latency commitment the problem statement
+actually states. The alternative is per-question batching with no general form
+left to find.
+
+The recommendation is to stop here. The rubric's own principle is that
+correctness beats coverage, and Tier 2 now has **zero wrong answers and zero
+verdict inversions** across every run since the fixes. A 14 of 14 bought by
+relaxing the latency discipline would be a worse submission than a 12 of 14
+that never lies and never stalls.
 
 ### The verifier was rejecting correct answers
 
@@ -176,7 +194,7 @@ returns 401. Every agent-mode number here is a statement about
 
 ## Test suite
 
-`make test`: **527 passed, 7 failed, 15 xfailed, 2 deselected.**
+`make test`: **534 passed, 7 failed, 15 xfailed, 2 deselected.**
 
 The 7 failures are all pre-existing golden parity failures and were failing
 before this session's work:
