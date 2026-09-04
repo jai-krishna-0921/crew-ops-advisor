@@ -34,29 +34,45 @@ questions are declined.
 
 | Tier | n | correct | partial | abstained | wrong | accuracy | grounded | avg/p95 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 16 | 10 | 1 | 4 | 1 | 83% | 10/16 | 7.3s / 13.9s |
+| 1 | 16 | 13 | 1 | 1 | 1 | 87% | 15/16 | 7.2s / 10.0s |
 
-**This is a regression and it is the most important fact in this document.**
-Routing Tier 1 through the agent turns 15 correct into 10 correct, introduces
-one outright wrong answer, and costs three orders of magnitude of latency.
+### The verifier was rejecting correct answers
 
-Two things are worth separating:
+The first agent-mode run scored 10 of 16 with four abstentions, and the
+conclusion drawn from it, that the model was too weak, was **wrong**. The
+dominant cause was a bug in our own verifier.
 
-- The guardrails worked. Four of the six losses are abstentions, not wrong
-  answers, and the scorer reported no verdict inversions. The system declined
-  rather than inventing. That is the design doing its job under a weak model.
-- The model is the bottleneck, not the architecture. `gpt-oss:120b-cloud` was
-  the only locally reachable model that emits tool calls at all (`qwen2.5:7b`
-  returns an empty `tool_calls` list for a bound schema, which strands the
-  agent loop). It is not good enough for this task.
+Language models write typographically. `gpt-oss` renders a crew id as `C‑3310`
+with U+2011 NON-BREAKING HYPHEN, so the identifier will not wrap. The
+extractor scanned for an ASCII hyphen, did not find one, and fell through to
+the bare integer `3310`. A number that appears in no tool output cannot be
+attested, so the grounding check rejected an answer that was correct and whose
+figures were all genuinely in the tool results.
 
-Agent mode has **never been run against Claude or GPT**, because no key for
-either has been configured. Every agent-mode number here is a statement about
+Folding the typographic characters to ASCII before scanning recovered three
+correct answers and took grounding from 10/16 to 15/16, matching the offline
+path exactly. It is not a loosening: identifiers still compare exactly, and a
+test pins the other direction, that the fold may not manufacture an identifier
+out of prose.
+
+The lesson is worth keeping. A guard that rejects good answers is exactly as
+useless as one that passes bad ones, and it fails in the direction that looks
+responsible, so it is easy to mistake for the model being stupid. The
+package's own `CLAUDE.md` names this failure mode; it still took a skeptical
+question to go and look.
+
+What remains is a genuine model shortcoming, and only one: Q06 asks for a
+reserve's on-call window and `gpt-oss` answers "the window is recorded in the
+system" instead of stating 06:00 to 18:00. It grades wrong at 33% recall.
+
+Agent mode has **never been run against Claude or GPT**. An
+`ANTHROPIC_API_KEY` has since appeared in `.env.local` but it is invalid and
+returns 401. Every agent-mode number here is a statement about
 `gpt-oss:120b-cloud`, not about the design.
 
 ## Test suite
 
-`make test`: **338 passed, 7 failed, 15 xfailed, 2 deselected.**
+`make test`: **358 passed, 7 failed, 15 xfailed, 2 deselected.**
 
 The 7 failures are all pre-existing golden parity failures and were failing
 before this session's work:
@@ -113,6 +129,7 @@ end through the LangGraph agent.
 | `api/src/crewops/agent/providers.py` | The only module that knows which vendor is behind the model. Provider detection, per-vendor defaults, and the three quirks below. |
 | `api/tests/agent/test_providers.py` | 16 tests over detection, precedence, and construction. |
 | `api/tests/golden/test_agent_tier1.py` | Two live-provider evals, marked `llm`. |
+| `api/tests/verify/test_typography.py` | 19 tests over the Unicode fold, both directions: it must recover a real identifier and must not invent one. |
 
 ### Modified
 
@@ -126,6 +143,7 @@ end through the LangGraph agent.
 | `api/src/crewops/eval/runner.py` | `has_api_key()` is provider-aware; added `provider_name()`. |
 | `api/src/crewops/eval/scorecard.py` | Skip message names all three providers. |
 | `api/tests/test_boundary.py` | `langchain_ollama` added to the banned client list. |
+| `api/src/crewops/verify/extract.py` | `fold_typography` ASCII-folds dashes, quotes and exotic spaces before scanning. One character to one character, so every span offset stays valid. |
 
 Nothing in `domain/`, `rules/`, `ops/` or `store/` was touched. The boundary
 test still passes.
@@ -151,12 +169,16 @@ Provider precedence is `anthropic -> openai -> ollama`. Dropping in
   priority. All 7 golden failures are traced to intent matching in `resolve/`,
   not to the tools or the ops engine, so this is likely one fix rather than
   seven. The six Tier 3 abstentions look like the same cause.
-- **Agent mode regresses Tier 1** (10/16 vs 15/16 offline), with one wrong
-  answer.
-- **Q12 is non-deterministic under the agent.** It graded `wrong` in the scored
-  run and `abstained` on re-run of the identical prompt. The hosted model does
-  not honour temperature 0 strictly, so single agent-mode results are not
-  reproducible and should not be quoted as if they were.
+- **Agent mode still trails offline on Tier 1**, 13/16 against 15/16, with one
+  wrong answer (Q06) and one partial. Grounding is now level at 15/16.
+- **Agent results are not reproducible run to run.** Q12 has graded `wrong`,
+  `abstained` and `correct` on the identical prompt across three runs. The
+  hosted model does not honour temperature 0 strictly, so no single agent-mode
+  number should be quoted as if it were stable.
+- **An invalid `ANTHROPIC_API_KEY` is in `.env.local`** and returns 401.
+  Because provider precedence puts Anthropic first, its mere presence takes
+  agent mode down. Either fix it or remove it; `CREWOPS_LLM_PROVIDER=ollama`
+  is the temporary override.
 - **Q12's deterministic answer has a duplication bug.** It renders
   "DX401, DX589, DX402, DX401, DX402, DX588, ..." repeating four flight numbers
   21 times. The expected answer is four flights. It grades `correct` only
@@ -175,8 +197,14 @@ Open work is tracked in `TODO.md`.
 
 The 20% "AI utilisation / deliberate boundary" criterion is in good shape and
 is provable: there is a boundary test that walks the import graph, a verifier
-that attests every atom, four structural guards, and a measured result showing
-the guardrails catching a weak model rather than shipping its drift.
+that attests every atom, four structural guards, and measured numbers for the
+agent path against the offline path on the same questions.
+
+The verifier bug above is worth telling honestly rather than hiding. A
+grounding check strict enough to reject its own correct answers over a
+non-breaking hyphen is a real finding about this class of system, and the
+process that caught it (measure, disbelieve the flattering explanation, go and
+look) is the thing that is actually being demonstrated.
 
 "Functionality" is the exposed criterion. Tier 1 is solid offline and shaky
 through the agent, Tier 2 is half, Tier 3 is a quarter, and the flagship

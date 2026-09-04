@@ -179,6 +179,52 @@ def _blank_markup(text: str) -> str:
     return _MARKUP_RE.sub(lambda m: " " * len(m.group(0)), text)
 
 
+#: Typographic characters folded to their ASCII equivalent before scanning.
+#:
+#: Every entry is one character mapped to exactly one character, which is the
+#: property the whole scanner depends on: `extract_atoms` reports span offsets
+#: into the scanned string and resolves each atom's sentence by that offset, so
+#: a fold that changed the length would silently misattribute context.
+#:
+#: This is not a relaxation of the check. Identifiers, rule ids, stations and
+#: dates still compare exactly (see this package's CLAUDE.md, invariant 3), and
+#: `test_the_fold_does_not_invent_an_identifier` pins the other direction: the
+#: fold may only recover an identifier that was genuinely written, never
+#: manufacture one out of prose.
+_FOLD: Final[dict[int, str]] = {
+    # Every dash a model reaches for instead of ASCII hyphen-minus. A crew id
+    # written `C‑3310` with U+2011 so it will not wrap used to scan as the bare
+    # integer 3310, which attests against nothing and rejected correct answers.
+    0x2010: "-",  # HYPHEN
+    0x2011: "-",  # NON-BREAKING HYPHEN
+    0x2012: "-",  # FIGURE DASH
+    0x2013: "-",  # EN DASH
+    0x2014: "-",  # EM DASH
+    0x2015: "-",  # HORIZONTAL BAR
+    0x2212: "-",  # MINUS SIGN
+    # Quotes, so a possessive does not detach from its identifier.
+    0x2018: "'",
+    0x2019: "'",
+    0x201C: '"',
+    0x201D: '"',
+    # Spaces that are not U+0020, which otherwise break `INR 18,500` apart.
+    0x00A0: " ",  # NO-BREAK SPACE
+    0x2007: " ",  # FIGURE SPACE
+    0x2009: " ",  # THIN SPACE
+    0x202F: " ",  # NARROW NO-BREAK SPACE
+}
+
+
+def fold_typography(text: str) -> str:
+    """ASCII-fold the punctuation a model types, preserving every offset.
+
+    Applied to the prose side only. The attested set is built from tool
+    envelopes, which are machine generated and already ASCII, so there is
+    nothing to fold on that side and no risk of the two drifting apart.
+    """
+    return text.translate(_FOLD)
+
+
 def _canonicalise(kind: AtomKind, match: re.Match[str]) -> tuple[AtomKind, str] | None:
     raw = match.group(0)
     if kind == "rule_id":
@@ -226,6 +272,10 @@ def extract_atoms(text: str) -> list[Atom]:
     """Every checkable atom in `text`, left to right, without overlaps."""
     if not text or not text.strip():
         return []
+    # Fold first, and use the folded string for both the scan and the sentence
+    # spans, so an atom's reported text and its quoted context agree. The fold
+    # is length preserving, so offsets are unaffected.
+    text = fold_typography(text)
     scan_target = _blank_markup(text)
     sentence_spans = sentences_of(text)
 

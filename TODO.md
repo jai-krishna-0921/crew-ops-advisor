@@ -44,8 +44,52 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
 
 - [ ] 7 golden failures (Q19, Q29, S1, S2, S3, S6, flagship), all traced to
       intent matching in `resolve/`, not to the tools or the ops engine
+- [ ] Six of the eight Tier 3 questions abstain on one shared cause:
+      `find_cover_options` wants a pairing and the question names a person and
+      a date. Same `resolve/` intent matching, so likely one fix for both.
 - [ ] `docs/SAMPLES.md`, a required deliverable
 - [ ] Presentation deck, a required deliverable
+- [ ] Architecture diagram of the LLM vs deterministic boundary. It is the 20%
+      criterion and the strongest part of the build.
+
+## The model layer
+
+Measured numbers and the full write-up are in `PROGRESS.md`.
+
+- [x] Provider agnostic: `agent/providers.py` is the only module naming a
+      vendor. Precedence anthropic, then openai, then ollama.
+- [x] Ollama wired, Tier 1 proven end to end through the LangGraph agent
+- [x] Fixed: the verifier rejected correct answers when the model wrote
+      `C‑3310` with a non-breaking hyphen. Recovered 3 answers, grounding went
+      10/16 to 15/16.
+- [ ] The `ANTHROPIC_API_KEY` in `.env.local` is invalid and returns 401.
+      Anthropic sorts first, so its presence alone takes agent mode down. Fix
+      it or remove it. `CREWOPS_LLM_PROVIDER=ollama` overrides meanwhile.
+- [ ] With a valid key, re-run `scorecard --mode both`, then decide whether the
+      agent path earns its latency: offline is 15/16 at 4ms, the agent is 13/16
+      at 7.2s.
+- [ ] Q06: `gpt-oss` answers "the window is recorded in the system" instead of
+      stating 06:00 to 18:00. The one remaining genuine model shortcoming.
+- [ ] Agent results are not reproducible: Q12 has graded wrong, abstained and
+      correct on the identical prompt. Do not quote a single run.
+
+## Thread memory, written but unproven
+
+- [ ] The `checkpoints` table has 0 rows: all 27 logged turns ran
+      deterministic, which bypasses the graph, so the LangGraph checkpointer
+      has never persisted anything
+- [ ] 26 threads for 27 turns, so multi-turn follow-up is never exercised
+- [ ] The eval harness builds `Advisor` with no memory, so nothing it runs is
+      logged. Decide whether that should change.
+
+## Housekeeping
+
+- [ ] Q12's deterministic answer repeats four flight numbers 21 times. It
+      grades correct only because matching is containment based, so the grader
+      is hiding it.
+- [ ] `make lint` format half is red and was before any of this:
+      `ruff format --check` wants 41 files. One isolated commit, coordinated,
+      since two tools are editing this tree.
 
 ## Scorecard, deterministic path
 

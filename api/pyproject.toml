@@ -82,6 +82,12 @@ ignore = ["ANN401", "UP042"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN"]
+# RUF001/2/3 flag ambiguous Unicode. These two files are *about* ambiguous
+# Unicode: the fold table maps it, and the tests assert the extractor survives
+# it. The characters have to be present literally or neither is testing
+# anything. Everywhere else the rule stays on.
+"src/crewops/verify/extract.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/verify/test_typography.py" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "anthropic".msg = "The deterministic core must not import a model client. Agent code only."
