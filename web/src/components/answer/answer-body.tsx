@@ -96,15 +96,51 @@ export function AnswerBody({
       )
     : reply.follow_ups;
 
+  /**
+   * THE ANSWER HAS NO HEADING. It has a first sentence.
+   *
+   * `Reply.headline` was drawn at 24px in the display face over the prose it
+   * had been cut out of, which is a document title, and an answer in a chat is
+   * not a document. Nothing else in the transcript is set that large, so every
+   * turn opened with a banner and the reader's eye was pulled to a line of
+   * type rather than to the answer. Making it merely smaller would not have
+   * fixed that: the mistake was treating a sentence as a heading at all.
+   *
+   * So the lead goes back into the prose stream as its own paragraph, in the
+   * same face, the same size and the same weight as everything after it.
+   * Answer first is preserved by POSITION, which is how a chat does it, rather
+   * than by typography.
+   *
+   * Rejoining rather than merely restyling also fixes something that was
+   * quietly wrong. The `h2` rendered plain text, so the figures in it were the
+   * only figures in the product not bound to the Fact that attests them: the
+   * `39.07h` in the headline was dead and the identical `39.07h` one line
+   * below it opened its arithmetic. Through `Markdown` the whole answer is
+   * linked, including its first sentence.
+   */
+  const prose = useMemo(() => {
+    if (declined) return "";
+    const lead = reply.headline?.trim() ?? "";
+    const body = reply.text.trim();
+    if (!lead) return body;
+    if (!body) return lead;
+    // A GUARD FOR THE TURNS ALREADY IN THE LOG. `_body_after` returns the
+    // answer untouched when it cannot take the lead sentence off the front,
+    // and every turn written before headlines stopped being cut mid sentence
+    // is in exactly that state: the fragment is still at the top of the body.
+    // Prepending it there would print it twice. A fresh reply never reaches
+    // this branch.
+    if (body.replace(/^#+\s*/, "").startsWith(lead)) return body;
+    // `headline_of` cuts BEFORE the terminator when it slices a sentence out
+    // of a longer paragraph, so a lead that has a body after it arrives with
+    // no full stop on it. One that was a whole line keeps its own.
+    const punctuated = /[.!?:;]$/.test(lead) ? lead : `${lead}.`;
+    return `${punctuated}\n\n${body}`;
+  }, [declined, reply.headline, reply.text]);
+
   return (
     <div className="space-y-4">
-      {reply.headline && !declined ? (
-        <h2 className="macro max-w-[52ch] text-xl text-ink">{reply.headline}</h2>
-      ) : null}
-
-      {reply.text && !declined ? (
-        <Markdown text={reply.text} facts={facts} />
-      ) : null}
+      {prose ? <Markdown text={prose} facts={facts} /> : null}
 
       {reply.abstention ? (
         <AbstentionCard

@@ -119,22 +119,31 @@ _SENTENCE_END: Final = re.compile(r"(?<![A-Z])[.!?](?=\s|$)")
 
 
 def _first_sentence(text: str, *, minimum: int = _HEADLINE_MIN) -> str:
-    """The leading sentence, or a word-boundary slice when there is not one.
+    """The leading sentence, or nothing when there is not one inside the budget.
 
     `minimum` guards against cutting on an abbreviation in a long answer, where
     a very short leading "sentence" is nearly always a mistake. An abstention
     passes 0, because its first sentence is the refusal itself ("I cannot
     answer that reliably") and is meant to be short.
+
+    A HEADLINE IS A SENTENCE OR IT IS NOTHING. This used to fall back to a cut
+    on the nearest word boundary, on the reasoning that a slice is honest
+    where an invented summary would not be. Honest and useless: what it
+    actually produced, on a real Tier 1 duty hours answer, was
+
+        C-1042 has accrued 20.93 duty hours ... (max 60 duty hours in
+
+    printed in a bold panel by the terminal, and printed as the answer's first
+    paragraph by the web, immediately above the same sentence in full. There
+    is no interface in which a truncated clause is the right thing to lead
+    with, and every one of them already handles an answer that has no headline.
     """
     match = _SENTENCE_END.search(text, minimum)
     if match and match.end() <= _HEADLINE_MAX:
         return text[: match.start()].strip()
     if len(text) <= _HEADLINE_MAX:
         return text.strip()
-    # No usable sentence end in budget. Cut on a word boundary rather than
-    # mid-token, and stay a slice: the headline is never invented.
-    head, _, _ = text[:_HEADLINE_MAX].rpartition(" ")
-    return (head or text[:_HEADLINE_MAX]).strip()
+    return ""
 
 
 def headline_of(text: str, *, abstention: Abstention | None = None) -> str | None:
@@ -148,6 +157,29 @@ def headline_of(text: str, *, abstention: Abstention | None = None) -> str | Non
     if len(first) > _HEADLINE_MAX:
         return _first_sentence(first) or None
     return first or None
+
+
+def _strip_lead(paragraph: str, headline: str) -> str | None:
+    """`paragraph` with `headline` taken off the front, or None if it is not there.
+
+    None is the "leave it alone" answer, for a headline that is not a leading
+    sentence of this paragraph: not a prefix of it at all, or a prefix that
+    stops somewhere other than a sentence end. `_first_sentence` no longer
+    produces the second kind, so on a freshly built reply this is unreachable.
+    It still fires on the turns already in the log, which were written by the
+    version that did, and returning the paragraph untouched is the right
+    answer for those: better a lead sentence that repeats than an answer that
+    opens halfway through a clause.
+    """
+    lead = paragraph.lstrip("#").strip()
+    if lead == headline:
+        return ""
+    if not lead.startswith(headline):
+        return None
+    remainder = lead[len(headline) :].lstrip()
+    if remainder[:1] not in (".", "!", "?"):
+        return None
+    return remainder[1:].strip()
 
 
 def _body_after(text: str, headline: str | None) -> str:
@@ -183,20 +215,24 @@ def _body_after(text: str, headline: str | None) -> str:
         return text
     stripped = text.strip()
     first, sep, rest = stripped.partition("\n")
-    if sep:
-        if first.strip().lstrip("#").strip() != headline:
-            return text
-        return rest.strip() or ""
+    if not sep:
+        trimmed = _strip_lead(stripped, headline)
+        return text if trimmed is None else trimmed
 
-    lead = stripped.lstrip("#").strip()
-    if lead == headline:
-        return ""
-    if not lead.startswith(headline):
+    # THE FIRST LINE IS A PARAGRAPH LIKE ANY OTHER. This branch used to accept
+    # only the case where the headline was the whole of it, which quietly
+    # excluded every answer whose opening line runs past the 200 character
+    # budget: there the headline is a slice of the line, the equality failed,
+    # and the body kept the line entire. On screen that is the lead sentence
+    # in two consecutive paragraphs, and a real Tier 1 duty hours answer hits
+    # it every time.
+    trimmed = _strip_lead(first, headline)
+    if trimmed is None:
         return text
-    remainder = lead[len(headline) :].lstrip()
-    if remainder[:1] not in (".", "!", "?"):
-        return text
-    return remainder[1:].strip()
+    rest = rest.strip()
+    if not trimmed:
+        return rest
+    return f"{trimmed}\n{rest}" if rest else trimmed
 
 
 def collect_facts(envelopes: Sequence[ToolEnvelope]) -> list[Fact]:

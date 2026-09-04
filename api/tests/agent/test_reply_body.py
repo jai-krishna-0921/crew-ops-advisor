@@ -92,6 +92,34 @@ def test_a_multi_line_answer_keeps_its_body() -> None:
     assert _body_after(text, headline_of(text)) == "Captains: C-3305, C-3310."
 
 
+def test_a_long_first_line_does_not_repeat_its_lead_sentence() -> None:
+    """The half of the defect the single paragraph fix did not reach.
+
+    The multi-line branch only ever recognised the case where the headline is
+    the WHOLE first line. When that line runs past the 200 character budget
+    the headline is a slice of it instead, the branch stopped matching, and
+    the body kept the line entire. On screen that is the same sentence in two
+    consecutive paragraphs, which is what a real Tier 1 answer produced.
+    """
+    lead = (
+        "C-1042 has accrued 20.93 duty hours in the 7 calendar days ending "
+        "2026-09-14 (window 2026-09-08 to 2026-09-14, inclusive). Headroom "
+        "under RULE-DUTY-02 is 39.07 hours (39h04m), computed as 60 minus 20.93."
+    )
+    assert len(lead) > 200, "the fixture only exercises the bug over the budget"
+    text = f"{lead}\nThe legality check confirms this."
+
+    headline = headline_of(text)
+    assert headline is not None
+    assert headline.endswith("inclusive)")
+
+    body = _body_after(text, headline)
+    assert headline not in body, "the lead sentence renders twice"
+    assert body.startswith("Headroom under RULE-DUTY-02")
+    assert "The legality check confirms this." in body
+    assert "39.07" in body and "39h04m" in body
+
+
 def test_a_body_that_does_not_open_with_the_headline_is_left_alone() -> None:
     """A model may write a heading that is not a slice of what follows."""
     text = "The pairing is covered. C-3310 takes both days."
@@ -101,19 +129,23 @@ def test_a_body_that_does_not_open_with_the_headline_is_left_alone() -> None:
 # ------------------------------------------------------- what must not change
 
 
-def test_a_headline_cut_mid_sentence_stays_in_the_body() -> None:
+def test_a_sentence_that_will_not_fit_produces_no_headline_at_all() -> None:
     """The case that decides the implementation.
 
-    With no sentence end inside the budget, `headline_of` cuts on a word
-    boundary. That cut is a fragment, not a sentence, and taking it out of the
-    body would leave the answer starting halfway through a clause.
+    With no sentence end inside the 200 character budget there is nothing to
+    select, and what used to happen instead was a cut on the nearest word
+    boundary. That is a fragment, and a fragment is wrong in every interface
+    that consumes it: the terminal printed "...(max 60 duty hours in" in a
+    bold panel, and the web, which renders the headline as the answer's first
+    paragraph, printed the fragment and then the whole sentence again
+    underneath it.
+
+    A HEADLINE IS A SENTENCE OR IT IS NOTHING. When there is not one, the
+    answer is simply prose with no lead, which every interface already handles
+    because an answer can have no headline for other reasons.
     """
     text = "Covering P-2291 means " + "checking every duty day in the window " * 8
-    headline = headline_of(text)
-    assert headline is not None
-    assert not headline.endswith("."), "this fixture is meant to have no sentence end"
+    assert len(text) > 200
 
-    body = _body_after(text, headline)
-    assert body == text, (
-        "a word boundary cut is not a sentence, so the body must keep all of it"
-    )
+    assert headline_of(text) is None
+    assert _body_after(text, None) == text, "with no headline the body is the answer"

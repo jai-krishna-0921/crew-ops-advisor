@@ -53,6 +53,32 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
       bubble in its own warm colour. Calmer than the reference: no
       photograph, no six-hue spectrum, chroma about a third of it.
 
+## Landed: the answer has no heading
+
+- [x] `Reply.headline` stops being an `h2` at 24px in the display face. It is
+      the answer's first sentence and it goes back into the prose stream as
+      its own paragraph, same face, same size, same weight. Answer first is
+      carried by position, which is how a chat does it, not by typography.
+- [x] Fix: the figures in the headline were the only figures in the product
+      not bound to the Fact that attests them. The `h2` rendered plain text,
+      so `39.07h` in the lead was dead and the identical `39.07h` one line
+      below opened its arithmetic. Routing the lead through `Markdown` links
+      the whole answer.
+- [x] Fix: a first line over the 200 character budget printed its lead
+      sentence twice. `_body_after` only recognised the case where the
+      headline was the WHOLE first line, and over the budget it is a slice of
+      it, so the body kept the line entire.
+- [x] Fix, at the root: a headline is a sentence or it is nothing.
+      `_first_sentence` used to fall back to a cut on the nearest word
+      boundary when no sentence end fitted, which produced "C-1042 has accrued
+      20.93 duty hours ... (max 60 duty hours in" as the lead line, printed by
+      the CLI in a bold panel and by the web immediately above the same
+      sentence in full. There is no interface where a truncated clause is the
+      right thing to lead with.
+- [x] The turns already in the log were written by the version that cut mid
+      sentence, so the web checks whether the body still opens with the lead
+      before prepending it. A fresh reply never reaches that branch.
+
 ## Landed: colour, second pass
 
 The first pass read the reference at about a third of its chroma and the
