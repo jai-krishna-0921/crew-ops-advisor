@@ -82,9 +82,12 @@ export function AnswerBody({
         <section aria-label="Rule traces" className="space-y-1.5">
           <Eyebrow>Rules evaluated</Eyebrow>
           <div className="grid gap-1.5 md:grid-cols-2">
-            {reply.rule_traces.map((trace) => (
+            {reply.rule_traces.map((trace, index) => (
+              // Traces from every candidate land in one flat list, so rule id
+              // plus date repeats. Keep the index in the key or React omits
+              // rows that differ only by which crew member they describe.
               <RuleTraceCard
-                key={`${trace.rule_id}-${trace.duty_date ?? "any"}`}
+                key={`${trace.rule_id}-${trace.duty_date ?? "any"}-${index}`}
                 trace={trace}
               />
             ))}

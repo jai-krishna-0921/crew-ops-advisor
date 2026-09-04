@@ -20,7 +20,13 @@ from typing import Any, cast
 from crewops.agent.config import AgentConfig, llm_configured
 from crewops.contracts import ToolSurface
 
-__all__ = ["CoreUnavailableError", "build_model", "default_snapshot", "load_tools"]
+__all__ = [
+    "CoreUnavailableError",
+    "build_model",
+    "default_data_dir",
+    "default_snapshot",
+    "load_tools",
+]
 
 #: The dataset's own "now". Every question is answered as of this instant
 #: unless the caller overrides it.
@@ -54,7 +60,7 @@ def load_tools(data_dir: Path | str | None = None) -> ToolSurface:
     root = Path(
         data_dir
         or os.environ.get("CREWOPS_DATA_DIR")
-        or _default_data_dir()
+        or default_data_dir()
     )
     # `Tools` takes a loaded WorldState, not a path. The dataset is read once
     # here and shared for the life of the process: it is immutable, and
@@ -65,7 +71,7 @@ def load_tools(data_dir: Path | str | None = None) -> ToolSurface:
     return cast(ToolSurface, tools)
 
 
-def _default_data_dir() -> Path:
+def default_data_dir() -> Path:
     """Walk up for the shipped dataset. Read only, never written to."""
     here = Path(__file__).resolve()
     for parent in here.parents:

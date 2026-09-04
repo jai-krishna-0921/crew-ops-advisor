@@ -89,5 +89,18 @@ def create_app(
 
 
 def _env_data_dir() -> Path | None:
+    """Where the shipped dataset lives. Read only, always.
+
+    An explicit CREWOPS_DATA_DIR wins. Otherwise fall back to the same walk-up
+    discovery the tool factory uses, so the demo launcher and the sample
+    questions work from a plain `make dev` with nothing exported. Returning
+    None here used to leave /api/questions empty, which silently emptied the
+    launcher the whole demo starts from.
+    """
     raw = os.environ.get("CREWOPS_DATA_DIR", "").strip()
-    return Path(raw) if raw else None
+    if raw:
+        return Path(raw)
+    from crewops.agent.factory import default_data_dir
+
+    found = default_data_dir()
+    return found if found.is_dir() else None

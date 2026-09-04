@@ -38,6 +38,12 @@ class FindCrewArgs(BaseModel):
     on_reserve_date: date | None = Field(
         default=None, description="Only crew on the reserve roster for this date"
     )
+    status: str | None = Field(
+        default=None,
+        description="Dataset crew status, for example active. Candidate searches "
+        "drop non-active crew on their own, so this is for reporting, not "
+        "eligibility.",
+    )
     available_on: date | None = Field(
         default=None, description="Only crew with no rostered duty on this date"
     )
@@ -58,6 +64,11 @@ class GetCrewDetailArgs(BaseModel):
 
 
 class FindFlightsArgs(BaseModel):
+    registration: str | None = Field(
+        default=None,
+        description="Aircraft tail. The only route from a tail to the pairing "
+        "that flies it.",
+    )
     origin: str | None = Field(default=None, description="Departure station")
     destination: str | None = Field(default=None, description="Arrival station")
     on_date: date | None = None
@@ -160,6 +171,12 @@ class GetRosterArgs(BaseModel):
 
 
 class CheckLegalityArgs(BaseModel):
+    added_duty_hours: float | None = Field(
+        default=None,
+        description="Test a hypothetical without naming an assignment: how much "
+        "more duty could this crew member take.",
+    )
+    added_flight_hours: float | None = Field(default=None)
     crew_id: str
     pairing_id: str | None = Field(
         default=None, description="Check the whole pairing, every duty day"
@@ -230,6 +247,20 @@ class ScanDutyHeadroomArgs(BaseModel):
 class FindCoverOptionsArgs(BaseModel):
     pairing_id: str | None = Field(default=None, description="The gap to cover")
     flight_numbers: list[str] | None = None
+    for_crew_id: str | None = Field(
+        default=None,
+        description="The crew member who is out. Prefer this: it resolves the "
+        "pairing on its own and it names the seat, which decides both the rank "
+        "the search filters on and the callout rate it charges.",
+    )
+    role: str | None = Field(
+        default=None,
+        description="The seat to fill when the person is not known. Must match a "
+        "rank exactly: Senior Cabin Crew is not substitutable for Cabin Crew.",
+    )
+    on_date: date | None = Field(
+        default=None, description="Which day of the roster the gap falls on"
+    )
     exclude_crew_ids: list[str] | None = Field(
         default=None, description="Usually the crew member who is out"
     )

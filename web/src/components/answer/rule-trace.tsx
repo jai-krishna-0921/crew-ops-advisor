@@ -174,8 +174,15 @@ export function DayLegalityBlock({ day }: { day: DayLegality }) {
         </span>
       </div>
       <div className="grid gap-1.5 md:grid-cols-2">
-        {day.traces.map((trace) => (
-          <RuleTraceCard key={`${day.duty_date}-${trace.rule_id}`} trace={trace} />
+        {day.traces.map((trace, index) => (
+          // The index is part of the key because one turn flattens the traces
+          // of every candidate into one list, so a rule id and a date together
+          // are not unique. Duplicate keys let React drop rows, and a silently
+          // missing rule row in a legality view is the worst kind of bug here.
+          <RuleTraceCard
+            key={`${day.duty_date}-${trace.rule_id}-${index}`}
+            trace={trace}
+          />
         ))}
       </div>
     </div>

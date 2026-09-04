@@ -19,6 +19,7 @@ import type {
   Recommendation,
   Reply,
   RuleDefinition,
+  QuestionTier,
   SampleQuestion,
   SimulateRequest,
   StreamEvent,
@@ -53,7 +54,55 @@ class ApiError extends Error {
   }
 }
 
-async function get<T>(path: string, fallback: T): Promise<T> {
+/**
+ * Pull the useful body out of a server response.
+ *
+ * The API wraps collections as `{rules: [...], count}` and tool-backed routes
+ * as a full ToolEnvelope carrying `payload` alongside its facts and trace.
+ * Both shapes are deliberate: the envelope is what makes a figure on this page
+ * traceable to the arithmetic that produced it. The UI wants the body, so the
+ * unwrapping happens once, here, rather than in every caller.
+ */
+function unwrap<T>(body: unknown, key: string): T {
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    const record = body as Record<string, unknown>;
+    if (key in record) return record[key] as T;
+    if ("payload" in record) return record.payload as T;
+  }
+  return body as T;
+}
+
+/**
+ * Map server records onto the view types this app renders.
+ *
+ * The API serves the dataset's own field names (`question_id`, `prompt`) and
+ * the memory layer's own (`first_question`, `turns`). Neither is ours to
+ * rename: the dataset is read only and the thread store is the agent's. So the
+ * translation happens once, here, instead of leaking two vocabularies through
+ * every component.
+ */
+function toSampleQuestion(row: Record<string, unknown>): SampleQuestion {
+  return {
+    id: String(row.question_id ?? row.id ?? ""),
+    tier: (row.tier ?? 1) as QuestionTier,
+    question: String(row.prompt ?? row.question ?? ""),
+    topic: (row.topic as string | null | undefined) ?? null,
+  };
+}
+
+function toThreadSummary(row: Record<string, unknown>): ThreadSummary {
+  const started = String(row.started_at ?? row.created_at ?? "");
+  return {
+    thread_id: String(row.thread_id ?? ""),
+    title: String(row.first_question ?? row.title ?? "Untitled thread"),
+    created_at: started,
+    updated_at: String(row.updated_at ?? started),
+    turn_count: Number(row.turns ?? row.turn_count ?? 0),
+    tier: (row.tier as ThreadSummary["tier"]) ?? null,
+  };
+}
+
+async function get<T>(path: string, fallback: T, key?: string): Promise<T> {
   if (USE_MOCKS) return delay(fallback);
   const response = await fetch(`${API_BASE}${path}`, {
     headers: { Accept: "application/json" },
@@ -65,7 +114,8 @@ async function get<T>(path: string, fallback: T): Promise<T> {
       response.status,
     );
   }
-  return (await response.json()) as T;
+  const body: unknown = await response.json();
+  return key ? unwrap<T>(body, key) : (body as T);
 }
 
 async function post<T>(path: string, body: unknown, fallback: T): Promise<T> {
@@ -85,7 +135,7 @@ async function post<T>(path: string, body: unknown, fallback: T): Promise<T> {
       response.status,
     );
   }
-  return (await response.json()) as T;
+  return unwrap<T>(await response.json(), "payload");
 }
 
 function delay<T>(value: T, ms = 120): Promise<T> {
@@ -97,13 +147,27 @@ function delay<T>(value: T, ms = 120): Promise<T> {
 export const api = {
   health: () => get<HealthResponse>("/api/health", HEALTH),
 
-  worldSummary: () => get<WorldSummary>("/api/world/summary", WORLD),
+  worldSummary: () => get<WorldSummary>("/api/world/summary", WORLD, "summary"),
 
-  rules: () => get<RuleDefinition[]>("/api/rules", RULES),
+  rules: () => get<RuleDefinition[]>("/api/rules", RULES, "rules"),
 
-  questions: () => get<SampleQuestion[]>("/api/questions", QUESTIONS),
+  questions: async () =>
+    USE_MOCKS
+      ? QUESTIONS
+      : (
+          await get<Record<string, unknown>[]>(
+            "/api/questions",
+            [],
+            "questions",
+          )
+        ).map(toSampleQuestion),
 
-  threads: () => get<ThreadSummary[]>("/api/threads", THREADS),
+  threads: async () =>
+    USE_MOCKS
+      ? THREADS
+      : (
+          await get<Record<string, unknown>[]>("/api/threads", [], "threads")
+        ).map(toThreadSummary),
 
   thread: (id: string) =>
     get<ThreadDetail>(`/api/threads/${encodeURIComponent(id)}`, {
@@ -114,7 +178,7 @@ export const api = {
     }),
 
   brief: (date: string) =>
-    get<Watchlist>(`/api/brief?date=${encodeURIComponent(date)}`, WATCHLIST),
+    get<Watchlist>(`/api/brief?date=${encodeURIComponent(date)}`, WATCHLIST, "payload"),
 
   simulate: (request: SimulateRequest) =>
     post<ImpactReport>("/api/simulate", request, IMPACT),

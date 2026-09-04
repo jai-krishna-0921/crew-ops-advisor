@@ -209,8 +209,19 @@ async def legality(request: Request, body: LegalityRequest) -> dict[str, Any]:
 
 
 class CoverRequest(BaseModel):
+    """A cover search.
+
+    `for_crew_id` is how a controller actually phrases it: a person is out,
+    not a pairing. It also names the seat, and since candidate enumeration
+    filters on an exact rank match and the callout rate differs by role, the
+    search returns the wrong people at the wrong price without it.
+    """
+
     pairing_id: str | None = None
     flight_numbers: list[str] | None = None
+    for_crew_id: str | None = None
+    role: str | None = None
+    on_date: date | None = None
     exclude_crew_ids: list[str] | None = None
     max_options: int = Field(default=5, ge=1, le=20)
     include_rejected: bool = True
@@ -220,9 +231,10 @@ class CoverRequest(BaseModel):
 async def cover(request: Request, body: CoverRequest) -> dict[str, Any]:
     """Ranked cover options with costs and rejects. No model call."""
     state = _state(request)
-    if not body.pairing_id and not body.flight_numbers:
+    if not body.pairing_id and not body.flight_numbers and not body.for_crew_id:
         raise HTTPException(
-            status_code=422, detail="cover needs a pairing_id or flight_numbers"
+            status_code=422,
+            detail="cover needs a pairing_id, flight_numbers, or a for_crew_id",
         )
     return _envelope_response(
         _run(state, "find_cover_options", body.model_dump(exclude_none=True))

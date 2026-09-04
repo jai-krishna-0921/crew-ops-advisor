@@ -126,6 +126,19 @@ def _render_impact(envelopes: Sequence[ToolEnvelope], question: str) -> str:
 
 
 def _render_recommendation(envelopes: Sequence[ToolEnvelope], question: str) -> str:
+    """A decision first, in the order a controller needs it.
+
+    Both surfaces that show this text also render the ranked options
+    structurally: the console draws option cards, the CLI draws a Rich table.
+    Linearising every option, cost line and trade-off into the prose as well
+    produced five thousand characters of run-on text saying exactly what the
+    cards beside it already said, which is unreadable at 6 a.m. and buries the
+    one thing being asked for.
+
+    So the prose answers the question and stops: what to do, what it costs,
+    what it rules out, and how much room the choice leaves. The detail belongs
+    in the cards, where it can be scanned.
+    """
     recommendation = _payload(envelopes, Recommendation)
     if recommendation is None:
         return _render_generic(envelopes, question)
@@ -136,45 +149,100 @@ def _render_recommendation(envelopes: Sequence[ToolEnvelope], question: str) -> 
 
     if not recommendation.options:
         lines.append(
-            "\nNo legal option was found. Every candidate the search reached was "
-            "excluded by a rule."
+            "No legal option was found. Every candidate the search reached was "
+            "excluded by a rule, so this needs a decision the rulebook cannot "
+            "make for you."
         )
-    else:
-        lines.append("\nRanked options:")
-        for option in recommendation.options:
-            lines.append(_option_line(option))
+        if recommendation.rejected:
+            lines.append(_closest_rejection(recommendation))
+        return "\n\n".join(lines)
+
+    best = recommendation.options[0]
+    headline = (
+        f"{best.action}. {best.crew_rank}, base {best.crew_base}, "
+        f"covering {best.coverage_summary}, at INR {best.cost.total_inr:,.0f}."
+    )
+    if best.delay_minutes:
+        headline += f" This introduces {best.delay_minutes} minutes of delay."
+    lines.append(headline)
+
+    if best.reasoning:
+        lines.append(best.reasoning.strip())
+
+    tightest = _tightest_margin(best)
+    if tightest:
+        lines.append(tightest)
+
+    scope: list[str] = []
+    if recommendation.candidates_evaluated:
+        scope.append(f"{recommendation.candidates_evaluated} candidates evaluated")
+    legal = len(recommendation.options)
+    scope.append(f"{legal} cleared every rule on every day of the cover")
+    if recommendation.rejected:
+        scope.append(f"{len(recommendation.rejected)} were excluded")
+    lines.append(", ".join(scope) + ".")
+
+    if len(recommendation.options) > 1:
+        runner_up = recommendation.options[1]
+        if runner_up.cost.total_inr > best.cost.total_inr:
+            # Both totals are attested facts, so both can be stated. Their
+            # difference is not: subtracting them here would be this module
+            # producing a figure no tool computed, which is exactly what the
+            # grounding check exists to stop. It caught this, correctly.
+            # The two numbers side by side say the same thing to a reader.
+            lines.append(
+                f"The next option is {runner_up.action} at "
+                f"INR {runner_up.cost.total_inr:,.0f}."
+            )
 
     if recommendation.rejected:
-        lines.append("\nRejected, with the rule that excluded each:")
-        for option in recommendation.rejected[:8]:
-            breach = option.legality.breaches
-            why = breach[0].rule_id if breach else "no legal path"
-            lines.append(f"  {option.crew_id} ({option.crew_rank}): {why}")
+        lines.append(_closest_rejection(recommendation))
 
-    if recommendation.ranking_basis:
-        lines.append(f"\nRanked by: {recommendation.ranking_basis}")
-    if recommendation.candidates_evaluated:
-        lines.append(f"Candidates evaluated: {recommendation.candidates_evaluated}.")
     if recommendation.notification_draft:
-        lines.append("\nDraft notification:\n" + recommendation.notification_draft)
-    return "\n".join(lines)
+        lines.append("Draft notification:\n" + recommendation.notification_draft)
+
+    return "\n\n".join(line for line in lines if line)
 
 
-def _option_line(option: CoverOption) -> str:
-    parts = [
-        f"  {option.rank}. {option.action}",
-        f"     {option.crew_rank}, base {option.crew_base}, {option.coverage_summary}",
-        f"     Cost INR {option.cost.total_inr:,.0f}",
-    ]
-    for line in option.cost.line_items:
-        parts.append(f"       {line.label}: INR {line.amount_inr:,.0f} ({line.basis})")
-    if option.delay_minutes:
-        parts.append(f"     Delay introduced: {option.delay_minutes} minutes")
-    if option.reasoning:
-        parts.append(f"     {option.reasoning}")
-    for tradeoff in option.tradeoffs:
-        parts.append(f"     Trade-off: {tradeoff}")
-    return "\n".join(parts)
+def _tightest_margin(option: CoverOption) -> str:
+    """The rule this option comes closest to breaching.
+
+    A legal option is not automatically a comfortable one, and the margin is
+    what tells a controller whether they still have room if the day gets worse.
+    """
+    tightest: RuleTrace | None = None
+    best_margin = float("inf")
+    for day in option.legality.per_day:
+        for trace in day.traces:
+            margin = trace.margin
+            if margin is None or margin < 0:
+                continue
+            if margin < best_margin:
+                tightest, best_margin = trace, margin
+    if tightest is None or tightest.margin_human is None:
+        return ""
+    return (
+        f"Tightest margin is {tightest.margin_human} under {tightest.rule_id}."
+    )
+
+
+def _closest_rejection(recommendation: Recommendation) -> str:
+    """Name one excluded candidate and the rule that excluded it.
+
+    Showing a reject is what proves the search was real. The full list is in
+    the cards; the prose carries one, because one is enough to be checked.
+    """
+    for option in recommendation.rejected:
+        breaches = option.legality.breaches
+        if not breaches:
+            continue
+        breach = breaches[0]
+        detail = breach.margin_human or breach.arithmetic
+        return (
+            f"{option.crew_id} was the closest exclusion: "
+            f"{breach.rule_id}, {detail}."
+        )
+    return ""
 
 
 def _render_notification(envelopes: Sequence[ToolEnvelope], question: str) -> str:

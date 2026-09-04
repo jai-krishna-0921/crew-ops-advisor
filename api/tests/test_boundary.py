@@ -343,3 +343,42 @@ def test_registry_signatures_have_not_fallen_behind_the_contract() -> None:
         + "\n\nWiden the implementation to match the contract, or change the "
         "contract deliberately and tell the other workstreams."
     )
+
+
+def test_agent_tool_schemas_match_the_contract() -> None:
+    """The agent's argument models must expose what the contract promises.
+
+    This is the same drift as the registry test above, one layer further out,
+    and it is the more dangerous of the two. Pydantic drops unknown fields
+    silently, so an argument missing from a ToolSpec's model is not an error:
+    the model asks for it, the value evaporates, and the tool reports that it
+    was never given one. It cost the flagship scenario twice before this test
+    existed.
+    """
+    import inspect
+
+    try:
+        from crewops.agent.toolspecs import TOOL_SPECS
+    except ImportError:
+        pytest.skip("crewops.agent.toolspecs not implemented yet")
+
+    protocol = _protocol_methods()
+    problems: list[str] = []
+    for spec in TOOL_SPECS:
+        promised = {
+            name
+            for name, param in inspect.signature(protocol[spec.name]).parameters.items()
+            if param.kind is inspect.Parameter.KEYWORD_ONLY
+        }
+        exposed = set(spec.args_model.model_fields)
+        dropped = sorted(promised - exposed)
+        if dropped:
+            problems.append(f"{spec.name} cannot accept {dropped}")
+
+    assert not problems, (
+        "These agent tool schemas accept fewer arguments than the contract "
+        "promises:\n  "
+        + "\n  ".join(problems)
+        + "\n\nPydantic drops unknown fields without complaining, so the "
+        "argument is not rejected, it is silently lost."
+    )
