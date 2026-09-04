@@ -532,6 +532,11 @@ REQUIRED_FOR: dict[str, frozenset[str]] = {
             "plan_joint_cover",
             "simulate_reassignment",
             "earliest_report",
+            # It evaluates RULE-FDP-01 against the delayed duty and returns the
+            # trace, so "the crew cannot legally complete DX404" is a computed
+            # verdict. Leaving it out made verdict_guard refuse S4 in a turn
+            # where the rules engine had run and produced the breach.
+            "simulate_delay",
         }
     ),
     "consequence_claim": frozenset(

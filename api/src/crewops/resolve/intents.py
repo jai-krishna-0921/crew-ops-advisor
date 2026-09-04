@@ -76,6 +76,32 @@ def _first_date(entities: Entities, snapshot: datetime) -> date:
     return entities.dates[0] if entities.dates else snapshot.date()
 
 
+def _last_date(entities: Entities, snapshot: datetime) -> date:
+    """The latest date named.
+
+    "C-5417's certificate expired on 17 Sep, their duty on 19 Sep is now
+    illegal" names three dates and the one being asked about is the last. A
+    compliance question is always about the duty ahead, not the lapse behind.
+    """
+    return max(entities.dates) if entities.dates else snapshot.date()
+
+
+#: A delay in minutes has to come out of the bare numbers, because `build`
+#: sees entities rather than the question. "a 90-minute delay ... on 16 Sep"
+#: yields 90, 16, 90, so the day of the month has to be excluded by range: a
+#: delay below five minutes is not worth simulating and one above ten hours is
+#: a cancellation.
+_MIN_DELAY_MINUTES: Final = 5
+_MAX_DELAY_MINUTES: Final = 600
+
+
+def _delay_minutes(entities: Entities) -> int:
+    for value in entities.numbers:
+        if _MIN_DELAY_MINUTES <= value <= _MAX_DELAY_MINUTES:
+            return int(value)
+    return 0
+
+
 def _report_time(entities: Entities, day: date) -> datetime | None:
     if not entities.times:
         return None
@@ -109,6 +135,88 @@ INTENTS: Final[tuple[Intent, ...]] = (
                     ),
                 },
             )
+        ],
+    ),
+    # Two crew out at once is not two sick calls. Cover has to be allocated as
+    # one problem, because the same reserve can only take one of the gaps, and
+    # `plan_joint_cover` is the tool that solves the allocation. `sick_impact`
+    # took `crew_ids[0]` and silently answered for one of the two.
+    #
+    # Priority above every sick call shape, since those patterns match this
+    # question too and would otherwise win on specificity of wording.
+    Intent(
+        name="joint_cover",
+        tier=3,
+        priority=95,
+        patterns=_rx(
+            r"\bboth\b.*\bcalls? in sick\b",
+            r"\bcaptains? of both\b",
+            r"\bboth\b.*\b(?:go|goes|went) unavailable\b",
+            r"\bsimultaneous(?:ly)?\b.*\b(?:sick|unavailable|gaps?)\b",
+            r"\btwo\b.*\bcalls? in sick\b",
+        ),
+        requires=("crew_id",),
+        missing_hint="two crew ids, for example C-3940 and C-1938",
+        template="recommendation",
+        # The joint plan and each gap's own candidates. The allocation says who
+        # takes which pairing without double booking anyone; it does not
+        # enumerate the alternatives and exclusions per gap, and the key wants
+        # both (`options_dxa`, `excluded_dxa`, `options_dxb`). Joint cover
+        # alone scored 28%, the per-gap searches alone 72%.
+        build=lambda e, s: [
+            PlannedCall(
+                "plan_joint_cover",
+                {
+                    "gaps": [
+                        {"for_crew_id": crew_id, "on_date": _first_date(e, s).isoformat()}
+                        for crew_id in e.crew_ids
+                    ],
+                    "objective": "min_cost",
+                },
+            ),
+            *[
+                PlannedCall(
+                    "find_cover_options",
+                    {
+                        "for_crew_id": crew_id,
+                        "on_date": _first_date(e, s),
+                        "include_rejected": True,
+                    },
+                )
+                for crew_id in e.crew_ids
+            ],
+        ],
+    ),
+    # A certificate that lapsed leaves an illegal duty on the roster, and the
+    # desk needs the verdict and the way out. S5 matched the tier 1 `rule`
+    # lookup purely because it names RULE-CERT-06, and answered with the text
+    # of the rule.
+    Intent(
+        name="compliance_breach",
+        tier=3,
+        priority=92,
+        patterns=_rx(
+            r"\bis now illegal\b",
+            r"\bnow illegal under\b",
+            r"\bcompliance flags?\b",
+            r"\b(?:certificate|certification|licence|license|medical|recurrent[_ ]training)\b"
+            r".*\bexpired\b",
+        ),
+        requires=("crew_id",),
+        template="recommendation",
+        build=lambda e, s: [
+            PlannedCall(
+                "check_legality",
+                {"crew_id": e.crew_ids[0], "on_date": _last_date(e, s)},
+            ),
+            PlannedCall(
+                "find_cover_options",
+                {
+                    "for_crew_id": e.crew_ids[0],
+                    "on_date": _last_date(e, s),
+                    "include_rejected": True,
+                },
+            ),
         ],
     ),
     Intent(
@@ -145,6 +253,35 @@ INTENTS: Final[tuple[Intent, ...]] = (
         ],
     ),
     # ------------------------------------------------------------- tier 2
+    # There was no delay intent at all, so S4 matched nothing and the offline
+    # path declined a question `simulate_delay` answers outright. The tool has
+    # existed the whole time; nothing routed to it.
+    Intent(
+        name="flight_delay",
+        tier=2,
+        priority=82,
+        patterns=_rx(
+            r"\b(?:technical |weather |atc )?delay\b",
+            r"\bdelayed\b.*\b(?:minute|hour)s?\b",
+            r"\b\d+[\s-]?(?:minute|min|hour|hr)s?\b.*\bdelay\b",
+            r"\blegs? shift by\b",
+            r"\bpushes? back\b",
+        ),
+        requires=("flight",),
+        missing_hint="a flight number, for example DX401",
+        template="impact",
+        build=lambda e, s: [
+            PlannedCall(
+                "simulate_delay",
+                {
+                    "flight_number": e.flight_numbers[0],
+                    "delay_minutes": _delay_minutes(e),
+                    "on_date": _first_date(e, s),
+                    "mode": "pre_departure",
+                },
+            )
+        ],
+    ),
     Intent(
         name="station_closure",
         tier=2,
