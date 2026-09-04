@@ -390,6 +390,20 @@ def _synthetic_report(assignment_ref: str, duties: Sequence[ProposedDuty]) -> Le
     )
 
 
+def option_to_cover_option(
+    world: WorldState, search: CoverSearch, option: RankedOption
+) -> CoverOption:
+    """The contract shaped projection of one option, for a caller outside a
+    single `CoverSearch.to_recommendation()` call.
+
+    `plan_joint_cover` needs this: it builds several searches (one per gap),
+    solves the allocation across all of them, and then has to render the one
+    chosen `RankedOption` per gap as a `CoverOption` the same way a solo
+    `find_cover_options` answer would.
+    """
+    return _to_cover_option(world, search, option)
+
+
 def _to_cover_option(
     world: WorldState, search: CoverSearch, option: RankedOption
 ) -> CoverOption:
@@ -643,4 +657,5 @@ __all__ = [
     "CoverSearch",
     "ExcludedCandidate",
     "RankedOption",
+    "option_to_cover_option",
 ]

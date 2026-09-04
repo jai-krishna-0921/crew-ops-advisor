@@ -12,6 +12,7 @@ from crewops.ops.candidates import (
     CoverSearch,
     ExcludedCandidate,
     RankedOption,
+    option_to_cover_option,
 )
 from crewops.ops.costing import price_cancellation, price_cover, price_crew_set
 from crewops.ops.disruption import (
@@ -62,6 +63,7 @@ __all__ = [
     "RankedOption",
     "WatchlistBuilder",
     "allocate",
+    "option_to_cover_option",
     "plan_positioning",
     "positioning_options",
     "price_cancellation",

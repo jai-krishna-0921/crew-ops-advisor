@@ -29,8 +29,10 @@ from datetime import timedelta
 from typing import Any, Literal, cast
 
 from crewops.contracts.evidence import Fact, FactUnit, ToolEnvelope
+from crewops.contracts.ops import CostBreakdown, CostLine
+from crewops.contracts.ops import JointPlan as ContractJointPlan
 from crewops.contracts.rules import ALL_RULE_IDS
-from crewops.contracts.tools import DelayMode, TimeOfDay
+from crewops.contracts.tools import DelayMode, JointObjective, TimeOfDay
 from crewops.domain import (
     Crew,
     Flight,
@@ -39,7 +41,7 @@ from crewops.domain import (
     format_duration,
     load_world,
 )
-from crewops.ops import OpsEngine
+from crewops.ops import CoverSearch, OpsEngine, allocate, option_to_cover_option
 from crewops.rules import (
     LegalityEngine,
     ProposedDuty,
@@ -1871,6 +1873,211 @@ class Tools:
             ],
             timer=timer,
             truncated=len(kept) < len(search.options),
+        )
+
+    def plan_joint_cover(
+        self,
+        *,
+        gaps: list[dict[str, str]],
+        objective: JointObjective = "min_cost",
+        max_options: int = 3,
+    ) -> ToolEnvelope:
+        timer = ToolTimer()
+        args: dict[str, Any] = {"gaps": gaps, "objective": objective, "max_options": max_options}
+        if len(gaps) < 2:
+            return error_envelope(
+                "plan_joint_cover",
+                args,
+                "Name at least two simultaneous gaps. A single gap is find_cover_options.",
+                timer=timer,
+            )
+        if objective != "min_cost":
+            return error_envelope(
+                "plan_joint_cover",
+                args,
+                f"Only the min_cost objective is implemented; {objective!r} is not "
+                "yet supported. Say so rather than silently defaulting.",
+                timer=timer,
+            )
+
+        resolved: list[tuple[str, str, str | None]] = []
+        for i, gap in enumerate(gaps):
+            pairing_id = gap.get("pairing_id")
+            for_crew_id = gap.get("for_crew_id")
+            role = gap.get("role")
+            on_date_str = gap.get("on_date")
+            try:
+                gap_on_date = DateType.fromisoformat(on_date_str) if on_date_str else None
+            except ValueError:
+                return error_envelope(
+                    "plan_joint_cover",
+                    args,
+                    f"Gap {i + 1}: {on_date_str!r} is not a YYYY-MM-DD date.",
+                    timer=timer,
+                )
+
+            sick = for_crew_id
+            resolved_role = role
+            if for_crew_id:
+                member = self.world.crew_member(for_crew_id)
+                if member is None:
+                    return error_envelope(
+                        "plan_joint_cover", args, self._unknown_crew(for_crew_id), timer=timer
+                    )
+                if resolved_role is None:
+                    resolved_role = member.rank
+                if pairing_id is None:
+                    lookup_date = gap_on_date or self.world.snapshot.date()
+                    pairing_id = self._pairing_for_crew_on(for_crew_id, lookup_date)
+                    if pairing_id is None:
+                        return error_envelope(
+                            "plan_joint_cover",
+                            args,
+                            f"Gap {i + 1}: {for_crew_id} holds no pairing on {lookup_date}.",
+                            timer=timer,
+                        )
+            if pairing_id is None:
+                return error_envelope(
+                    "plan_joint_cover",
+                    args,
+                    f"Gap {i + 1} needs a pairing_id or a for_crew_id.",
+                    timer=timer,
+                )
+            if self.world.pairing(pairing_id) is None:
+                return error_envelope(
+                    "plan_joint_cover", args, self._unknown_pairing(pairing_id), timer=timer
+                )
+            if resolved_role is None:
+                resolved_role, guessed_sick = self._role_to_cover(pairing_id, None, [])
+                sick = sick or guessed_sick
+            if resolved_role is None:
+                return error_envelope(
+                    "plan_joint_cover",
+                    args,
+                    f"Gap {i + 1}: could not determine which role needs cover on "
+                    f"{pairing_id}. Name the crew member with for_crew_id, or pass role.",
+                    timer=timer,
+                )
+            resolved.append((pairing_id, resolved_role, sick))
+
+        searches: list[CoverSearch] = self.ops.cover_searches_for_gaps(resolved)
+        internal_plan = allocate(searches)
+
+        # The dangerous failure mode this tool exists to prevent: two
+        # independent searches returning the same candidate as rank 1. Detect
+        # it explicitly so the reasoning is visible, even though `allocate`
+        # already guarantees the final assignments never repeat a crew id.
+        best_by_gap = {search.assignment_ref: search.best for search in searches}
+        crew_to_gaps: dict[str, list[str]] = {}
+        for ref, best in best_by_gap.items():
+            if best is not None and best.crew_id:
+                crew_to_gaps.setdefault(best.crew_id, []).append(ref)
+        contention = [
+            f"{crew_id} was independently the cheapest legal option for "
+            f"{' and '.join(refs)}. Assigning them to both at once would put one "
+            "crew member on two aircraft, so the joint allocation gives them to "
+            "exactly one gap and prices the next legal option for the rest."
+            for crew_id, refs in sorted(crew_to_gaps.items())
+            if len(refs) > 1
+        ]
+
+        assignments = [
+            option_to_cover_option(self.world, search, assignment.option)
+            for search, assignment in zip(searches, internal_plan.assignments, strict=True)
+        ]
+        line_items = [
+            CostLine(
+                label=f"{a.assignment_ref}: {a.option.action}",
+                amount_inr=a.option.cost_inr,
+                basis=" + ".join(line.basis for line in a.option.cost.line_items)
+                or "no cost lines",
+                rule_ref=None,
+            )
+            for a in internal_plan.assignments
+        ]
+        total_cost = CostBreakdown(
+            line_items=line_items,
+            total_inr=internal_plan.total_cost_inr,
+            note="Sum of the cheapest legal option assigned to each gap under the "
+            "distinctness constraint.",
+        )
+
+        alternatives_shown = internal_plan.alternatives[: max(0, max_options - 1)]
+        tradeoffs = list(contention)
+        if internal_plan.note:
+            tradeoffs.append(internal_plan.note)
+        for alt in alternatives_shown:
+            tradeoffs.append(
+                "Equally cheap alternative: "
+                + "; ".join(
+                    f"{a.assignment_ref} to {a.option.crew_id or 'cancellation'} "
+                    f"(INR {a.option.cost_inr:,})"
+                    for a in alt
+                )
+            )
+
+        joint = ContractJointPlan(
+            objective=objective,
+            feasible=True,
+            assignments=assignments,
+            gaps_covered=[a.assignment_ref for a in internal_plan.assignments],
+            gaps_uncovered=[],
+            total_cost=total_cost,
+            contention=contention,
+            why_infeasible=None,
+            tradeoffs=tradeoffs,
+            facts=[],
+        )
+        facts = [
+            *[f for option in assignments for f in option.facts],
+            computed_fact(
+                "plan_joint_cover.total_cost_inr",
+                "Total cost of the joint plan",
+                internal_plan.total_cost_inr,
+                "inr",
+                " + ".join(
+                    f"{a.assignment_ref} {a.option.cost_inr:,}" for a in internal_plan.assignments
+                )
+                + f" = {internal_plan.total_cost_inr:,}",
+                _SOURCE,
+            ),
+            computed_fact(
+                "plan_joint_cover.gaps_covered",
+                "Gaps covered",
+                len(internal_plan.assignments),
+                "count",
+                f"{len(gaps)} gaps named, {len(internal_plan.assignments)} assignments made",
+                _SOURCE,
+            ),
+        ]
+        detail = (
+            f"{len(gaps)} simultaneous gaps, {len(contention)} contested for the same "
+            f"candidate. Optimal joint cost is INR {internal_plan.total_cost_inr:,}: "
+            + "; ".join(
+                f"{a.assignment_ref} to "
+                f"{a.option.crew_id or 'cancellation'} (INR {a.option.cost_inr:,})"
+                for a in internal_plan.assignments
+            )
+            + "."
+        )
+        return ok_envelope(
+            "plan_joint_cover",
+            args,
+            joint,
+            facts=facts,
+            trace=[
+                step(
+                    "Solve gaps jointly, never repeating a crew member",
+                    detail,
+                    ["plan_joint_cover.total_cost_inr"],
+                )
+            ],
+            citations=[
+                cite("crew.json", "every active candidate per role"),
+                cite("rules.json", "all seven rules per candidate per gap per day"),
+                cite("costs.json", "callout, positioning, delay and cancellation rates"),
+            ],
+            timer=timer,
         )
 
     def draft_notification(

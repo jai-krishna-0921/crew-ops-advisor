@@ -120,6 +120,26 @@ class OpsEngine:
 
     # ------------------------------------------------------ joint allocation
 
+    def cover_searches_for_gaps(
+        self,
+        gaps: Sequence[tuple[str, str, str | None]],
+        *,
+        forbid_crew: Iterable[str] = (),
+    ) -> list[CoverSearch]:
+        """One `CoverSearch` per gap, run independently.
+
+        Exposed separately from `allocate_jointly` so a caller that needs to
+        render each gap's own solo search (which candidate was rank 1 before
+        the joint constraint was applied, for example) does not have to run
+        the searches a second time.
+        """
+        return [
+            self.find_cover_for_pairing(
+                pairing_id, role=role, sick_crew_id=sick, forbid_crew=forbid_crew
+            )
+            for pairing_id, role, sick in gaps
+        ]
+
     def allocate_jointly(
         self,
         gaps: Sequence[tuple[str, str, str | None]],
@@ -133,13 +153,7 @@ class OpsEngine:
         because two sick calls competing for one reserve is a single problem,
         not two.
         """
-        searches = [
-            self.find_cover_for_pairing(
-                pairing_id, role=role, sick_crew_id=sick, forbid_crew=forbid_crew
-            )
-            for pairing_id, role, sick in gaps
-        ]
-        return allocate(searches)
+        return allocate(self.cover_searches_for_gaps(gaps, forbid_crew=forbid_crew))
 
     # --------------------------------------------------------- simulation
 
