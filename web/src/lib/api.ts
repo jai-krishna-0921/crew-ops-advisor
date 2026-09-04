@@ -155,12 +155,43 @@ function toThreadSummary(row: Record<string, unknown>): ThreadSummary {
   const started = String(row.started_at ?? row.created_at ?? "");
   return {
     thread_id: String(row.thread_id ?? ""),
-    title: String(row.first_question ?? row.title ?? "Untitled thread"),
+    // The server names a thread from the first answer's headline, which is a
+    // short line written for a reader rather than the ninety characters of
+    // situation somebody typed to start it. `first_question` is the fallback
+    // for a thread recorded before titles existed.
+    title: String(row.title ?? row.first_question ?? "Untitled thread"),
+    titled_by: row.titled_by === "user" ? "user" : "auto",
     created_at: started,
     updated_at: String(row.updated_at ?? started),
     turn_count: Number(row.turns ?? row.turn_count ?? 0),
     tier: (row.tier as ThreadSummary["tier"]) ?? null,
   };
+}
+
+/**
+ * A write. Unlike `get`, this has no mock fallback and no silent degradation.
+ *
+ * A read that fails can show stale data and the page still works. A rename
+ * that reports success without renaming anything, or a delete that reports
+ * success without deleting anything, is a lie told to somebody about their own
+ * data, so both throw and the caller says so.
+ */
+async function send<T>(
+  path: string,
+  method: "PATCH" | "DELETE" | "POST",
+  body?: unknown,
+): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: body
+      ? { "Content-Type": "application/json", Accept: "application/json" }
+      : { Accept: "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) {
+    throw new Error(`${method} ${path} failed: ${response.status}`);
+  }
+  return (await response.json()) as T;
 }
 
 async function get<T>(path: string, fallback: T, key?: string): Promise<T> {
@@ -243,6 +274,19 @@ export const api = {
       : (
           await get<Record<string, unknown>[]>("/api/threads", [], "threads")
         ).map(toThreadSummary),
+
+  renameThread: (id: string, title: string) =>
+    send<{ thread_id: string; title: string }>(
+      `/api/threads/${encodeURIComponent(id)}`,
+      "PATCH",
+      { title },
+    ),
+
+  deleteThread: (id: string) =>
+    send<{ thread_id: string; deleted: boolean }>(
+      `/api/threads/${encodeURIComponent(id)}`,
+      "DELETE",
+    ),
 
   thread: (id: string) =>
     get<ThreadDetail>(`/api/threads/${encodeURIComponent(id)}`, {

@@ -23,7 +23,18 @@ from crewops.contracts import ToolSurface
 from crewops.server.deps import AppState, build_state
 from crewops.server.routes import router
 
-__all__ = ["ALLOWED_ORIGINS", "create_app"]
+__all__ = ["ALLOWED_METHODS", "ALLOWED_ORIGINS", "create_app"]
+
+#: Every verb this API serves.
+#:
+#: It read `GET, POST, OPTIONS`, which was true when it was written and stopped
+#: being true the moment a conversation could be renamed or deleted. The
+#: browser's preflight then answered "Disallowed CORS method" and both features
+#: failed from the web app while working perfectly under curl, because the
+#: request never reached the route, the store or the UI at all. A test asserts
+#: this list covers what the router actually serves, so the next verb cannot be
+#: forgotten here.
+ALLOWED_METHODS = ("GET", "POST", "PATCH", "DELETE", "OPTIONS")
 
 #: The dev web app. Widen this deliberately, never with a wildcard plus
 #: credentials.
@@ -81,7 +92,7 @@ def create_app(
         CORSMiddleware,
         allow_origins=list(ALLOWED_ORIGINS),
         allow_credentials=False,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=list(ALLOWED_METHODS),
         allow_headers=["*"],
     )
     app.include_router(router)

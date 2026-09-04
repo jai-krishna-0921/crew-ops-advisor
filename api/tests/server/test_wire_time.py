@@ -39,3 +39,29 @@ def test_the_serialised_form_carries_an_offset() -> None:
     for stamp in (advisor_utcnow(), runner_utcnow()):
         text = stamp.isoformat()
         assert text.endswith("+00:00") or text.endswith("Z"), text
+
+
+def test_cors_allows_every_method_the_api_actually_serves() -> None:
+    """The allowlist has to keep up with the routes.
+
+    It was `GET, POST, OPTIONS`, written when those were the only verbs the
+    API had. Renaming and deleting a conversation are PATCH and DELETE, so the
+    browser's preflight came back "Disallowed CORS method" and both features
+    failed from the web app while working perfectly under curl. Nothing in the
+    route, the store or the UI was wrong, which is exactly why it cost an hour
+    to find: the request never reached any of them.
+
+    Asserting against the router rather than against a hand-written list means
+    the next verb this API grows cannot be forgotten here.
+    """
+    from crewops.server.app import ALLOWED_METHODS, create_app
+
+    app = create_app()
+    served = {
+        method
+        for route in app.routes
+        for method in getattr(route, "methods", set())
+        if method not in {"HEAD"}
+    }
+    missing = served - set(ALLOWED_METHODS)
+    assert not missing, f"routes serve {sorted(missing)} but CORS does not allow it"

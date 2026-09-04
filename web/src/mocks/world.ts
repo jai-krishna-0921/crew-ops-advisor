@@ -230,6 +230,7 @@ export const THREADS: ThreadSummary[] = [
   {
     thread_id: "T-9f21",
     title: "C-1042 sick call, 15 Sep",
+    titled_by: "auto",
     created_at: "2026-09-14T18:12:00",
     updated_at: "2026-09-14T18:19:00",
     turn_count: 4,
@@ -238,6 +239,7 @@ export const THREADS: ThreadSummary[] = [
   {
     thread_id: "T-7c04",
     title: "BLR reserve availability",
+    titled_by: "auto",
     created_at: "2026-09-14T17:40:00",
     updated_at: "2026-09-14T17:44:00",
     turn_count: 2,
@@ -246,6 +248,7 @@ export const THREADS: ThreadSummary[] = [
   {
     thread_id: "T-5b88",
     title: "C-5417 recurrent training lapse",
+    titled_by: "user",
     created_at: "2026-09-14T09:02:00",
     updated_at: "2026-09-14T09:11:00",
     turn_count: 3,

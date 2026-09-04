@@ -11,8 +11,9 @@
  * launchpad rather than a wall of warnings.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRightIcon, CalendarBlankIcon } from "@phosphor-icons/react/dist/ssr";
 
 import type { Alert, RiskSeverity, Watchlist } from "@/lib/contracts";
@@ -27,6 +28,7 @@ import {
   SEVERITY_TONE,
   shortDate,
 } from "@/lib/format";
+import { InsightCard } from "@/components/ai/elements";
 import { GroundedText } from "@/components/answer/grounded-prose";
 import { FactProvider } from "@/components/evidence/fact-context";
 import {
@@ -105,6 +107,20 @@ export function BriefView() {
     return by;
   }, [watchlist]);
 
+  const router = useRouter();
+  const ask = useCallback(
+    (question: string) => router.push(`/?q=${encodeURIComponent(question)}`),
+    [router],
+  );
+
+  const topCritical = useMemo(
+    () =>
+      (watchlist?.alerts ?? []).find(
+        (alert) => alert.severity === "critical" && alert.suggested_question,
+      ) ?? null,
+    [watchlist],
+  );
+
   const alerts = useMemo(() => {
     const list = [...(watchlist?.alerts ?? [])].sort(
       (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
@@ -154,6 +170,45 @@ export function BriefView() {
             </select>
           </label>
         </header>
+
+        {/* THE SHAPE OF THE DAY, BEFORE THE LIST OF IT. The header said "14
+            items: 2 critical, 4 high, 8 lower priority" in a sentence, which
+            is the same four numbers a controller has to parse word by word at
+            six in the morning. The severity mix is one bar, and every figure
+            on these cards is a count the watchlist returned. */}
+        {watchlist ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <InsightCard
+              label="Open items"
+              value={grouped(watchlist.alerts.length)}
+              detail="Everything the scan raised for this date"
+              segments={[
+                { tone: "bg-breach", count: counts.critical, label: "Critical" },
+                { tone: "bg-caution", count: counts.high, label: "High" },
+                { tone: "bg-ink-3", count: counts.medium, label: "Medium" },
+                { tone: "bg-line-strong", count: counts.low, label: "Low" },
+              ]}
+            />
+            <InsightCard
+              label="Needs a decision today"
+              value={grouped(counts.critical)}
+              tone={counts.critical > 0 ? "breach" : undefined}
+              detail={
+                counts.critical > 0
+                  ? "Illegal as rostered, or lapsing inside the window"
+                  : "Nothing is illegal as rostered on this date"
+              }
+              onAsk={ask}
+              question={topCritical?.suggested_question ?? null}
+            />
+            <InsightCard
+              label="Worth watching"
+              value={grouped(counts.high)}
+              tone={counts.high > 0 ? "caution" : undefined}
+              detail="Legal now, and one sick call from not being"
+            />
+          </div>
+        ) : null}
 
         {watchlist ? (
           <div className="mt-4 flex flex-wrap items-center gap-3">

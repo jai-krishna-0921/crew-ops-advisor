@@ -24,7 +24,11 @@ from crewops.contracts import (
     ReplyEvent,
     RunStartedEvent,
     StreamEvent,
+    ToolCallEvent,
+    ToolEnvelope,
+    ToolResultEvent,
     ToolSurface,
+    TraceEvent,
     VerificationEvent,
 )
 from crewops.resolve.resolver import DeterministicResolver
@@ -47,6 +51,34 @@ def _utcnow() -> datetime:
     same class of defect as a report time in the wrong zone.
     """
     return datetime.now(UTC)
+
+
+def _tool_label(tool: str) -> str:
+    """The tool name as a phrase, for the row that is still running.
+
+    Deliberately mechanical. The agent path gets a written label because a
+    model wrote one; inventing English here would be the offline path claiming
+    an intent it never formed.
+    """
+    return tool.replace("_", " ")
+
+
+def _envelope_summary(envelope: ToolEnvelope) -> str:
+    """One line about what came back, taken from what came back.
+
+    The first fact is the tool's own headline figure: `list_reserves` leads
+    with the count, `check_legality` with the verdict. When a tool returned no
+    facts there is nothing to summarise and the row says nothing rather than
+    guessing.
+    """
+    if not envelope.ok:
+        return envelope.error or "failed"
+    if envelope.facts:
+        first = envelope.facts[0]
+        return f"{first.label}: {first.rendered()}"
+    if envelope.trace:
+        return envelope.trace[0].detail
+    return ""
 
 
 class Advisor:
@@ -149,10 +181,26 @@ class Advisor:
     ) -> AsyncIterator[StreamEvent]:
         """The offline path, in the same event shape as the agent path.
 
-        The deterministic resolver is synchronous and fast, so there is no
-        intermediate progress to report. The event sequence is still complete
-        and still honours the ordering guarantee, because the UI must not have
-        to branch on mode.
+        THE TOOL ROWS AND THE TRACE ARE REPLAYED, NOT SIMULATED, and the
+        difference matters enough to say plainly.
+
+        This used to emit five events: run_started, verification, an optional
+        abstain, reply, done. No tool_call, no tool_result, no trace. So the
+        trace panel, the task rows and the tool chips were dead on every turn
+        the deterministic resolver answered, which without an API key is every
+        turn there is. The justification was "the resolver is synchronous and
+        fast, so there is no intermediate progress to report", and that is the
+        wrong reading of the situation: the resolver ran six real tools and
+        measured six real latencies, and the record of that was thrown away on
+        the way to the screen.
+
+        So the envelopes are replayed as events AFTER the resolver returns.
+        Every row carries the latency that tool actually took. Nothing is
+        invented, and no progress is faked to look like thinking: a run that
+        finishes in four milliseconds emits its rows in four milliseconds and
+        the reader sees a finished list rather than a performance. What they
+        get is what ran, which is what the agent path has always shown and
+        what "explainability is mandatory" asks for.
         """
         seq = 0
 
@@ -173,6 +221,26 @@ class Advisor:
             as_of=as_of,
         )
         await self._record(reply)
+
+        for envelope in reply.tool_calls:
+            yield ToolCallEvent(
+                **_next(),
+                tool=envelope.tool,
+                args=envelope.args,
+                label=_tool_label(envelope.tool),
+            )
+            yield ToolResultEvent(
+                **_next(),
+                tool=envelope.tool,
+                ok=envelope.ok,
+                latency_ms=envelope.latency_ms,
+                summary=_envelope_summary(envelope),
+                envelope=envelope,
+            )
+
+        for step in reply.traces:
+            yield TraceEvent(**_next(), step=step)
+
         yield VerificationEvent(**_next(), report=reply.verification)
         if reply.abstention is not None:
             from crewops.contracts import AbstainEvent

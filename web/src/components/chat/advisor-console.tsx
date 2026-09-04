@@ -71,6 +71,7 @@ export function AdvisorConsole() {
   const [questions, setQuestions] = useState<SampleQuestion[]>([]);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [catalogueError, setCatalogueError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const conversation = useConversation(mode);
   const {
@@ -90,6 +91,12 @@ export function AdvisorConsole() {
   // somebody back down mid-answer is the rudest thing a streaming chat does.
   const scrollRef = useStickToBottom(turns.length);
   const seededRef = useRef<string | null>(null);
+  const threadIdRef = useRef<string | null>(null);
+  const newThreadRef = useRef(newThread);
+  useEffect(() => {
+    threadIdRef.current = threadId;
+    newThreadRef.current = newThread;
+  }, [threadId, newThread]);
 
   const refreshThreads = useCallback(() => {
     api
@@ -100,6 +107,60 @@ export function AdvisorConsole() {
         // asking a question, so it fails quietly.
       });
   }, []);
+
+  /**
+   * Rename, applied locally first and reconciled with the server after.
+   *
+   * The optimistic write is worth it because the alternative is a name that
+   * does not change for a round trip while somebody is looking straight at
+   * it. If the server refuses, the refetch puts the old name back and the
+   * error says so, which is the honest version of optimism: the UI may be
+   * early, it may not be wrong.
+   */
+  const renameThread = useCallback(
+    (id: string, title: string) => {
+      setThreads((current) =>
+        current.map((thread) =>
+          thread.thread_id === id
+            ? { ...thread, title, titled_by: "user" as const }
+            : thread,
+        ),
+      );
+      api
+        .renameThread(id, title)
+        .then(refreshThreads)
+        .catch(() => {
+          setActionError("That conversation could not be renamed.");
+          refreshThreads();
+        });
+    },
+    [refreshThreads],
+  );
+
+  /**
+   * Delete, which removes an audit trail and is not optimistic about it.
+   *
+   * The row is taken off the list straight away because the confirmation has
+   * already happened, but if the delete fails the refetch brings it back and
+   * says so. A conversation that looks deleted and is not is worse than one
+   * that takes a moment to go.
+   */
+  const deleteThread = useCallback(
+    (id: string) => {
+      setThreads((current) => current.filter((thread) => thread.thread_id !== id));
+      // Reading a thread that no longer exists would 404 into the load error
+      // banner, so the view leaves it before the request does.
+      if (threadIdRef.current === id) newThreadRef.current();
+      api
+        .deleteThread(id)
+        .then(refreshThreads)
+        .catch(() => {
+          setActionError("That conversation could not be deleted.");
+          refreshThreads();
+        });
+    },
+    [refreshThreads],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -214,6 +275,8 @@ export function AdvisorConsole() {
             activeThreadId={threadId}
             onNewThread={newThread}
             onCollapse={() => setRailOpen(false)}
+            onRename={renameThread}
+            onDelete={deleteThread}
             onOpenThread={(id) => {
               // openThread aborts any running stream and loads that thread's
               // history. Setting the id alone used to leave the current turns
@@ -263,7 +326,7 @@ export function AdvisorConsole() {
 
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
-            {loadError ? (
+            {loadError || actionError ? (
               <div className="flex items-start gap-2 rounded-md bg-breach-wash px-3.5 py-2.5">
                 <WarningCircleIcon
                   size={14}
@@ -271,10 +334,15 @@ export function AdvisorConsole() {
                   aria-hidden
                   className="mt-0.5 shrink-0 text-breach"
                 />
-                <p className="min-w-0 flex-1 text-base text-ink">{loadError}</p>
+                <p className="min-w-0 flex-1 text-base text-ink">
+                  {loadError ?? actionError}
+                </p>
                 <button
                   type="button"
-                  onClick={conversation.dismissLoadError}
+                  onClick={() => {
+                    setActionError(null);
+                    conversation.dismissLoadError();
+                  }}
                   className="shrink-0 rounded-full px-2 py-0.5 text-xs text-ink-2 hover:bg-hover hover:text-ink"
                 >
                   Dismiss
@@ -344,6 +412,8 @@ export function AdvisorConsole() {
           <SideRail
             threads={threads}
             activeThreadId={threadId}
+            onRename={renameThread}
+            onDelete={deleteThread}
             onNewThread={() => {
               newThread();
               setSheetOpen(false);

@@ -584,7 +584,10 @@ export interface SampleQuestion {
 
 export interface ThreadSummary {
   thread_id: string;
+  /** Named from the first answer's headline, or by a person who renamed it. */
   title: string;
+  /** "user" once somebody has typed a name, so a later turn cannot overwrite it. */
+  titled_by: "auto" | "user";
   created_at: string;
   updated_at: string;
   turn_count: number;

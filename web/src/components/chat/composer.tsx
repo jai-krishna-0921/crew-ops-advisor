@@ -82,12 +82,7 @@ export function Composer({
 
   return (
     <div className="px-4 pb-5 sm:px-6">
-      <div
-        className={cx(
-          "rounded-xl bg-surface transition-shadow duration-200 ease-out-quint",
-          "shadow-float focus-within:shadow-pop",
-        )}
-      >
+      <div className="relative rounded-xl bg-surface shadow-float transition-shadow duration-200 ease-out-quint focus-within:shadow-pop">
         <textarea
           ref={ref}
           rows={1}
@@ -101,33 +96,31 @@ export function Composer({
           }}
           placeholder={placeholder}
           aria-label="Ask the advisor"
-          className="block w-full resize-none bg-transparent px-4 pt-4 pb-1 text-md leading-relaxed text-ink placeholder:text-ink-3 focus:outline-none"
+          className="block max-h-42 w-full resize-none bg-transparent py-3.5 pr-14 pl-4 text-md leading-relaxed text-ink placeholder:text-ink-3 focus:outline-none"
         />
 
-        <div className="flex items-center px-2.5 pt-0.5 pb-2.5">
-          <button
-            type="button"
-            onClick={busy ? onStop : send}
-            disabled={!busy && !canSend}
-            aria-label={busy ? "Stop generating" : "Send"}
-            className={cx(
-              "ml-auto inline-flex size-9 items-center justify-center rounded-full",
-              "transition-[background-color,color,transform] duration-200 ease-out-quint",
-              "disabled:cursor-not-allowed",
-              busy
-                ? "bg-ink text-page"
-                : canSend
-                  ? "bg-accent text-page hover:scale-105"
-                  : "bg-inset text-ink-3",
-            )}
-          >
-            {busy ? (
-              <StopIcon size={13} weight="fill" aria-hidden />
-            ) : (
-              <ArrowUpIcon size={16} weight="bold" aria-hidden />
-            )}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={busy ? onStop : send}
+          disabled={!busy && !canSend}
+          aria-label={busy ? "Stop generating" : "Send"}
+          className={cx(
+            "absolute right-2.5 bottom-2.5 inline-flex size-9 items-center justify-center rounded-full",
+            "transition-[background-color,color,transform] duration-200 ease-out-quint",
+            "disabled:cursor-not-allowed",
+            busy
+              ? "bg-ink text-page"
+              : canSend
+                ? "bg-accent text-page hover:scale-105"
+                : "bg-inset text-ink-3",
+          )}
+        >
+          {busy ? (
+            <StopIcon size={13} weight="fill" aria-hidden />
+          ) : (
+            <ArrowUpIcon size={16} weight="bold" aria-hidden />
+          )}
+        </button>
       </div>
     </div>
   );

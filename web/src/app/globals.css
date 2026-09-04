@@ -130,20 +130,22 @@
     0 24px 48px -20px oklch(24.5% 0.011 62 / 0.14);
 
   /* ---- type -----------------------------------------------------------
-     ONE FAMILY, TWO ROLES. This has now been wrong twice in opposite
-     directions. It was two grotesques of near identical width and skeleton
-     (Bricolage over Plus Jakarta), which is not a pairing: the eye reads
-     two near-identical faces as one face rendering inconsistently. The fix
-     for that was a serif, which is a real pairing and is also a different
-     product: an editorial voice on a page whose job is to be boring and
-     correct at six in the morning.
+     CABINET GROTESK OVER SATOSHI, self hosted.
 
-     So `display` is the same family at 800 with the tracking pulled in.
-     A grotesque at 800 set at default tracking reads as shouting; pulled
-     in, it reads as a headline, and the heading and the paragraph under it
-     share a skeleton so the jump reads as emphasis rather than as a
-     different document. */
-  --font-display: var(--font-app-sans), ui-sans-serif, system-ui, sans-serif;
+     Four attempts came before this and all four were Google Fonts, which is
+     the actual story: the shortlist was "what is one import away" rather
+     than "what should this look like". It was two grotesques of near
+     identical skeleton (Bricolage over Plus Jakarta), which the eye reads
+     as one face rendering inconsistently rather than as a pairing; then a
+     serif, a real pairing and the wrong product; then Public Sans and
+     Figtree, both competent and neither with a point of view.
+
+     Cabinet has character in the terminals and a tight, confident set at
+     800. Satoshi is a neo-grotesque with a tall x-height and open counters,
+     so it holds 13px in a dense table and still reads warm in a paragraph.
+     They differ the way two faces have to differ to look chosen. */
+  --font-display: var(--font-app-display), var(--font-app-sans), ui-sans-serif,
+    system-ui, sans-serif;
   --font-sans: var(--font-app-sans), ui-sans-serif, system-ui, "Segoe UI",
     sans-serif;
   --font-mono: var(--font-app-mono), ui-monospace, "SF Mono", monospace;
@@ -297,7 +299,7 @@
   h4 {
     font-family: var(--font-display);
     font-weight: 700;
-    letter-spacing: -0.018em;
+    letter-spacing: -0.015em;
     line-height: 1.16;
   }
 
@@ -423,8 +425,8 @@
 @utility macro {
   font-family: var(--font-display);
   font-weight: 800;
-  letter-spacing: -0.028em;
-  line-height: 1.08;
+  letter-spacing: -0.02em;
+  line-height: 1.06;
 }
 
 /* Uppercase micro label. Sans, not mono: this is applied at every column

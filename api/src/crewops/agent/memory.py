@@ -41,7 +41,20 @@ CREATE TABLE IF NOT EXISTS turns (
     reply_json   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS turns_thread_idx ON turns (thread_id, asked_at);
+
+-- A conversation's name, kept apart from its turns so renaming one does not
+-- touch the audit trail. `titled_by` is the whole point of the table: a name
+-- somebody typed must never be overwritten by the next answer's headline.
+CREATE TABLE IF NOT EXISTS thread_meta (
+    thread_id TEXT PRIMARY KEY,
+    title     TEXT NOT NULL,
+    titled_by TEXT NOT NULL CHECK (titled_by IN ('auto', 'user'))
+);
 """
+
+
+#: A title longer than this is not a title, it is the question again.
+_TITLE_MAX = 72
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +65,21 @@ class ThreadSummary:
     turns: int
     started_at: str
     updated_at: str
+    title: str
+    titled_by: str
+
+
+def _as_title(text: str) -> str:
+    """A single tidy line, capped.
+
+    Cuts on a word boundary when there is one to cut on, because a name
+    truncated mid-word reads as a bug rather than as a name.
+    """
+    tidy = " ".join(text.split())
+    if len(tidy) <= _TITLE_MAX:
+        return tidy
+    cut = tidy[:_TITLE_MAX].rsplit(" ", 1)[0]
+    return f"{cut or tidy[:_TITLE_MAX]}\u2026"
 
 
 class Memory:
@@ -131,21 +159,94 @@ class Memory:
                 reply.model_dump_json(),
             ),
         )
+        await self._name_thread(reply)
         await self._log_conn.commit()
+
+    async def _name_thread(self, reply: Reply) -> None:
+        """Name a conversation from its first answer, once.
+
+        `Reply.headline` is a short line written for a reader under time
+        pressure, by the model in agent mode and by the deterministic renderer
+        offline. It is already the sentence somebody would use to describe the
+        exchange, which makes it a better name than the ninety character
+        situation they typed to start it.
+
+        A title is language rather than a figure, which is why a model is
+        allowed to author one: nothing in the answer depends on it and the
+        verifier has nothing to attest. `INSERT OR IGNORE` is what keeps it to
+        the first turn and what stops it from ever overwriting a name somebody
+        typed, since a user rename holds the same primary key.
+        """
+        if self._log_conn is None:
+            return
+        title = _as_title(reply.headline or reply.question)
+        if not title:
+            return
+        await self._log_conn.execute(
+            "INSERT OR IGNORE INTO thread_meta (thread_id, title, titled_by) "
+            "VALUES (?, ?, 'auto')",
+            (reply.thread_id, title),
+        )
+
+    async def rename(self, thread_id: str, title: str) -> bool:
+        """Give a conversation a name a person chose. Returns whether it stuck."""
+        if self._log_conn is None:
+            return False
+        tidy = _as_title(title)
+        if not tidy:
+            return False
+        cursor = await self._log_conn.execute(
+            "SELECT 1 FROM turns WHERE thread_id = ? LIMIT 1", (thread_id,)
+        )
+        exists = await cursor.fetchone()
+        await cursor.close()
+        if exists is None:
+            return False
+        await self._log_conn.execute(
+            "INSERT INTO thread_meta (thread_id, title, titled_by) "
+            "VALUES (?, ?, 'user') "
+            "ON CONFLICT(thread_id) DO UPDATE SET title = excluded.title, "
+            "titled_by = 'user'",
+            (thread_id, tidy),
+        )
+        await self._log_conn.commit()
+        return True
+
+    async def delete(self, thread_id: str) -> bool:
+        """Remove a conversation and its name. Returns whether there was one.
+
+        The name goes with the turns rather than being left behind, so a
+        recycled thread id cannot inherit a name from a conversation that no
+        longer exists.
+        """
+        if self._log_conn is None:
+            return False
+        cursor = await self._log_conn.execute(
+            "DELETE FROM turns WHERE thread_id = ?", (thread_id,)
+        )
+        removed = cursor.rowcount
+        await cursor.close()
+        await self._log_conn.execute(
+            "DELETE FROM thread_meta WHERE thread_id = ?", (thread_id,)
+        )
+        await self._log_conn.commit()
+        return removed > 0
 
     async def threads(self, limit: int = 50) -> list[ThreadSummary]:
         if self._log_conn is None:
             return []
         cursor = await self._log_conn.execute(
-            "SELECT thread_id, COUNT(*) AS n, MIN(asked_at), MAX(asked_at) "
-            "FROM turns GROUP BY thread_id ORDER BY MAX(asked_at) DESC LIMIT ?",
+            "SELECT t.thread_id, COUNT(*) AS n, MIN(t.asked_at), MAX(t.asked_at), "
+            "       m.title, m.titled_by "
+            "FROM turns t LEFT JOIN thread_meta m ON m.thread_id = t.thread_id "
+            "GROUP BY t.thread_id ORDER BY MAX(t.asked_at) DESC LIMIT ?",
             (limit,),
         )
         rows = await cursor.fetchall()
         await cursor.close()
 
         summaries: list[ThreadSummary] = []
-        for thread_id, count, started, updated in rows:
+        for thread_id, count, started, updated, title, titled_by in rows:
             first = await self._question_at(str(thread_id), ascending=True)
             last = await self._question_at(str(thread_id), ascending=False)
             summaries.append(
@@ -156,6 +257,10 @@ class Memory:
                     turns=int(count),
                     started_at=str(started),
                     updated_at=str(updated),
+                    # A thread recorded before this table existed has no row in
+                    # it, so it falls back to what the rail used to show.
+                    title=str(title) if title else _as_title(first),
+                    titled_by=str(titled_by) if titled_by else "auto",
                 )
             )
         return summaries

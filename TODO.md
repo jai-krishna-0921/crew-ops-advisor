@@ -40,6 +40,26 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
 - [x] Session persistence across a reload
 - [x] Contextual memory stubs, wired per thread
 
+## Landed: this pass
+
+- [x] Fonts: Cabinet Grotesk for display, Satoshi for text, both self hosted
+      so the product still runs with no network
+- [x] Composer: the send button sits in the field, so the empty row is gone
+- [x] Fact hover opens one popover, the one under the cursor
+- [x] Tool calls and the trace stream on a live turn, not only in history
+- [x] Reference elements wired: elapsed loader, task rows, tool chips,
+      thinking, source chips under every answer, insight cards on the brief
+- [x] Rename and delete a conversation
+- [x] The assistant names the conversation from the first answer's headline
+- [x] Fix: CORS refused PATCH and DELETE, so rename and delete failed in the
+      browser while working under curl
+- [x] Fix: the rename field was focused during the click that opened it, so
+      the click's own focus handling took the caret straight back out
+- [x] Fix: the row menu was trapped in the stacking context its entry
+      animation created, and the rows below painted over it
+- [x] Fix: an invisible full-viewport backdrop swallowed every click meant
+      for the menu it was supposed to dismiss
+
 ## Open
 
 - [ ] 7 golden failures (Q19, Q29, S1, S2, S3, S6, flagship), all traced to

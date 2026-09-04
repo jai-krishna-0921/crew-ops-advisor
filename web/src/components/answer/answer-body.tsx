@@ -11,7 +11,9 @@
 
 import { ArrowRightIcon, WarningIcon } from "@phosphor-icons/react/dist/ssr";
 
-import type { Reply } from "@/lib/contracts";
+import { useMemo } from "react";
+
+import type { Citation, Reply } from "@/lib/contracts";
 import { collectFacts } from "@/lib/fact-link";
 import { AbstentionCard } from "@/components/answer/abstention";
 import { RecommendationView } from "@/components/answer/cover-options";
@@ -20,10 +22,14 @@ import { Markdown } from "@/components/answer/markdown";
 import { ImpactReportView } from "@/components/answer/impact-report";
 import { RuleTraceCard } from "@/components/answer/rule-trace";
 import { VerificationPanel } from "@/components/answer/verification";
+import { SourceChip } from "@/components/ai/elements";
 import { Disclosure, Eyebrow } from "@/components/ui/primitives";
 
 /** Beyond this many rows, the working is a wall and folds itself away. */
 const TRACE_WALL = 8;
+
+/** Beyond this many chips, provenance stops being readable and becomes noise. */
+const SOURCE_CAP = 6;
 
 function TraceList({ traces }: { traces: Reply["rule_traces"] }) {
   return (
@@ -56,6 +62,21 @@ export function AnswerBody({
 
   const traces = reply.rule_traces;
   const showTraces = traces.length > 0 && !reply.recommendation;
+
+  // Deduplicated, and capped. A Tier 3 answer touches the same three files
+  // forty times, and forty identical chips is not provenance, it is noise.
+  const allSources = useMemo(() => {
+    const seen = new Map<string, Citation>();
+    for (const citation of [
+      ...reply.citations,
+      ...reply.tool_calls.flatMap((envelope) => envelope.citations),
+    ]) {
+      seen.set(`${citation.file}::${citation.pointer}`, citation);
+    }
+    return [...seen.values()];
+  }, [reply.citations, reply.tool_calls]);
+  const sources = allSources.slice(0, SOURCE_CAP);
+  const extraSources = allSources.length - sources.length;
 
   return (
     <div className="space-y-4">
@@ -131,6 +152,26 @@ export function AnswerBody({
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+
+      {/* WHERE THE ANSWER CAME FROM, ON THE ANSWER. The citations existed
+          only inside the evidence drawer, which means checking a source cost
+          a click and a context switch, and nobody reading quickly ever
+          discovered they were there at all. Naming the dataset file and the
+          record under the answer is the difference between a system that can
+          be audited and one that is. */}
+      {sources.length > 0 ? (
+        <section aria-label="Sources" className="flex flex-wrap items-center gap-1.5">
+          <Eyebrow>From</Eyebrow>
+          {sources.map((citation) => (
+            <SourceChip key={`${citation.file}:${citation.pointer}`} citation={citation} />
+          ))}
+          {extraSources > 0 ? (
+            <span className="text-xs text-ink-3">
+              and {extraSources} more, in the evidence panel
+            </span>
+          ) : null}
         </section>
       ) : null}
 

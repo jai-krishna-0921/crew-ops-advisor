@@ -302,6 +302,8 @@ async def threads(
                 "turns": row.turns,
                 "started_at": row.started_at,
                 "updated_at": row.updated_at,
+                "title": row.title,
+                "titled_by": row.titled_by,
             }
             for row in rows
         ],
@@ -319,6 +321,42 @@ async def thread(request: Request, thread_id: str) -> dict[str, Any]:
     if not turns:
         raise HTTPException(status_code=404, detail=f"No thread {thread_id}")
     return {"thread_id": thread_id, "turns": turns, "count": len(turns)}
+
+
+class RenameThread(BaseModel):
+    """A name a person typed. Language, so there is nothing here to attest."""
+
+    title: str = Field(min_length=1, max_length=200)
+
+
+@router.patch("/threads/{thread_id}")
+async def rename_thread(
+    request: Request, thread_id: str, body: RenameThread
+) -> dict[str, Any]:
+    state = _state(request)
+    if state.memory is None:
+        raise HTTPException(status_code=404, detail="Thread memory is not enabled")
+    if not await state.memory.rename(thread_id, body.title):
+        raise HTTPException(
+            status_code=404, detail=f"No thread {thread_id}, or the title was empty"
+        )
+    return {"thread_id": thread_id, "title": body.title.strip(), "titled_by": "user"}
+
+
+@router.delete("/threads/{thread_id}")
+async def delete_thread(request: Request, thread_id: str) -> dict[str, Any]:
+    """Remove a conversation and everything recorded on it.
+
+    This deletes an audit trail, which is the one destructive route on this
+    API, so it removes exactly one thread and reports whether there was one to
+    remove rather than succeeding quietly on a wrong id.
+    """
+    state = _state(request)
+    if state.memory is None:
+        raise HTTPException(status_code=404, detail="Thread memory is not enabled")
+    if not await state.memory.delete(thread_id):
+        raise HTTPException(status_code=404, detail=f"No thread {thread_id}")
+    return {"thread_id": thread_id, "deleted": True}
 
 
 # ------------------------------------------------------------------ plumbing
