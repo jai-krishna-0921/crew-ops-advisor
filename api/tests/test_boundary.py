@@ -383,3 +383,28 @@ def test_agent_tool_schemas_match_the_contract() -> None:
         + "\n\nPydantic drops unknown fields without complaining, so the "
         "argument is not rejected, it is silently lost."
     )
+
+
+def test_the_guards_and_the_contract_name_the_same_tools() -> None:
+    """One source of truth for which tools can stand behind a claim.
+
+    These were two hand-maintained lists and they drifted: `guards.py` carried
+    `simulate_reassignment` and not `plan_joint_cover`, `REQUIRED_FOR` carried
+    the reverse. Nothing failed. The symptom, much later, was a guard refusing
+    an answer the rules engine had genuinely produced, because a newly added
+    tool had been registered in one list and not the other.
+
+    `guards.py` now derives both sets from the contract. This test fails if
+    anyone restates them.
+    """
+    from crewops.agent.guards import LEGALITY_BEARING_TOOLS, RANKING_BEARING_TOOLS
+    from crewops.contracts.tools import REQUIRED_FOR, TOOL_NAMES
+
+    assert REQUIRED_FOR["legality_claim"] == LEGALITY_BEARING_TOOLS
+    assert REQUIRED_FOR["recommendation_claim"] == RANKING_BEARING_TOOLS
+
+    names = set(TOOL_NAMES)
+    for claim, required in REQUIRED_FOR.items():
+        assert names.issuperset(required), (
+            f"{claim} names tools that do not exist: {sorted(required - names)}"
+        )

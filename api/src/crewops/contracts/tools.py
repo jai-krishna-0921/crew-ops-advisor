@@ -526,7 +526,13 @@ REQUIRED_FOR: dict[str, frozenset[str]] = {
     # same footing as any other. Leaving it out made the guard refuse an answer
     # the rules engine had genuinely produced.
     "legality_claim": frozenset(
-        {"check_legality", "find_cover_options", "plan_joint_cover", "earliest_report"}
+        {
+            "check_legality",
+            "find_cover_options",
+            "plan_joint_cover",
+            "simulate_reassignment",
+            "earliest_report",
+        }
     ),
     "consequence_claim": frozenset(
         {

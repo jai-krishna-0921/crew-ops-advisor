@@ -21,7 +21,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from crewops.contracts import RETRIEVAL_ONLY, AbstentionReason, ToolEnvelope
+from crewops.contracts import REQUIRED_FOR, RETRIEVAL_ONLY, AbstentionReason, ToolEnvelope
 
 __all__ = [
     "EM_DASH",
@@ -50,23 +50,28 @@ class GuardFailure:
 # Which tools can stand behind a legality verdict.
 #
 # `check_legality` is the canonical one and the only tool whose entire job is
-# to produce a verdict. The other two are accepted because their payloads embed
-# `LegalityReport` objects produced by the same rules engine on the same data:
-# a cover search rule checks every candidate, and a reassignment simulation
-# rule checks the mover and anyone displaced. Reporting the verdict inside one
-# of those is reporting the engine's output, not inferring one.
+# to produce a verdict. The others qualify because their output comes from the
+# same rules engine on the same data: a cover search rule checks every
+# candidate, a reassignment simulation rule checks the mover and anyone
+# displaced, and `earliest_report` evaluates RULE-REST-04 and returns its trace.
+# Reporting a verdict from inside one of those is reporting the engine's
+# output, not inferring one.
 #
 # Nothing else qualifies. Retrieval never qualifies: knowing that a crew member
 # has 51.83 duty hours does not establish that adding a pairing breaches a
 # limit, and the temptation to do that subtraction is exactly the failure mode
 # this whole system exists to remove.
+#
+# Derived from the contract rather than restated. These were two hand
+# maintained lists and they had already drifted: this one carried
+# `simulate_reassignment` and not `plan_joint_cover`, `REQUIRED_FOR` carried
+# the reverse. Adding a tool to one and not the other is silent, and the
+# symptom is a guard refusing an answer the rules engine genuinely produced.
 # ---------------------------------------------------------------------------
-LEGALITY_BEARING_TOOLS: Final[frozenset[str]] = frozenset(
-    {"check_legality", "find_cover_options", "simulate_reassignment"}
-)
+LEGALITY_BEARING_TOOLS: Final[frozenset[str]] = REQUIRED_FOR["legality_claim"]
 
 #: Only a cover search ranks options against costs and trade-offs.
-RANKING_BEARING_TOOLS: Final[frozenset[str]] = frozenset({"find_cover_options"})
+RANKING_BEARING_TOOLS: Final[frozenset[str]] = REQUIRED_FOR["recommendation_claim"]
 
 EM_DASH: Final = "\u2014"
 #: An en dash between spaces reads as an em dash and is banned for the same
