@@ -9,9 +9,10 @@ This module is deterministic and does not import a model client.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, Final
 
 from crewops.agent.tabulate import tabulate
 from crewops.contracts import (
@@ -100,17 +101,52 @@ def build_reply(
     )
 
 
+#: Longest headline a controller should have to read before acting.
+_HEADLINE_MAX: Final = 200
+
+#: Shortest slice worth calling a headline. Below this the cut has almost
+#: certainly landed on an abbreviation rather than a sentence end.
+_HEADLINE_MIN: Final = 40
+
+#: A sentence end that is not somebody's initial.
+#:
+#: Crew in this dataset are written as an initial and a surname, `A. Nair`, so
+#: a plain split on ". " truncated
+#: `C-1042 (A. Nair, Captain, BLR, A320) has accrued...` to `C-1042 (A`. The
+#: lookbehind refuses a full stop that follows a single capital, which is what
+#: an initial looks like and what the end of a real sentence rarely does.
+_SENTENCE_END: Final = re.compile(r"(?<![A-Z])[.!?](?=\s|$)")
+
+
+def _first_sentence(text: str, *, minimum: int = _HEADLINE_MIN) -> str:
+    """The leading sentence, or a word-boundary slice when there is not one.
+
+    `minimum` guards against cutting on an abbreviation in a long answer, where
+    a very short leading "sentence" is nearly always a mistake. An abstention
+    passes 0, because its first sentence is the refusal itself ("I cannot
+    answer that reliably") and is meant to be short.
+    """
+    match = _SENTENCE_END.search(text, minimum)
+    if match and match.end() <= _HEADLINE_MAX:
+        return text[: match.start()].strip()
+    if len(text) <= _HEADLINE_MAX:
+        return text.strip()
+    # No usable sentence end in budget. Cut on a word boundary rather than
+    # mid-token, and stay a slice: the headline is never invented.
+    head, _, _ = text[:_HEADLINE_MAX].rpartition(" ")
+    return (head or text[:_HEADLINE_MAX]).strip()
+
+
 def headline_of(text: str, *, abstention: Abstention | None = None) -> str | None:
     """The first line a controller reads. Never invented, always a slice."""
     if abstention is not None:
-        return abstention.message.split(". ")[0].strip() or None
+        return _first_sentence(abstention.message.strip(), minimum=0) or None
     stripped = text.strip()
     if not stripped:
         return None
     first = stripped.split("\n", 1)[0].strip().lstrip("#").strip()
-    if len(first) > 200:
-        sentence = first.split(". ")[0]
-        return sentence[:200].strip() or None
+    if len(first) > _HEADLINE_MAX:
+        return _first_sentence(first) or None
     return first or None
 
 
@@ -119,16 +155,23 @@ def _body_after(text: str, headline: str | None) -> str:
 
     `headline_of` takes the first line rather than inventing one, so leaving
     that line in the body makes every interface print it twice, once large and
-    once again immediately underneath. Only strip it when something follows:
-    for a one line answer the headline is the whole answer.
+    once again immediately underneath.
+
+    Two cases, and the difference matters. When the headline is the *whole*
+    answer, the body is empty and the interface renders one line. When the
+    headline is a *slice* of a longer paragraph, the body keeps everything,
+    because dropping it would take every figure after the first full stop with
+    it.
     """
     if not headline:
         return text
     stripped = text.strip()
     first, sep, rest = stripped.partition("\n")
-    if not sep or first.strip().lstrip("#").strip() != headline:
+    if not sep:
+        return "" if stripped.lstrip("#").strip() == headline else text
+    if first.strip().lstrip("#").strip() != headline:
         return text
-    return rest.strip() or text
+    return rest.strip() or ""
 
 
 def collect_facts(envelopes: Sequence[ToolEnvelope]) -> list[Fact]:
