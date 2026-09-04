@@ -1374,12 +1374,22 @@ class Tools:
                 "check_legality", args, self._unknown_crew(crew_id), timer=timer
             )
         if pairing_id is None and not flight_numbers:
+            # `crew_id` is already the person, unlike find_cover_options where
+            # naming one is optional, so "their rostered duty on <date>" is
+            # unambiguous without the caller naming the pairing: resolve it
+            # from the crew member's own roster before falling back to the
+            # hypothetical window test or an abstention.
+            lookup_date = on_date or self.world.snapshot.date()
+            pairing_id = self._pairing_for_crew_on(crew_id, lookup_date)
+        if pairing_id is None and not flight_numbers:
             if added_duty_hours is None and added_flight_hours is None:
+                lookup_date = on_date or self.world.snapshot.date()
                 return error_envelope(
                     "check_legality",
                     args,
-                    "Name a pairing_id or flight_numbers, or ask a hypothetical "
-                    "with added_duty_hours or added_flight_hours.",
+                    f"{crew_id} holds no rostered pairing on {lookup_date}. Name a "
+                    "pairing_id or flight_numbers, or ask a hypothetical with "
+                    "added_duty_hours or added_flight_hours.",
                     timer=timer,
                 )
             return self._check_legality_hypothetical(
