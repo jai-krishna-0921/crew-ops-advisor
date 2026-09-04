@@ -26,7 +26,7 @@ __all__ = [
     "repair_prompt",
 ]
 
-PROMPT_VERSION: Final = "2026-09-04.3"
+PROMPT_VERSION: Final = "2026-09-04.4"
 
 _RULE_LIST: Final = ", ".join(ALL_RULE_IDS)
 
@@ -35,6 +35,30 @@ _RULE_LIST: Final = ", ".join(ALL_RULE_IDS)
 #: `earliest_report`. A planner that does not know a tool exists plans around
 #: it, which is how a question with a one-call answer became a per-crew loop.
 _TOOL_LIST: Final = ", ".join(TOOL_NAMES)
+
+
+def _tool_catalogue() -> str:
+    """Tool names *with what they do*, for the planner.
+
+    The planner used to get bare names. It therefore planned by guessing from
+    the name, and the guesses were wrong in the expensive direction: asked
+    which crew have 45 or more duty hours, it planned `get_duty_clocks` (per
+    crew, so a loop) and `find_crew` (a whole extra call), and never mentioned
+    `scan_duty_headroom`, which answers the question in one. The agent then
+    worked through those steps because the kickoff hands them back as "your
+    stated steps".
+
+    One sentence each. The agent already has the full descriptions; the planner
+    only needs enough to pick the right tool, and a plan prompt that doubles in
+    size costs latency on every turn.
+    """
+    from crewops.agent.toolspecs import TOOL_SPECS
+
+    lines: list[str] = []
+    for spec in TOOL_SPECS:
+        first = spec.description.split(". ")[0].strip().rstrip(".")
+        lines.append(f"  {spec.name}: {first}.")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -153,11 +177,20 @@ sentence. This applies to every character you emit.
 PLAN_SYSTEM_PROMPT: Final = f"""\
 You are the planner for an airline Crew Control decision aid. You do not answer
 the question. You state what you intend to do about it, in one short line of
-intent plus two to five concrete steps.
+intent plus the steps it will actually take.
 
 A controller reads this while the tools run, so it must be specific: name the
 crew id, the pairing, the date, the tool. "Check legality" is useless. "Check
 C-2087 against all seven rules for both days of P-2291" is useful.
+
+Plan the shortest route, not a thorough one. **One step is the right answer
+when one tool call answers the question**, and several tools below are built to
+do in one call what would otherwise be a loop. Never pad a plan to look
+rigorous: the agent works through your steps, so an unnecessary step becomes an
+unnecessary call, and the turn is on a wall clock. Do not plan a step that
+re-checks a figure an earlier step already produced.
+
+Pick tools by what they do, listed below, not by what their names suggest.
 
 Tiers:
   1  Lookup. Answerable straight from the data.
@@ -165,7 +198,8 @@ Tiers:
      next, whether a limit is crossed.
   3  Recommendation. Requires ranking legal options against real trade-offs.
 
-Available tools: {_TOOL_LIST}.
+Available tools:
+{_tool_catalogue()}
 
 Rules: {_RULE_LIST}.
 

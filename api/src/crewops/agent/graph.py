@@ -105,7 +105,10 @@ class TurnPlan(BaseModel):
     tier: Literal[1, 2, 3] = Field(description="1 lookup, 2 consequence, 3 recommendation")
     steps: list[str] = Field(
         default_factory=list,
-        description="Two to five concrete steps, each naming a tool and its subject",
+        description=(
+            "One to five concrete steps, each naming a tool and its subject. "
+            "One step is correct when one call answers the question"
+        ),
     )
 
 
@@ -296,25 +299,53 @@ def build_graph(
         )
         model_calls = 0
         if planner is not None and not _over_budget(state, cfg):
-            try:
-                structured = planner.with_structured_output(TurnPlan)
-                result = structured.invoke(
-                    [
-                        SystemMessage(content=PLAN_SYSTEM_PROMPT),
-                        HumanMessage(
-                            content=plan_user_prompt(
-                                state["question"], tier_floor=floor, as_of=as_of
-                            )
-                        ),
-                    ]
-                )
-                model_calls = 1
+            messages = [
+                SystemMessage(content=PLAN_SYSTEM_PROMPT),
+                HumanMessage(
+                    content=plan_user_prompt(
+                        state["question"], tier_floor=floor, as_of=as_of
+                    )
+                ),
+            ]
+            structured = planner.with_structured_output(TurnPlan)
+
+            # One retry, because `with_structured_output` does not raise when
+            # the model declines to emit the forced tool call: it returns None.
+            # Measured on deepseek-v4-flash that is four calls in six, so
+            # without this roughly half of all turns ran with no plan, and the
+            # `plan` event a controller reads was the fallback text rather than
+            # an intent. A turn with no steps also explores, which costs far
+            # more than the one retry does.
+            #
+            # One retry and no more. A planner that is down must not multiply
+            # the cost of every turn.
+            for attempt in (1, 2):
+                try:
+                    result = structured.invoke(messages)
+                    model_calls += 1
+                except Exception as exc:
+                    emit("note", {"text": f"Planner unavailable, continuing: {exc}"})
+                    break
+
                 if isinstance(result, TurnPlan):
                     plan = result
-                elif isinstance(result, dict):
+                    break
+                if isinstance(result, dict):
                     plan = TurnPlan.model_validate(result)
-            except Exception as exc:
-                emit("note", {"text": f"Planner unavailable, continuing: {exc}"})
+                    break
+                if attempt == 2 or _over_budget(state, cfg):
+                    # Visible, not silent. A turn with no plan used to look
+                    # exactly like a turn whose plan happened to be terse.
+                    emit(
+                        "note",
+                        {
+                            "text": (
+                                "The planner returned no plan twice, so this turn "
+                                "runs without stated steps."
+                            )
+                        },
+                    )
+                    break
 
         # The model may raise the tier, never lower it. The deterministic
         # classifier is the floor because a question that says "what should I
