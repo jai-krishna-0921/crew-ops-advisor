@@ -64,6 +64,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 
+from crewops.agent import providers
 from crewops.agent.config import AgentConfig
 from crewops.agent.events import emit
 from crewops.agent.guards import GuardFailure, run_guards, strip_em_dashes
@@ -338,7 +339,7 @@ def build_graph(
                         "run. The deterministic resolver answers the same questions "
                         "without one."
                     ),
-                    missing=["ANTHROPIC_API_KEY"],
+                    missing=providers.missing_env(),
                     suggestions=["Run the same question with --offline"],
                 )
             }

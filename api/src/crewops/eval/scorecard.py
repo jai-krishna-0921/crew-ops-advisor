@@ -362,7 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--mode",
         choices=["auto", "deterministic", "agent", "both"],
         default="auto",
-        help="auto runs both when ANTHROPIC_API_KEY is set, deterministic otherwise",
+        help="auto runs both when a model provider is configured, deterministic otherwise",
     )
     parser.add_argument("--tier", type=int, choices=[1, 2, 3], action="append")
     parser.add_argument("--only", help="comma separated case ids, for example Q18,Q24")
@@ -426,7 +426,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if runner.MODE_AGENT in modes and not runner.has_api_key():
         console.print(
-            "[yellow]ANTHROPIC_API_KEY is not set, so agent mode is skipped. "
+            "[yellow]No model provider is configured, so agent mode is skipped. "
+            "Set ANTHROPIC_API_KEY, OPENAI_API_KEY or OLLAMA_API_KEY. "
             "The deterministic path still runs: that is the point of it.[/yellow]"
         )
         modes = [m for m in modes if m != runner.MODE_AGENT] or [runner.MODE_DETERMINISTIC]

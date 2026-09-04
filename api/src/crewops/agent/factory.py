@@ -17,7 +17,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
-from crewops.agent.config import AgentConfig, llm_configured
+from crewops.agent import providers
+from crewops.agent.config import AgentConfig
 from crewops.contracts import ToolSurface
 
 __all__ = [
@@ -82,22 +83,23 @@ def default_data_dir() -> Path:
 
 
 def build_model(config: AgentConfig | None = None, *, planner: bool = False) -> Any:
-    """The chat model, or None when no key is configured.
+    """The chat model, or None when no provider is configured.
 
-    Returning None rather than raising is deliberate: no key is a supported
-    mode, not an error. The advisor falls through to the deterministic path.
+    Returning None rather than raising is deliberate: no provider is a
+    supported mode, not an error. The advisor falls through to the
+    deterministic path, which answers every tier on its own.
+
+    Which vendor gets constructed, and every quirk that differs between them,
+    lives in `agent/providers.py`. This function only decides planner versus
+    answerer, because that is the only distinction the rest of the agent draws.
     """
-    if not llm_configured():
+    provider = providers.resolve()
+    if provider is None:
         return None
-    cfg = config or AgentConfig.from_env()
-    # The banned-api rule in pyproject.toml keeps a model client out of the
-    # deterministic core. This module is agent code: the one place it belongs.
-    from langchain_anthropic import ChatAnthropic  # noqa: TID251
 
-    # Note the absence of `temperature`. Claude Sonnet 5 rejects sampling
-    # parameters outright, and a decision aid has no business sampling.
-    settings: dict[str, Any] = {
-        "model": cfg.plan_model if planner else cfg.model,
-        "max_tokens": cfg.plan_max_tokens if planner else cfg.max_tokens,
-    }
-    return ChatAnthropic(**settings)
+    cfg = config or AgentConfig.from_env()
+    return providers.build(
+        provider,
+        model=cfg.plan_model if planner else cfg.model,
+        max_tokens=cfg.plan_max_tokens if planner else cfg.max_tokens,
+    )

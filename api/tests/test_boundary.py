@@ -40,6 +40,7 @@ MODEL_CLIENTS: frozenset[str] = frozenset(
         "anthropic",
         "langchain_anthropic",
         "langchain_openai",
+        "langchain_ollama",
         "langchain_core",
         "langgraph",
         "openai",

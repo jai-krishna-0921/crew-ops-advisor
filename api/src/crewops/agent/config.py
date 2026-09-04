@@ -12,12 +12,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
+from crewops.agent import providers
+
 __all__ = ["DEFAULT_MODEL", "AgentConfig", "llm_configured"]
 
-#: Current generation Sonnet. Configurable because a judge may want to try a
-#: different model, but the whole design assumes a model that plans and
-#: explains rather than one that computes, so the tier matters less than usual.
-DEFAULT_MODEL: Final = "claude-sonnet-5"
+#: Current generation Sonnet. Kept as the bare-constructor default so
+#: `AgentConfig()` stays meaningful, but `from_env()` takes the default model
+#: from whichever provider is selected: a Claude model id sent to Ollama is a
+#: 404 on the first turn. See `agent/providers.py`.
+DEFAULT_MODEL: Final = providers.spec(providers.ANTHROPIC).default_model
 
 #: The problem statement is explicit: a 45 second response is not a decision
 #: aid. These are the budgets that keep the promise, enforced in the graph
@@ -37,13 +40,22 @@ def _env_int(name: str, default: int) -> int:
 
 
 def llm_configured() -> bool:
-    """True when a key is present. Selects agent mode over the offline path."""
-    return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+    """True when some provider is selected. Picks agent mode over offline.
+
+    Detection is by environment only, never by a live probe: this is called by
+    `Advisor.mode` and by the server on every request.
+    """
+    return providers.resolve() is not None
 
 
 @dataclass(frozen=True, slots=True)
 class AgentConfig:
     """Everything the graph needs to know that is not a tool or a question."""
+
+    #: Which vendor is behind `model`. Carried on the config so the CLI's
+    #: status view and the server's health route can report it without
+    #: re-deriving it from the environment.
+    provider: str = providers.ANTHROPIC
 
     model: str = DEFAULT_MODEL
     plan_model: str = DEFAULT_MODEL
@@ -72,13 +84,17 @@ class AgentConfig:
     @classmethod
     def from_env(cls) -> AgentConfig:
         raw_memory = os.environ.get("CREWOPS_MEMORY_DB", "").strip()
+
+        # No provider selected still has to yield a usable config: callers ask
+        # for `.model` to display it, and the offline path never uses it.
+        selected = providers.resolve()
+        fallback = selected.default_model if selected else DEFAULT_MODEL
+        model = os.environ.get("CREWOPS_MODEL", "").strip() or fallback
+
         return cls(
-            model=os.environ.get("CREWOPS_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL,
-            plan_model=(
-                os.environ.get("CREWOPS_PLAN_MODEL", "").strip()
-                or os.environ.get("CREWOPS_MODEL", DEFAULT_MODEL).strip()
-                or DEFAULT_MODEL
-            ),
+            provider=selected.name if selected else providers.NONE,
+            model=model,
+            plan_model=os.environ.get("CREWOPS_PLAN_MODEL", "").strip() or model,
             max_tokens=_env_int("CREWOPS_MAX_TOKENS", 2048),
             plan_max_tokens=_env_int("CREWOPS_PLAN_MAX_TOKENS", 512),
             max_tool_iterations=_env_int(

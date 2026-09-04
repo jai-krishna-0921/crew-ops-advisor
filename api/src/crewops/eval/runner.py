@@ -16,7 +16,6 @@ scoring artefact rather than as an error.
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,9 +31,10 @@ MODE_AGENT = "agent"
 def load_env() -> None:
     """Pick up `.env.local` and `.env` from the repository root if present.
 
-    Agent mode is selected by `ANTHROPIC_API_KEY`. Without it everything still
-    runs, on the deterministic path. That is the point of the deterministic
-    path.
+    Agent mode is selected by whichever provider key is present, in the
+    precedence order set out in `crewops.agent.providers`. Without any of them
+    everything still runs, on the deterministic path. That is the point of the
+    deterministic path.
     """
     try:
         from dotenv import load_dotenv
@@ -47,11 +47,26 @@ def load_env() -> None:
 
 
 def has_api_key() -> bool:
-    return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+    """True when some provider is selected, whichever one it is.
+
+    The name is kept for the callers that read like English at the call site.
+    It has never meant "Anthropic specifically" to anything but its old body.
+    """
+    from crewops.agent import providers
+
+    return providers.resolve() is not None
+
+
+def provider_name() -> str:
+    """The selected provider, for the report header. `none` when offline."""
+    from crewops.agent import providers
+
+    selected = providers.resolve()
+    return selected.name if selected else providers.NONE
 
 
 def available_modes() -> tuple[str, ...]:
-    """Deterministic always. Agent only when a key is configured."""
+    """Deterministic always. Agent only when a provider is configured."""
     return (MODE_DETERMINISTIC, MODE_AGENT) if has_api_key() else (MODE_DETERMINISTIC,)
 
 

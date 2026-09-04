@@ -499,13 +499,14 @@ def health(
     table.add_column("Check")
     table.add_column("Value")
 
+    cfg = AgentConfig.from_env()
     key = llm_configured()
     table.add_row(
-        "ANTHROPIC_API_KEY",
-        Text("set" if key else "not set", style="green" if key else "yellow"),
+        "Provider",
+        Text(cfg.provider if key else "none configured", style="green" if key else "yellow"),
     )
     table.add_row("Mode", "agent" if key else "deterministic")
-    table.add_row("Model", AgentConfig.from_env().model)
+    table.add_row("Model", cfg.model if key else "not used on the deterministic path")
 
     try:
         tools = load_tools(data_dir)
