@@ -19,6 +19,7 @@ import type {
   Recommendation,
   Reply,
   RuleDefinition,
+  RuleUnit,
   QuestionTier,
   SampleQuestion,
   SimulateRequest,
@@ -90,6 +91,66 @@ function toSampleQuestion(row: Record<string, unknown>): SampleQuestion {
   };
 }
 
+/** Which param carries the rule's headline limit, and in what unit. */
+const RULE_LIMIT_FIELDS: Record<string, [string, RuleUnit]> = {
+  "RULE-FDP-01": ["base_fdp_hours", "hours"],
+  "RULE-DUTY-02": ["max_duty_hours", "hours"],
+  "RULE-FLT-03": ["max_flight_hours", "hours"],
+  "RULE-REST-04": ["min_rest_hours", "hours"],
+};
+
+function toRuleDefinition(row: Record<string, unknown>): RuleDefinition {
+  // /api/rules returns one envelope per rule, so the rule itself sits under
+  // `payload`. The worked example is the most useful thing in it: it is the
+  // arithmetic a controller reads when they want to argue with a verdict, so
+  // it goes into the card rather than staying buried in the response.
+  const body = ((row.payload as Record<string, unknown>) ?? row) ?? {};
+  const params = (body.params as Record<string, number>) ?? {};
+  const ruleId = String(body.rule_id ?? row.rule_id ?? "");
+  const limitField = RULE_LIMIT_FIELDS[ruleId];
+  const detail = [body.comparison, body.worked_example]
+    .filter((part): part is string => typeof part === "string" && part.length > 0)
+    .join("\n\n");
+
+  return {
+    rule_id: ruleId as RuleDefinition["rule_id"],
+    title: String(body.title ?? ruleId),
+    constraint: String(body.text ?? ""),
+    limit: limitField ? (params[limitField[0]] ?? null) : null,
+    unit: limitField ? limitField[1] : null,
+    detail: detail || null,
+  };
+}
+
+function toWorldSummary(row: Record<string, unknown>): WorldSummary {
+  // The server returns the world's own vocabulary (snapshot_utc, hub) with the
+  // tallies as flat sibling fields. The ops header wants them as one labelled
+  // set it can iterate, so the reshaping happens here rather than in the view.
+  const countable = [
+    "flights",
+    "crew",
+    "pairings",
+    "pairing_days",
+    "reserves",
+    "certifications",
+    "rules",
+  ] as const;
+  const counts: Record<string, number> = {};
+  for (const key of countable) {
+    const value = row[key];
+    if (typeof value === "number") counts[key.replace(/_/g, " ")] = value;
+  }
+  return {
+    snapshot: String(row.snapshot_utc ?? row.snapshot ?? ""),
+    base: String(row.hub ?? row.base ?? ""),
+    date_from: String(row.first_date ?? row.date_from ?? ""),
+    date_to: String(row.last_date ?? row.date_to ?? ""),
+    counts,
+    currency: (row.currency as string | undefined) ?? undefined,
+    operator: (row.operator as string | undefined) ?? undefined,
+  };
+}
+
 function toThreadSummary(row: Record<string, unknown>): ThreadSummary {
   const started = String(row.started_at ?? row.created_at ?? "");
   return {
@@ -147,9 +208,23 @@ function delay<T>(value: T, ms = 120): Promise<T> {
 export const api = {
   health: () => get<HealthResponse>("/api/health", HEALTH),
 
-  worldSummary: () => get<WorldSummary>("/api/world/summary", WORLD, "summary"),
+  worldSummary: async () =>
+    USE_MOCKS
+      ? WORLD
+      : toWorldSummary(
+          await get<Record<string, unknown>>(
+            "/api/world/summary",
+            {},
+            "summary",
+          ),
+        ),
 
-  rules: () => get<RuleDefinition[]>("/api/rules", RULES, "rules"),
+  rules: async () =>
+    USE_MOCKS
+      ? RULES
+      : (
+          await get<Record<string, unknown>[]>("/api/rules", [], "rules")
+        ).map(toRuleDefinition),
 
   questions: async () =>
     USE_MOCKS

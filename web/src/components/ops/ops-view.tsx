@@ -169,7 +169,9 @@ function WorldStrip({ world }: { world: WorldSummary | null }) {
       </div>
     );
   }
-  const entries = Object.entries(world.counts).slice(0, 6);
+  // A panel should degrade, not take the page down, if a field it wanted is
+  // absent. Object.entries throws on undefined.
+  const entries = Object.entries(world.counts ?? {}).slice(0, 6);
   return (
     <div className="mt-4">
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
@@ -239,7 +241,7 @@ function RulesPanel() {
           </header>
           <p className="px-3 py-2 text-base text-ink">{rule.constraint}</p>
           {rule.detail ? (
-            <p className="max-w-[72ch] border-t border-line-soft px-3 py-2 text-base leading-relaxed text-ink-2">
+            <p className="max-w-[72ch] whitespace-pre-line border-t border-line-soft px-3 py-2 text-base leading-relaxed text-ink-2">
               {rule.detail}
             </p>
           ) : null}

@@ -63,6 +63,7 @@ def build_reply(
 
     impact = _first_payload(envelopes, ImpactReport)
     recommendation = _first_payload(envelopes, Recommendation)
+    headline = headline_of(text, abstention=abstention)
 
     return Reply(
         thread_id=thread_id,
@@ -72,8 +73,8 @@ def build_reply(
         kind=kind,
         mode=mode,
         tier=tier,
-        headline=headline_of(text, abstention=abstention),
-        text=text,
+        headline=headline,
+        text=_body_after(text, headline),
         facts=collect_facts(envelopes),
         traces=collect_traces(envelopes),
         rule_traces=collect_rule_traces(envelopes),
@@ -110,6 +111,23 @@ def headline_of(text: str, *, abstention: Abstention | None = None) -> str | Non
         sentence = first.split(". ")[0]
         return sentence[:200].strip() or None
     return first or None
+
+
+def _body_after(text: str, headline: str | None) -> str:
+    """The answer with its own headline removed.
+
+    `headline_of` takes the first line rather than inventing one, so leaving
+    that line in the body makes every interface print it twice, once large and
+    once again immediately underneath. Only strip it when something follows:
+    for a one line answer the headline is the whole answer.
+    """
+    if not headline:
+        return text
+    stripped = text.strip()
+    first, sep, rest = stripped.partition("\n")
+    if not sep or first.strip().lstrip("#").strip() != headline:
+        return text
+    return rest.strip() or text
 
 
 def collect_facts(envelopes: Sequence[ToolEnvelope]) -> list[Fact]:

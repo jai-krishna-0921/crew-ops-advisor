@@ -2,7 +2,7 @@
 
 Every question in `data/crew-ops-advisor-dataset/data/questions.json` (38: 16
 Tier 1, 14 Tier 2, 8 Tier 3) and every scenario in `scenarios.json` (6), mapped
-onto the seventeen tools in `api/src/crewops/contracts/tools.py`.
+onto the tool surface in `api/src/crewops/contracts/tools.py`.
 
 The point of this document is the gap analysis in section 4. The tables exist
 to justify it. Read section 4 first if you are short of time.

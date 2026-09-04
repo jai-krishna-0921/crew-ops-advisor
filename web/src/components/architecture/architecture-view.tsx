@@ -84,7 +84,7 @@ const NODES: Node[] = [
     y: 196,
     zone: "deterministic",
     title: "Tool surface",
-    sub: "17 tools, three tiers",
+    sub: "24 tools, three tiers",
     pkg: "tools/registry.py",
     summary:
       "The seam. Every call returns a ToolEnvelope: a typed payload, a Fact for every figure in it, readable trace steps, and citations back into the dataset.",

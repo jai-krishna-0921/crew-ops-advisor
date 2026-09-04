@@ -80,13 +80,13 @@ Defined as a `Protocol` in `api/src/crewops/contracts/tools.py`. The Core
 workstream implements it as `crewops.tools.registry.Tools`. The Agent
 workstream binds it and never reaches past it.
 
-Seventeen tools across three tiers:
+Twenty four tools across three tiers:
 
 | Tier | Tools |
 |---|---|
-| 1, retrieval | `find_crew`, `get_crew_detail`, `find_flights`, `get_duty_clocks`, `list_reserves`, `find_expiring_certifications`, `get_pairing`, `get_roster` |
-| 2, consequence | `check_legality`, `simulate_absence`, `simulate_reassignment`, `simulate_station_closure` |
-| 3, recommendation | `find_cover_options`, `draft_notification` |
+| 1, retrieval | `find_crew`, `get_crew_detail`, `find_flights`, `find_pairings`, `get_duty_clocks`, `list_reserves`, `find_expiring_certifications`, `get_pairing`, `get_roster`, `find_crew_at_risk`, `aggregate`, `get_cost_rates` |
+| 2, consequence | `check_legality`, `simulate_absence`, `simulate_reassignment`, `simulate_station_closure`, `simulate_delay`, `scan_duty_headroom` |
+| 3, recommendation | `find_cover_options`, `plan_joint_cover`, `draft_notification` |
 | cross cutting | `get_watchlist`, `get_world_summary`, `explain_rule` |
 
 `RETRIEVAL_ONLY` names the tools that cannot, on their own, support a Tier 2 or
@@ -145,6 +145,27 @@ system that looks honest and one that is.
 | `GET` | `/api/threads/{id}` | full turn history for a thread |
 | `GET` | `/api/rules` | the seven rules as shipped |
 | `GET` | `/api/questions` | the 38 sample questions, for the demo launcher |
+
+**Response envelopes, stated exactly.** Naming a type here without pinning its
+JSON is how the console ended up crashing against the live server: both sides
+implemented something reasonable and they disagreed. So, precisely:
+
+| Path | Body |
+|---|---|
+| `/api/health` | the object itself, unwrapped |
+| `/api/world/summary` | `{summary, facts, snapshot}`, the world under `summary` |
+| `/api/rules` | `{rules, count}`, and each entry is itself an envelope with the rule under `payload` |
+| `/api/questions` | `{questions, count}`, records in the dataset's own vocabulary: `question_id`, `tier`, `prompt` |
+| `/api/threads` | `{threads, count}`, records in the memory layer's vocabulary: `first_question`, `turns`, `started_at` |
+| `/api/brief`, `/api/simulate`, `/api/legality`, `/api/cover` | a full `ToolEnvelope`, result under `payload`, with `facts` alongside |
+
+The envelope is deliberate on the tool-backed routes: its `facts` are what let
+the console trace a figure on screen back to the arithmetic that produced it.
+Clients unwrap; they do not ask the server to flatten.
+
+The dataset's field names and the memory layer's field names are not ours to
+rename. A client that wants different names adapts them at its own boundary,
+in one place.
 
 The deterministic routes exist so the UI can build panels that never invoke the
 model. A judge should be able to see the rules engine working with the API key
