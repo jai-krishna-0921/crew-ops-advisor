@@ -126,9 +126,10 @@ cheaper to read this than to rediscover it.
   and a `turns` table holding every settled `Reply` as JSON for audit. Wired
   into the CLI (`crewops chat`, `crewops ask`) and the server
   (`/api/threads`, `/api/threads/{id}`).
-- **The database file exists.** `api/.crewops/memory.db`, holding 27 logged
-  turns across 26 threads. It is not visible in the repo because `*.db` is
-  gitignored and it lives in a dot directory.
+- **The database file exists.** `api/.crewops/memory.db`. It is not visible in
+  the repo because `*.db` is gitignored and it lives in a dot directory. The 26
+  throwaway development threads have since been cleared out of it, so it now
+  holds 2 turns.
 - **Database lookup tools.** `store/projection.py` builds an indexed SQLite
   projection of `WorldState` (crew, crew_rating, flight, and more, with
   indices). `tools/registry.py` imports `DatasetStore` and queries it, falling
@@ -138,12 +139,13 @@ cheaper to read this than to rediscover it.
 
 ### But the memory is less proven than it looks
 
-All 27 recorded turns ran in `deterministic` mode, and the `checkpoints` table
-has **0 rows**. The LangGraph checkpointer has therefore never persisted a
-single checkpoint, because the deterministic path bypasses the graph entirely.
-26 threads for 27 turns means multi-turn conversation is essentially
-unexercised. Follow-up resolution ("and what about the first officer?") is
-written but not demonstrated.
+The `checkpoints` table has **0 rows** and has never had any. Every turn logged
+so far ran in `deterministic` mode, which bypasses the graph entirely, so the
+LangGraph checkpointer has never persisted a single checkpoint. Before the
+database was cleared it held 27 turns across 26 threads, which is close to one
+turn per thread: multi-turn conversation is essentially unexercised. Follow-up
+resolution ("and what about the first officer?") is written but not
+demonstrated.
 
 ## What changed this session
 
