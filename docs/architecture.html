@@ -1,0 +1,346 @@
+<html>
+<head><meta charset="utf-8"><title>Crew Ops Advisor: Architecture and Flow</title>
+<style>
+body { font-family: "Liberation Serif", Georgia, serif; font-size: 10.5pt; line-height: 1.45; margin: 2.2cm; color: #111; }
+h1 { font-size: 21pt; margin-bottom: 2pt; border-bottom: 2px solid #1f4e79; padding-bottom: 5pt; color: #1f4e79; }
+h2 { font-size: 14pt; margin-top: 20pt; color: #1f4e79; border-bottom: 1px solid #ccc; padding-bottom: 3pt; }
+h3 { font-size: 11.5pt; margin-top: 13pt; color: #333; }
+p.sub { color: #555; font-style: italic; margin-top: 0; }
+/* line-height must be 1 here: the converter inherits the body value into
+   every line of a <pre>, which pulls ASCII diagrams apart until they are
+   unreadable and triples the page count. */
+pre { background: #f5f5f5; border-left: 3px solid #1f4e79; padding: 6pt 9pt; font-family: "Liberation Mono", monospace; font-size: 8pt; line-height: 1; margin: 6pt 0; white-space: pre; }
+pre, pre * { line-height: 1 !important; margin-top: 0; margin-bottom: 0; }
+code { font-family: "Liberation Mono", monospace; font-size: 9pt; background: #f0f0f0; padding: 0 2pt; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; font-size: 9pt; }
+th { background: #1f4e79; color: #fff; text-align: left; padding: 4pt 6pt; }
+td { border: 1px solid #ccc; padding: 3.5pt 6pt; vertical-align: top; }
+tr:nth-child(even) td { background: #f7f9fb; }
+.rule { background: #fff8e1; border-left: 3px solid #e6a700; padding: 7pt 9pt; margin: 9pt 0; }
+.warn { background: #fdf0f0; border-left: 3px solid #c0392b; padding: 7pt 9pt; margin: 9pt 0; }
+ul { margin: 5pt 0 5pt 16pt; padding: 0; }
+li { margin-bottom: 2.5pt; }
+</style></head>
+<body>
+
+<h1>Crew Ops Advisor</h1>
+<p class="sub">Architecture, node-by-node flow, and where the line between the language model and deterministic code is drawn. dCortex hackathon submission.</p>
+
+<h2>1. The one rule that decides everything</h2>
+<div class="rule">
+<b>The language model plans and explains. It never produces a fact and never does arithmetic.</b><br><br>
+A LangGraph agent decides <i>which</i> computations to run, in what order, and how to phrase the result for a controller under time pressure. Deterministic code does the computing. A verifier then checks every number, identifier, rule id, station code and date in the drafted reply against what the tools actually returned, and rejects anything unattested.
+</div>
+
+<p>The problem statement puts 20% of the score on exactly this question, and says the obvious approach (put the data in the prompt, let the model answer) fails at Tier 2 and 3, because legality is exact arithmetic against a rulebook and an approximated duty-hour calculation is fluent, confident and wrong.</p>
+
+<h3>How the boundary is enforced rather than promised</h3>
+<p>A claim enforced only by a prompt is not enforced. <code>tests/test_boundary.py</code> walks the <b>import graph</b> of <code>contracts/</code>, <code>domain/</code>, <code>rules/</code>, <code>ops/</code>, <code>store/</code>, <code>tools/</code> and <code>verify/</code> and fails the build if any model client is reachable from any of them at any depth. It also asserts the mirror: that <code>agent/</code> <i>does</i> import one, so the boundary is not decorative. A third test re-parses every shipped dataset file, so a run that corrupted the answer keys fails loudly.</p>
+
+<h2>2. Physical shape</h2>
+<pre>
+Next.js UI  --SSE-->  FastAPI  -->  LangGraph agent
+                                         |
+                           +-------------+-------------+
+                           |             |             |
+                        planner        tools        verifier
+                         (LLM)    (deterministic)  (deterministic)
+                                         |
+                                +--------+--------+
+                            rules engine     ops engine
+                           (the 7 rules)   (cover search, costing,
+                                            ranking, simulation)
+                                         |
+                                    WorldState
+                               (typed, immutable, loaded once)
+                                         |
+                                  SQLite projection
+                              (indexed, rebuilt at startup)
+</pre>
+
+<pre>Path         Responsibility                                            Model allowed
+----------   -------------------------------------------------------   -------------
+data/        Provided dataset. Immutable, never regenerated.           no
+contracts/   Shared types every layer imports. The seam.               no
+domain/      Typed records, loader, immutable WorldState               no
+rules/       Clock arithmetic, the seven rules, RuleTrace              never
+ops/         Cover search, positioning, costing, ranking, simulation   never
+store/       Indexed SQLite projection of the world                    no
+tools/       The 24 tools the agent calls. Wraps the above.            no
+resolve/     Offline path: triage, intents, deterministic render       no
+agent/       LangGraph graph, prompts, providers, memory, guards       yes
+verify/      The grounding verifier                                    no
+eval/        Scorecard against the shipped answer keys                 no
+web/         Next.js front end. No answering logic, ever.              no</pre>
+
+<h2>3. Two answer paths, one Reply type</h2>
+<p>Every interface renders one <code>Reply</code>. Both paths use the same tools, the same guards and the same verifier; they differ only in who chooses the tools.</p>
+
+<pre>                         Deterministic path                  Agent path
+----------------------   ---------------------------------   -----------------------------
+Chooses tools by         regex intent match over 20 shapes   a language model, iteratively
+Needs a key              no                                  yes
+Latency                  3 to 113 ms                         6 to 30 s
+Handles typos, aliases   only what normalisation covers      yes, natively
+Reproducible             exactly                             no (see section 11)</pre>
+
+<h2>4. The LangGraph agent, node by node</h2>
+<pre>
+START
+  |
+  v
+route ------------- out of scope / greeting -------------> abstain --> END
+  |
+  v
+plan            structured output, one retry on an empty plan
+  |
+  v
+agent <---------------------+
+  |  |                      |
+  |  +--- tool calls ---> tools    (executes against ToolSurface,
+  |                                 accumulates envelopes in state)
+  v
+verify
+  |
+  +-- verified --------------------------------------------------> END
+  |
+  +-- unattested atoms ------> repair --------> agent
+  |
+  +-- guard failure ---------> policy_repair -> agent
+  |
+  +-- second failure --------> abstain --------> END
+</pre>
+
+<h3>route</h3>
+<p>Deterministic triage, costs nothing. Calls <code>canonical_question()</code> then <code>triage_question()</code>. Three outcomes: <b>greeting</b> (answered with a capability statement, no "I cannot"), <b>out of scope</b> (refused in ~2ms before any model spend, e.g. "what is the capital of France"), or <b>in scope</b> with a tier floor. Deliberately asymmetric: it refuses only when confident, because a wrong refusal here is unrecoverable while a wrong forward is caught downstream.</p>
+
+<h3>plan</h3>
+<p>One model call, no tools bound, structured output into <code>TurnPlan{intent, tier, steps}</code>. Emitted as the <code>plan</code> stream event so a controller watches the system decide before it acts. The model may <i>raise</i> the tier the deterministic classifier set, never lower it.</p>
+<p><b>Retry on empty.</b> <code>with_structured_output</code> does not raise when the model declines to emit the forced tool call: it returns <code>None</code>. Measured on deepseek-v4-flash that is four calls in six. So the node retries once and then emits a visible note. Before this, roughly half of all turns ran with no plan and degraded silently.</p>
+
+<h3>agent</h3>
+<p>The tool-calling loop. The model chooses tools and arguments and eventually writes prose. Capped at 8 iterations and a 30 second wall clock, checked before every model call and every tool batch.</p>
+
+<h3>tools</h3>
+<p>Not LangGraph's <code>ToolNode</code>. A custom node, so it can time each call, coerce arguments through the Pydantic arg model, accumulate every <code>ToolEnvelope</code> into typed state where the verifier can see the complete fact set, and emit progress events. It also <b>suppresses duplicate calls</b>: a call whose (tool, arguments) already ran this turn gets the earlier envelope back, keyed so that argument order is not a difference. The reply is still emitted, because a tool call with no matching result breaks the message sequence.</p>
+
+<h3>verify</h3>
+<p>Structural guards first, then the grounding check. Both deterministic. Details in sections 7 and 8.</p>
+
+<h3>repair / policy_repair</h3>
+<p>Exactly one correction pass, shared between them. <code>repair</code> is told precisely which atoms were unattested; <code>policy_repair</code> is told which guard failed and which tool would fix it. "Call <code>check_legality</code> for C-3310 on P-2291" is actionable; "be more careful" is not.</p>
+
+<h3>abstain</h3>
+<p>Builds a refusal a controller can act on: what was missing, what was established, and what the system <i>can</i> answer.</p>
+
+<h2>5. The deterministic path, step by step</h2>
+<pre>
+question
+  |
+  v
+canonical_question()      C1042 -> C-1042, bangalore -> BLR, DX 412 -> DX412
+  |                       (the controller's own words are kept for Reply.question)
+  v
+triage_question()         greeting? out of scope? which tier?
+  |
+  v
+match_intent()            20 intents, highest priority wins
+  |
+  v
+intent.missing(entities)  a gap here becomes a clarification, not a guess
+  |
+  v
+intent.build(entities, snapshot) -> list[PlannedCall]
+  |
+  v
+run each PlannedCall against the ToolSurface -> envelopes
+  |
+  v
+render(template, envelopes)   templates, never free text
+  |
+  v
+run_guards() then Verifier.check()    identical to the agent path
+  |
+  v
+Reply(mode=DETERMINISTIC)
+</pre>
+
+<p>An <code>Intent</code> carries: match patterns, a priority, required entities, a <code>build</code> that returns the tool plan, and a render template. The plan is where most of this project's remaining bugs lived: the tools and the rules engine were nearly always right, and the plan asked the wrong question.</p>
+
+<h3>Worked example: a sick call</h3>
+<pre>
+"Captain C-3231 calls in sick at 01:30Z on 16 Sep for pairing P-2224."
+
+triage      in scope, tier 2, crew=[C-3231], pairings=[P-2224], date=2026-09-16
+intent      sick_impact (priority 75)
+build       [ simulate_absence(crew_id=C-3231, from_date=2026-09-16),
+              find_cover_options(for_crew_id=C-3231, pairing_id=P-2224,
+                                 on_date=2026-09-16, include_rejected=True) ]
+run         2 envelopes, 47 ms
+render      impact template + structured Recommendation
+verify      every atom attested
+Reply       4 uncovered legs, 6 legal options ranked by cost, 19 exclusions
+            each carrying the rule that excluded it
+</pre>
+<p>The second call is the whole fix for three of the six worked scenarios. A sick call is a <i>situation</i>, not a question: a controller told a captain is sick needs to know who can take the pairing, even though the sentence never says "what should I do".</p>
+
+<h2>6. The tool surface</h2>
+<p>24 tools, one protocol (<code>contracts/tools.py</code>), one registry (<code>tools/registry.py</code>). The contract is the seam three layers build against, and <code>test_boundary.py</code> makes drift between the protocol, the registry and the agent's argument models a build failure, because Pydantic drops unknown fields silently: an argument missing from a ToolSpec is not rejected, it evaporates.</p>
+
+<pre>Class            Tools
+--------------   -------------------------------------------------------------------------------
+Retrieval (14)   find_crew, get_crew_detail, find_flights, find_pairings, get_duty_clocks,
+                 list_reserves, find_expiring_certifications, get_pairing, get_roster,
+                 find_crew_at_risk, aggregate, get_cost_rates, get_world_summary, explain_rule
+Consequence      check_legality, simulate_absence, simulate_reassignment,
+                 simulate_station_closure, simulate_delay, scan_duty_headroom, earliest_report
+Recommendation   find_cover_options, plan_joint_cover, draft_notification</pre>
+
+<p>Retrieval-only is a real classification, not documentation: <code>tier_guard</code> refuses a Tier 2 or 3 answer whose tool calls were <i>all</i> retrieval. Retrieval establishes what is; it does not establish what follows.</p>
+
+<h3>Every tool returns the same envelope</h3>
+<pre>
+ToolEnvelope{
+  tool, args, ok, error,
+  payload,              the structured result
+  facts:  [Fact],       typed values, each with a derivation
+  trace:  [TraceStep],  what the tool did, in order
+  citations: [Citation] file and pointer into the dataset
+}
+</pre>
+<p><code>Fact.derivation</code> is mandatory on a computed fact and states the arithmetic rather than summarising it: <code>"11.25h duty + 1.5h delay = 12.75h"</code>. That string is what a controller reads to challenge the number, and it is also re-scanned by the verifier so the operands inside it are attested too.</p>
+
+<h2>7. The seven rules</h2>
+<pre>Rule           Constraint                                                   Engine method
+------------   ----------------------------------------------------------   --------------------
+RULE-FDP-01    Max flight duty period 13h, reduced by sectors flown         check_fdp
+RULE-DUTY-02   Max 60 duty hours in any 7 consecutive days                  check_duty_window
+RULE-FLT-03    Max 100 flight hours in any 28 consecutive days              check_flight_window
+RULE-REST-04   Min 12 hours rest before commencing duty                     check_rest
+RULE-QUAL-05   Valid rating for the assigned aircraft type                  check_qualification
+RULE-CERT-06   All certifications valid on the duty date                    check_certifications
+RULE-BASE-07   Reserve callout from base only, unless deadhead cost         check_base
+               applied</pre>
+
+<p>Every check returns a <code>RuleTrace</code>: <code>rule_id, title, verdict, duty_date, limit, observed, unit, margin, margin_human, arithmetic, inputs, note</code>. A multi-day pairing returns one <code>DayLegality</code> per day and the overall verdict is the <b>worst</b> day. Legal on day one and breaching on day two is not a legal option.</p>
+
+<h2>8. The verifier</h2>
+<p>Deterministic: no model call, no network, no clock, no randomness. Same input, same report, forever.</p>
+<pre>
+1  extract   scan the prose for checkable atoms. Overlaps resolved by
+             earliest start, then longest span, so "INR 18,500" is one
+             currency atom and not also the integers 18 and 500.
+             Typographic characters are ASCII folded first (see below).
+
+2  attest    build the attested set from this turn's envelopes. Two
+             channels, counted separately: the typed Fact channel is
+             primary, the payload channel is a fallback over the same
+             deterministic output.
+
+3  compare   per kind. Durations to whole minutes rounded half up, so
+             61.33h == 61h20m. Other numbers to two decimals.
+             Identifiers, stations, rule ids and dates compare EXACTLY.
+
+4  report    VERIFIED, REPAIRED, REJECTED or SKIPPED, naming every
+             unattested atom and the sentence it came from.
+</pre>
+
+<div class="warn">
+<b>A guard that rejects good answers is exactly as useless as one that passes bad ones.</b><br><br>
+Language models write typographically: <code>gpt-oss</code> renders a crew id as <code>C&#8209;3310</code> with U+2011 NON-BREAKING HYPHEN so it will not wrap. The extractor scanned for an ASCII hyphen, did not find one, and fell through to the bare integer <code>3310</code>. A number in no tool output cannot be attested, so the grounding check <b>rejected answers that were correct</b>. It cost four of sixteen Tier 1 questions and read exactly like the model being stupid. The fold is one character to one character, so span offsets stay valid, and a test pins the other direction: it may only recover an identifier that was genuinely written, never manufacture one from prose.
+</div>
+
+<h3>What the verifier cannot catch</h3>
+<ul>
+<li><b>Relations between attested atoms.</b> Every atom in "C-3310 is legal for P-2291" can be attested while the sentence is false, because a verdict is a relation between values, not a value. This is what the guards exist for.</li>
+<li><b>Spelled-out numbers above twelve.</b> The prompt asks for digits; the guard does not enforce it.</li>
+<li><b>Unit swaps on an attested value.</b> If 61.33 is attested, "61.33 minutes" passes. Catching it produces false rejections on correct answers, which is worse.</li>
+</ul>
+
+<h2>9. The guards</h2>
+<p>The verifier checks <i>values</i>. The guards ask a different question: was this answer <i>entitled to exist</i>? They run before the grounding check, and the first failure wins.</p>
+
+<pre>Guard              Refuses                                 Because
+----------------   -------------------------------------   -------------------------------------
+substance          An empty answer, or a bare refusal      A refusal has to name what was
+                   with no reason                          missing
+breach_agreement   An answer that reaches an all-clear     The worst output the system can
+                   before mentioning a breach the tools    produce
+                   computed
+verdict            A legality claim with no rules-engine   A verdict is computed, never inferred
+                   envelope this turn
+ranking            A ranked recommendation with no cover   Ranking needs every candidate
+                   search                                  enumerated, rule checked and priced,
+                                                           including the rejected ones
+tier               A Tier 2 or 3 answer built on           Retrieval does not establish what
+                   retrieval alone                         follows</pre>
+
+<h3>Why breach_agreement exists</h3>
+<p>Q20 asks whether a 90 minute delay pushes the rostered crew over a limit. <code>simulate_delay</code> computed it correctly: breach, 12.75h against a 12.0h FDP limit. Six <code>check_legality</code> calls on the pairing <i>as scheduled</i> returned pass, because as scheduled it does pass. The model then led with <b>"the pairing passes all seven rules"</b> and corrected itself four sentences later. A controller reads the first line and acts on it, so that answer dispatches a crew into an FDP breach.</p>
+<p>Neither existing mechanism could see it: every value in that headline was real, and a rules tool <i>had</i> run. The guard checks <b>ordering</b>, not presence, so an answer that opens with the breach and then notes what passes still gets through. The deeper fix was to the tool: <code>simulate_delay</code> now emits its FDP evaluation as a <code>RuleTrace</code>, so the structured verdict agrees with the prose.</p>
+
+<h2>10. Provider layer and memory</h2>
+<p><code>agent/providers.py</code> is the only module in the repository that names a model vendor. The graph is written against <code>BaseChatModel</code>. Precedence is anthropic, then openai, then ollama, so adding a hosted key switches everything over with no config edit. Three vendor quirks live there so the graph stays neutral: the default model id must follow the provider, sampling must be pinned per vendor (Ollama defaults to temperature 0.8), and <code>with_structured_output</code> has no portable method.</p>
+<p><code>agent/memory.py</code> keeps two stores in one SQLite file: LangGraph's checkpointer for message state, and a <code>turns</code> table holding every settled <code>Reply</code> as JSON for audit. Operational data lives in a separate store entirely, so "chat memory never feeds operational reasoning" is structural rather than a convention.</p>
+
+<h2>11. Measured results</h2>
+<p>Scored against the shipped answer keys in <code>questions.json</code> and <code>scenarios.json</code> by <code>eval/scorecard.py</code>. Accuracy excludes abstentions: it is the share of questions the system chose to answer that it got right.</p>
+
+<h3>Deterministic path, no model, all 38 questions</h3>
+<pre>Tier   n    correct   abstained   wrong   accuracy   avg / p95
+----   --   -------   ---------   -----   --------   ----------
+1      16   15        1           0       100%       3 / 3 ms
+2      14   9         5           0       100%       15 / 81 ms
+3      8    2         6           0       100%       27 / 79 ms
+All    38   26        12          0       100%       10 / 79 ms</pre>
+
+<h3>The six worked scenarios, deterministic</h3>
+<pre>Scenario   Result          What it exercises
+--------   -------------   ---------------------------------------------
+S1         correct, 100%   Sick call, cover options, exclusions
+S2         correct, 100%   Two-day pairing sick call. The flagship.
+S3         correct, 100%   Station closure, 13 flights, 6 pairings
+S4         partial, 70%    Technical delay, FDP breach
+S5         correct, 100%   Expired certificate, illegal duty, recovery
+S6         partial, 79%    Two simultaneous sick calls, joint allocation</pre>
+<p>Four correct, two partial, nothing wrong, all six grounded.</p>
+
+<h3>Agent path, Tier 1, four models compared</h3>
+<pre>Model               correct                                   wrong   grounded   avg      p95
+-----------------   ---------------------------------------   -----   --------   ------   ------
+deepseek-v4-flash   16/16                                     0       16/16      6.5 s    12.1 s
+gpt-oss:120b        13/16                                     1       15/16      7.2 s    10.0 s
+glm-5.1             13/16                                     0       13/16      16.9 s   27.4 s
+kimi-k2.6           5/16                                      0       5/16       37.3 s   63.2 s
+qwen2.5:7b          unusable: returns an empty tool_calls
+                    list for a bound schema</pre>
+
+<div class="warn">
+<b>Read the accuracy column next to coverage, never alone.</b> <code>kimi-k2.6</code> scores <b>100% accuracy</b> on Tier 1: it declined 11 of 16 questions and got the other 5 right. Correct whenever it answers, and useless at a desk.
+</div>
+
+<h3>Reproducibility</h3>
+<p>These models do not honour temperature 0. Tier 2 on the agent path has scored 9, 10, 10, 12 and 13 across five runs of near-identical code. That spread is wider than most of the improvements measured against it, so agent-mode figures are quoted as ranges and single runs are not treated as evidence.</p>
+
+<h2>12. Known limitations</h2>
+<ul>
+<li><b>S4 and S6 remain partial.</b> S4 does not name the delayed flight in prose; S6 needs richer per-gap enumeration. Neither is wrong, both are incomplete.</li>
+<li><b>Tier 3 answers 2 of 8 questions.</b> Coverage, not correctness: the six declined are declined honestly.</li>
+<li><b>Thread memory is unproven.</b> The checkpoints table has zero rows, because every logged turn so far ran deterministic, which bypasses the graph. Multi-turn follow-up is implemented and undemonstrated.</li>
+<li><b>The offline path matches fixed shapes.</b> Normalisation covers identifier spelling and station aliases; a question phrased in a way no pattern anticipates is declined rather than guessed.</li>
+<li><b>Agent-mode latency.</b> Tier 2 p95 sits near the 30 second budget. The problem statement's line is 45 seconds.</li>
+</ul>
+
+<h2>13. What was actually hard</h2>
+<p>Recorded because the failure analysis is worth more than the feature list, and because every one of these was found by reading output rather than by reasoning about the design.</p>
+<ul>
+<li><b>The verifier rejected its own correct answers</b> over a non-breaking hyphen. It failed in the direction that looks responsible, so it read as the model being weak. Cost four Tier 1 questions.</li>
+<li><b>A verdict inversion.</b> The breach was computed and never carried into the structured reply, so the Reply asserted "legal" for a question whose answer was a breach.</li>
+<li><b>Three lists that were counted but never named.</b> Closure flights, closure pairings, and a recommendation's candidates. Each turned a correct computation into a wrong or partial answer.</li>
+<li><b>The planner returned nothing on four calls in six</b>, silently, so half of all turns ran with no plan and the controller was shown fallback boilerplate.</li>
+<li><b>Two hand-maintained lists that had to agree and nothing made them.</b> The guards' legality-bearing tools and the contract's <code>REQUIRED_FOR</code> had drifted; a newly added tool registered in one and not the other made a guard refuse an answer the rules engine had produced. Now derived, with a test.</li>
+</ul>
+
+<p style="margin-top:18pt; color:#555; font-style:italic;">Every figure in this document came from <code>make test</code> and <code>python -m crewops.eval.scorecard</code> on the commit that ships it, not from memory.</p>
+
+</body></html>
