@@ -348,6 +348,9 @@ INTENTS: Final[tuple[Intent, ...]] = (
             r"\bhow many flights\b",
             r"\bdeparting\b",
             r"\bschedule\b",
+            r"\bwhich aircraft (?:operates|flies|is (?:on|flying|operating))\b",
+            r"\bwhat aircraft (?:operates|flies|is (?:on|flying|operating))\b",
+            r"\bhow many seats\b",
         ),
         template="flights",
         build=lambda e, s: [PlannedCall("find_flights", _flight_filters(e, s))],
@@ -442,7 +445,15 @@ def _window_days(entities: Entities) -> int:
     return 30
 
 
-def _flight_filters(entities: Entities, snapshot: datetime) -> dict[str, Any]:
+#: `find_flights` defaults to a 100 row cap. The dataset holds 147 flights
+#: total, so a schedule-wide query (no date, route or flight number to narrow
+#: it) needs a wider cap or it silently drops rows, which is exactly the kind
+#: of question that asks for a superlative ("the longest block time in the
+#: schedule") across every leg, not just the ones that fit under 100.
+_SCHEDULE_WIDE_LIMIT = 200
+
+
+def _flight_filters(entities: Entities, _snapshot: datetime) -> dict[str, Any]:
     filters: dict[str, Any] = {}
     if entities.dates:
         filters["on_date"] = entities.dates[0]
@@ -456,7 +467,11 @@ def _flight_filters(entities: Entities, snapshot: datetime) -> dict[str, Any]:
     if entities.aircraft_types:
         filters["aircraft_type"] = entities.aircraft_types[0]
     if not filters:
-        filters["on_date"] = snapshot.date()
+        # Nothing narrows this: the question is about the whole schedule, not
+        # about "today" (the snapshot date is a demo convenience, not a
+        # meaning of an unqualified "which flights"). Widen the cap instead of
+        # guessing a date, so a schedule-wide question sees every leg.
+        filters["limit"] = _SCHEDULE_WIDE_LIMIT
     return filters
 
 

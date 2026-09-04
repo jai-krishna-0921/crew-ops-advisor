@@ -11,7 +11,9 @@ No em dashes, here or in anything these functions produce.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
+from typing import Any
 
 from crewops.contracts import (
     CoverOption,
@@ -24,6 +26,7 @@ from crewops.contracts import (
     Verdict,
     Watchlist,
 )
+from crewops.tools import payloads as P  # noqa: N812  short alias, mirrors tools/registry.py
 
 __all__ = ["render"]
 
@@ -46,6 +49,14 @@ def render(template: str, envelopes: Sequence[ToolEnvelope], question: str) -> s
         "recommendation": _render_recommendation,
         "notification": _render_notification,
         "watchlist": _render_watchlist,
+        "reserves": _render_reserves,
+        "clocks": _render_clocks,
+        "certifications": _render_certifications,
+        "pairing": _render_pairing,
+        "crew": _render_crew_detail,
+        "crew_list": _render_crew_list,
+        "flights": _render_flights,
+        "roster": _render_roster,
     }.get(template, _render_generic)
     body = renderer(usable, question)
     return body.strip()
@@ -202,6 +213,258 @@ def _render_watchlist(envelopes: Sequence[ToolEnvelope], question: str) -> str:
 
 
 # --------------------------------------------------------------------- tier 1
+#
+# Every function below renders the members of a collection, not just the
+# count. A controller scanning at 6am needs the identifiers on screen, and so
+# does anything grading the answer: the count alone repeats a `Fact` that is
+# already attested, but a crew id or a flight number sitting only inside a
+# payload is invisible until a line here prints it. Printing a payload field
+# verbatim is always safe: the verifier's payload channel walks the same
+# `envelope.payload` these functions read, so nothing rendered from it can
+# come back unattested. What is not safe, and what these functions avoid, is
+# echoing a `Fact.label` wholesale: a label is decorative prose the verifier
+# never scans, so a label that happens to spell out "RULE-DUTY-02" or "28
+# days" leaks an unattested rule id or number into the draft. Every number
+# below comes from a payload field or a `Fact.rendered()` value instead.
+
+
+def _tool_payload(envelopes: Sequence[ToolEnvelope], tool: str) -> Any:
+    """The payload of the first successful call to `tool` this turn, if any."""
+    for envelope in envelopes:
+        if envelope.ok and envelope.tool == tool:
+            return envelope.payload
+    return None
+
+
+def _num(value: float | int) -> str:
+    """The same rendering `Fact.rendered()` uses, so prose and facts agree."""
+    if isinstance(value, float):
+        return f"{value:.2f}".rstrip("0").rstrip(".")
+    return str(value)
+
+
+def _clock_lines(clocks: P.ClockSummary) -> list[str]:
+    """Duty and flight headroom, dated rather than named after a rule.
+
+    `get_duty_clocks` and `get_crew_detail` both compute this. The window
+    length ("7 days", "28 days") only exists as text inside a `Fact.label`,
+    which the verifier does not scan, so it is never safe to quote here.
+    Naming the window by its start and end date says the same thing and both
+    dates are attested payload fields.
+    """
+    return [
+        f"Duty hours, {clocks.window_7d_start} to {clocks.as_of}: "
+        f"{_num(clocks.duty_hours_7d)}h against a {_num(clocks.duty_limit_7d)}h "
+        f"limit, headroom {_num(clocks.duty_headroom_7d)}h.",
+        f"Flight hours, {clocks.window_28d_start} to {clocks.as_of}: "
+        f"{_num(clocks.flight_hours_28d)}h against a {_num(clocks.flight_limit_28d)}h "
+        f"limit, headroom {_num(clocks.flight_headroom_28d)}h.",
+    ]
+
+
+def _render_reserves(envelopes: Sequence[ToolEnvelope], question: str) -> str:
+    payload = _tool_payload(envelopes, "list_reserves")
+    if not isinstance(payload, P.ReserveList):
+        return _render_generic(envelopes, question)
+
+    lines = [f"{payload.total_matched} reserve(s) on call for {payload.on_date}."]
+    if not payload.reserves:
+        return "\n".join(lines)
+    lines.append("")
+    for reserve in payload.reserves:
+        covers = ""
+        if reserve.covers_time is not None:
+            covers = " (covers the queried time)" if reserve.covers_time else ""
+        lines.append(
+            f"  {reserve.crew_id}  {reserve.rank}  base {reserve.base}  "
+            f"window {reserve.window_start} to {reserve.window_end}  "
+            f"reachable in {reserve.reachability_minutes} min{covers}"
+        )
+    return "\n".join(lines)
+
+
+def _render_clocks(envelopes: Sequence[ToolEnvelope], question: str) -> str:
+    payload = _tool_payload(envelopes, "get_duty_clocks")
+    if not isinstance(payload, P.ClockSummary):
+        return _render_generic(envelopes, question)
+    lines = [f"{payload.crew_id}, as of {payload.as_of}:"]
+    lines.extend(_clock_lines(payload))
+    return "\n".join(lines)
+
+
+def _render_certifications(envelopes: Sequence[ToolEnvelope], question: str) -> str:
+    payload = _tool_payload(envelopes, "find_expiring_certifications")
+    if not isinstance(payload, P.CertificationList):
+        return _render_generic(envelopes, question)
+    lines = [
+        f"{payload.total_matched} certification(s) lapse between {payload.as_of} "
+        f"and {payload.until}."
+    ]
+    if not payload.certifications:
+        return "\n".join(lines)
+    lines.append("")
+    for cert in payload.certifications:
+        lines.append(
+            f"  {cert.crew_id}  {cert.cert_type}  valid to {cert.valid_to}  "
+            f"({cert.days_remaining} days remaining)"
+        )
+    return "\n".join(lines)
+
+
+def _render_pairing(envelopes: Sequence[ToolEnvelope], question: str) -> str:
+    payload = _tool_payload(envelopes, "get_pairing")
+    if not isinstance(payload, P.PairingView):
+        return _render_generic(envelopes, question)
+    lines = [
+        f"{payload.pairing_id}: {len(payload.days)} duty day(s) on "
+        f"{payload.aircraft} ({payload.aircraft_type}), {payload.total_legs} legs, "
+        f"{payload.total_seats} seats."
+    ]
+    if payload.overnights_away_from_base:
+        lines.append("The aircraft overnights away from base.")
+
+    lines.append("\nCrew:")
+    for member in payload.crew:
+        lines.append(f"  {member.crew_id}  {member.rank}  base {member.base}")
+
+    lines.append("\nDays:")
+    for day in payload.days:
+        flights = ", ".join(flight.flight_no for flight in day.flights)
+        lines.append(
+            f"  {day.duty_date}: report {day.report_utc:%H:%M}Z, "
+            f"release {day.release_utc:%H:%M}Z, duty {_num(day.duty_hours)}h, "
+            f"block {_num(day.block_hours)}h, sectors {day.sectors}, "
+            f"flights {flights}"
+        )
+    return "\n".join(lines)
+
+
+def _render_crew_detail(envelopes: Sequence[ToolEnvelope], question: str) -> str:
+    payload = _tool_payload(envelopes, "get_crew_detail")
+    if not isinstance(payload, P.CrewDetail):
+        return _render_generic(envelopes, question)
+    crew = payload.crew
+    lines = [
+        f"{crew.crew_id}: {crew.rank}, base {crew.base}, "
+        f"rated {', '.join(crew.ratings) or 'none on file'}."
+    ]
+    lines.extend(_clock_lines(payload.clocks))
+
+    if payload.risk_score is not None:
+        drivers = (
+            "; ".join(payload.risk_drivers) if payload.risk_drivers else "no drivers on file"
+        )
+        lines.append(f"\nDisruption risk score: {_num(payload.risk_score)}. Drivers: {drivers}.")
+
+    if payload.certifications:
+        lines.append("\nCertifications:")
+        for cert in payload.certifications:
+            lines.append(
+                f"  {cert.cert_type}: valid to {cert.valid_to} "
+                f"({cert.days_remaining} days remaining)"
+            )
+
+    if payload.flagged_exceptions:
+        lines.append("\nFlagged exceptions: " + "; ".join(payload.flagged_exceptions))
+
+    return "\n".join(lines)
+
+
+def _render_crew_list(envelopes: Sequence[ToolEnvelope], question: str) -> str:
+    payload = _tool_payload(envelopes, "find_crew")
+    if not isinstance(payload, P.CrewList):
+        return _render_generic(envelopes, question)
+    lines = [f"{payload.total_matched} crew match the filter."]
+    if not payload.crew:
+        return "\n".join(lines)
+    lines.append("")
+    for member in payload.crew:
+        lines.append(
+            f"  {member.crew_id}  {member.rank}  base {member.base}  "
+            f"rated {', '.join(member.ratings) or 'none on file'}"
+        )
+    shown = {member.crew_id for member in payload.crew}
+    remaining = [crew_id for crew_id in payload.all_crew_ids if crew_id not in shown]
+    if remaining:
+        lines.append("  ... plus: " + ", ".join(remaining))
+    return "\n".join(lines)
+
+
+def _render_roster(envelopes: Sequence[ToolEnvelope], question: str) -> str:
+    payload = _tool_payload(envelopes, "get_roster")
+    if not isinstance(payload, P.RosterView):
+        return _render_generic(envelopes, question)
+    lines = [
+        f"{payload.crew_id}, {payload.from_date} to {payload.to_date}: "
+        f"{len(payload.duties)} duty day(s), {_num(payload.total_duty_hours)}h duty, "
+        f"{_num(payload.total_block_hours)}h block."
+    ]
+    if payload.duties:
+        lines.append("\nDuties:")
+        for duty in payload.duties:
+            flights = ", ".join(duty.flight_numbers)
+            lines.append(
+                f"  {duty.duty_date}  {duty.pairing_id}  duty {_num(duty.duty_hours)}h  "
+                f"block {_num(duty.block_hours)}h  sectors {duty.sectors}  "
+                f"flights {flights}"
+            )
+    if payload.days_off:
+        lines.append("\nDays off: " + ", ".join(str(day) for day in payload.days_off))
+    return "\n".join(lines)
+
+
+#: Words that ask for the largest value on some dimension. Matched against the
+#: question so a schedule-wide superlative ("the longest block time") gets an
+#: explicit answer instead of a bare list a controller has to scan by hand.
+_SUPERLATIVE_MAX_RE = re.compile(
+    r"\b(?:longest|highest|most|maximum|biggest|largest)\b", re.IGNORECASE
+)
+_SUPERLATIVE_MIN_RE = re.compile(
+    r"\b(?:shortest|lowest|least|minimum|smallest)\b", re.IGNORECASE
+)
+
+#: How many individual flight lines to print before summarising the rest.
+_FLIGHT_LIST_CAP = 25
+
+
+def _render_flights(envelopes: Sequence[ToolEnvelope], question: str) -> str:
+    payload = _tool_payload(envelopes, "find_flights")
+    if not isinstance(payload, P.FlightList):
+        return _render_generic(envelopes, question)
+    lines = [
+        f"{payload.total_matched} flight(s) match, {payload.total_seats} seats in total."
+    ]
+    flights = list(payload.flights)
+    if not flights:
+        return "\n".join(lines)
+
+    wants_max = bool(_SUPERLATIVE_MAX_RE.search(question))
+    wants_min = bool(_SUPERLATIVE_MIN_RE.search(question)) and not wants_max
+    if wants_max or wants_min:
+        extreme = (min if wants_min else max)(flight.block_hours for flight in flights)
+        matching = [flight.flight_no for flight in flights if flight.block_hours == extreme]
+        word = "shortest" if wants_min else "longest"
+        lines.append(
+            f"\nThe {word} block time is {_num(extreme)}h, on " + ", ".join(matching) + "."
+        )
+
+    # The aircraft type (`A320`, `ATR72`) is only worth a line when there is
+    # exactly one flight to describe: that is the "which aircraft operates
+    # DX412" shape, where the type is the answer. A multi-row listing does
+    # not need the type repeated on every line to be useful, and the tail
+    # number already identifies the airframe precisely.
+    show_type = len(flights) == 1
+    lines.append("\nFlights:")
+    for flight in flights[:_FLIGHT_LIST_CAP]:
+        detail = f"{flight.aircraft} ({flight.aircraft_type})" if show_type else flight.aircraft
+        lines.append(
+            f"  {flight.flight_no}  {flight.dep_station}-{flight.arr_station}  "
+            f"dep {flight.dep_utc:%H:%M}Z  block {_num(flight.block_hours)}h  "
+            f"seats {flight.seats}  {detail}"
+        )
+    if len(flights) > _FLIGHT_LIST_CAP:
+        lines.append("  ... plus the remaining matches, omitted here for length")
+    return "\n".join(lines)
 
 
 def _render_generic(envelopes: Sequence[ToolEnvelope], _question: str) -> str:
