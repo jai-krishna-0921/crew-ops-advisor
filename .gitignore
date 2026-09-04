@@ -26,9 +26,14 @@ next-env.d.ts
 .env.*.local
 # The example carries no secrets and documents the flags, so it ships.
 !.env.example
-*.sqlite
-*.sqlite3
-*.db
+# SQLite, and the two sidecar files it writes next to every database. The
+# trailing `*` is the point: `-wal` and `-shm` do not end in `.db`, so the
+# plain patterns matched the database and let its write-ahead log through.
+# That log is where SQLite keeps pages it has not checkpointed yet, so the
+# demo conversations were being committed as binary churn, 1.8MB in one case.
+*.sqlite*
+*.sqlite3*
+*.db*
 .DS_Store
 
 # Build output
