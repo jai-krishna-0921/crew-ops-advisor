@@ -170,6 +170,27 @@ class OpsEngine:
             pairing_id=pairing_id, on_date=on_date, delay_hours=delay_hours
         )
 
+    def simulate_flight_delay(
+        self, *, flight_id: str, delay_hours: float, mode: str = "pre_departure"
+    ) -> DelayResult:
+        """Delay one named flight, picking the model the situation describes.
+
+        `pre_departure` slides report and release together (a technical delay
+        before the first departure, verified against S4 and Q20). `mid_duty`
+        extends the release only, against a fixed report, because the crew
+        have already reported (verified against S3). The two give different
+        answers for the same duty, so the caller's choice of mode matters.
+        """
+        if mode == "pre_departure":
+            pairing = self.world.pairing_for_flight(flight_id)
+            day = self.world.pairing_day_for_flight(flight_id)
+            if pairing is None or day is None:
+                raise KeyError(f"{flight_id} is not covered by any pairing in the roster")
+            return self.simulator.whole_duty_delay(
+                pairing_id=pairing.pairing_id, on_date=day.date, delay_hours=delay_hours
+            )
+        return self.simulator.mid_duty_delay(flight_id=flight_id, delay_hours=delay_hours)
+
     def simulate_reassignment(
         self,
         *,

@@ -593,6 +593,146 @@ class DisruptionSimulator:
             impact=impact,
         )
 
+    def mid_duty_delay(self, *, flight_id: str, delay_hours: float) -> DelayResult:
+        """A delay that lands part way through a duty already under way.
+
+        The crew have already reported, so the delay pushes the release out
+        and the report stays exactly where it is: `fdp_after = original duty
+        length + delay`. This is the model verified against scenario S3,
+        generalised here to one named flight rather than every flight a
+        station closure window happens to touch. `whole_duty_delay` computes
+        the same breach arithmetic for a delay before the first departure;
+        the two differ in which duty gets offered as the partial re-crew,
+        because here the legs before the delayed one already flew on time and
+        need no shift at all.
+        """
+        pairing = self.world.pairing_for_flight(flight_id)
+        day = self.world.pairing_day_for_flight(flight_id)
+        if pairing is None or day is None:
+            raise KeyError(f"{flight_id} is not covered by any pairing in the roster")
+        pairing_id = pairing.pairing_id
+        on_date = day.date
+        flight = self.world.require_flight(flight_id)
+
+        fdp_before = day.duty_hours
+        fdp_after = round(fdp_before + delay_hours, 2)
+        limit = self.engine.fdp_limit_for(day.sectors)
+        breach = fdp_after > limit
+
+        # The partial duty a controller would actually fly: drop the last leg.
+        # Legs before the delayed one already operated on time, so nothing
+        # here needs shifting, unlike the pre-departure model where the whole
+        # remaining duty moves later.
+        kept = day.flights[:-1]
+        dropped = day.flights[len(kept) :]
+        partial = proposed_duty_from_flights(self.world, kept) if kept else None
+        partial_fdp = partial.duty_hours if partial else 0.0
+        partial_limit = self.engine.fdp_limit_for(len(kept)) if kept else 0.0
+
+        detail = (
+            f"RULE-FDP-01: {flight.flight_no} is delayed {delay_hours}h mid duty, so "
+            f"the duty runs {fdp_after}h against a {limit}h limit for {day.sectors} "
+            f"sectors, and the rostered crew cannot legally complete "
+            f"{self.world.require_flight(day.flights[-1]).flight_no}."
+            if breach
+            else (
+                f"RULE-FDP-01: {flight.flight_no} is delayed {delay_hours}h mid duty, "
+                f"so the duty runs {fdp_after}h against a {limit}h limit for "
+                f"{day.sectors} sectors, which is legal."
+            )
+        )
+
+        impact = ImpactReport(
+            trigger=(
+                f"{flight.flight_no} on {on_date} delayed {delay_hours}h mid duty "
+                f"({pairing.aircraft})"
+            ),
+            trigger_kind="flight_delay",
+            as_of=self.world.snapshot,
+            uncrewed_flights=[self._flight_ref(f) for f in dropped] if breach else [],
+            pairings_broken=[pairing_id] if breach else [],
+            crew_affected=[m.crew_id for m in pairing.crew],
+            stations_affected=sorted(
+                {self.world.require_flight(f).dep_station for f in day.flights}
+            ),
+            passengers_affected=self.world.seats_of(dropped) if breach else 0,
+            downstream_risks=(
+                [
+                    DownstreamRisk(
+                        flight_no=self.world.require_flight(dropped[0]).flight_no,
+                        pairing_id=pairing_id,
+                        rule_id="RULE-FDP-01",
+                        severity=RiskSeverity.CRITICAL,
+                        detail=detail,
+                        duty_date=on_date,
+                    )
+                ]
+                if breach and dropped
+                else []
+            ),
+            explanation=(
+                f"The duty was {fdp_before}h and becomes {fdp_after}h once "
+                f"{flight.flight_no} runs {delay_hours}h late mid duty, because the "
+                "crew already reported and only the release moves. "
+                + (
+                    f"That is over the {limit}h limit for {day.sectors} sectors. "
+                    f"Dropping the last leg leaves {len(kept)} sectors at "
+                    f"{partial_fdp}h against a {partial_limit}h limit, which the "
+                    "rostered crew can fly on the original schedule."
+                    if breach and kept
+                    else f"That is within the {limit}h limit."
+                )
+            ),
+            facts=[
+                Fact(
+                    key=f"{pairing_id}.{on_date}.fdp_after_delay",
+                    label="FDP after the delay",
+                    value=fdp_after,
+                    unit="hours",
+                    provenance=Provenance.COMPUTED,
+                    source=_SOURCE,
+                    derivation=f"{fdp_before}h duty + {delay_hours}h delay = {fdp_after}h, "
+                    "report unmoved",
+                ),
+                Fact(
+                    key=f"{pairing_id}.{on_date}.fdp_limit",
+                    label="FDP limit",
+                    value=limit,
+                    unit="hours",
+                    provenance=Provenance.COMPUTED,
+                    source=_SOURCE,
+                    derivation=f"13.0 - 0.5 x max(0, {day.sectors} - 2) = {limit}h",
+                ),
+                Fact(
+                    key=f"{pairing_id}.{on_date}.partial_fdp",
+                    label="FDP of the shortened duty",
+                    value=partial_fdp,
+                    unit="hours",
+                    provenance=Provenance.COMPUTED,
+                    source=_SOURCE,
+                    derivation=(
+                        f"dropping the last leg leaves {len(kept)} sectors, "
+                        f"unshifted, {partial_fdp}h against a {partial_limit}h limit"
+                    ),
+                ),
+            ],
+        )
+        return DelayResult(
+            pairing_id=pairing_id,
+            duty_date=on_date,
+            delay_hours=delay_hours,
+            fdp_before=fdp_before,
+            fdp_after_delay=fdp_after,
+            fdp_limit=limit,
+            breach=breach,
+            breach_detail=detail,
+            partial_duty_flights=kept,
+            partial_fdp=partial_fdp,
+            partial_fdp_limit=partial_limit,
+            dropped_flights=dropped,
+            impact=impact,
+        )
+
     # -------------------------------------------------------- reassignment
 
     def reassignment(

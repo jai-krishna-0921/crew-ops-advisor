@@ -30,7 +30,7 @@ from typing import Any, Literal, cast
 
 from crewops.contracts.evidence import Fact, FactUnit, ToolEnvelope
 from crewops.contracts.rules import ALL_RULE_IDS
-from crewops.contracts.tools import TimeOfDay
+from crewops.contracts.tools import DelayMode, TimeOfDay
 from crewops.domain import (
     Crew,
     Flight,
@@ -1571,6 +1571,178 @@ class Tools:
                 cite("rosters.json", "duties touched"),
             ],
             timer=timer,
+        )
+
+    def simulate_delay(
+        self,
+        *,
+        flight_number: str,
+        delay_minutes: int,
+        on_date: DateType | None = None,
+        mode: DelayMode = "pre_departure",
+    ) -> ToolEnvelope:
+        timer = ToolTimer()
+        args = {
+            "flight_number": flight_number,
+            "delay_minutes": delay_minutes,
+            "on_date": on_date,
+            "mode": mode,
+        }
+        try:
+            ids = self._resolve_flight_ids([flight_number], on_date)
+        except LookupError as exc:
+            return error_envelope("simulate_delay", args, str(exc), timer=timer)
+        flight_id = ids[0]
+        if self.world.pairing_for_flight(flight_id) is None:
+            return error_envelope(
+                "simulate_delay",
+                args,
+                f"{flight_id} is not covered by any pairing in the roster.",
+                timer=timer,
+            )
+
+        try:
+            result = self.ops.simulate_flight_delay(
+                flight_id=flight_id, delay_hours=round(delay_minutes / 60.0, 4), mode=mode
+            )
+        except KeyError as exc:
+            return error_envelope("simulate_delay", args, str(exc), timer=timer)
+
+        facts = [
+            *result.impact.facts,
+            *self._impact_facts(result.impact),
+            computed_fact(
+                f"{result.pairing_id}.{result.duty_date}.breach",
+                "RULE-FDP-01 breached",
+                result.breach,
+                "boolean",
+                result.breach_detail,
+                _SOURCE,
+            ),
+        ]
+        payload = {
+            "flight_id": flight_id,
+            "pairing_id": result.pairing_id,
+            "duty_date": result.duty_date,
+            "mode": mode,
+            "delay_hours": result.delay_hours,
+            "fdp_before": result.fdp_before,
+            "fdp_after_delay": result.fdp_after_delay,
+            "fdp_limit": result.fdp_limit,
+            "breach": result.breach,
+            "breach_detail": result.breach_detail,
+            "partial_duty_flights": list(result.partial_duty_flights),
+            "partial_fdp": result.partial_fdp,
+            "partial_fdp_limit": result.partial_fdp_limit,
+            "dropped_flights": list(result.dropped_flights),
+            "impact": result.impact,
+        }
+        return ok_envelope(
+            "simulate_delay",
+            args,
+            payload,
+            facts=facts,
+            trace=[
+                step(
+                    f"Model the {mode.replace('_', ' ')} delay",
+                    result.impact.explanation,
+                    [f"{result.pairing_id}.{result.duty_date}.fdp_after_delay"],
+                )
+            ],
+            citations=[
+                cite("flights.json", flight_id),
+                cite("rosters.json", result.pairing_id),
+                cite("rules.json", "RULE-FDP-01"),
+            ],
+            timer=timer,
+        )
+
+    def scan_duty_headroom(
+        self,
+        *,
+        on_date: DateType,
+        threshold_hours: float | None = None,
+        base: str | None = None,
+        rank: str | None = None,
+        aircraft_type: str | None = None,
+        limit: int = 50,
+    ) -> ToolEnvelope:
+        timer = ToolTimer()
+        args = {
+            "on_date": on_date,
+            "threshold_hours": threshold_hours,
+            "base": base,
+            "rank": rank,
+            "aircraft_type": aircraft_type,
+            "limit": limit,
+        }
+        cutoff = threshold_hours if threshold_hours is not None else 10.0
+
+        rows: list[tuple[Crew, P.ClockSummary]] = []
+        for member in self.world.crew:
+            if not member.is_active:
+                continue
+            if base and member.base != base:
+                continue
+            if rank and member.rank != rank:
+                continue
+            if aircraft_type and aircraft_type not in member.ratings:
+                continue
+            clocks = self._clock_summary(member.crew_id, on_date)
+            if clocks.duty_headroom_7d <= cutoff or clocks.flight_headroom_28d <= cutoff:
+                rows.append((member, clocks))
+        rows.sort(key=lambda pair: min(pair[1].duty_headroom_7d, pair[1].flight_headroom_28d))
+        shown = rows[:limit]
+
+        entries = tuple(
+            {
+                "crew_id": member.crew_id,
+                "rank": member.rank,
+                "base": member.base,
+                "duty_headroom_7d": clocks.duty_headroom_7d,
+                "flight_headroom_28d": clocks.flight_headroom_28d,
+            }
+            for member, clocks in shown
+        )
+        payload = {
+            "on_date": on_date,
+            "threshold_hours": cutoff,
+            "crew": list(entries),
+            "total_matched": len(rows),
+        }
+        facts = [
+            computed_fact(
+                f"scan_duty_headroom.{on_date}.total_matched",
+                "Crew inside the headroom threshold",
+                len(rows),
+                "count",
+                f"active crew with 7 day duty headroom or 28 day flight headroom "
+                f"at or below {cutoff}h on {on_date}",
+                _SOURCE,
+            ),
+            *[
+                fact
+                for member, clocks in shown
+                for fact in self._clock_facts(member.crew_id, clocks)
+            ],
+        ]
+        return ok_envelope(
+            "scan_duty_headroom",
+            args,
+            payload,
+            facts=facts,
+            trace=[
+                step(
+                    "Sweep duty headroom",
+                    f"{len(rows)} crew are at or below {cutoff}h headroom on {on_date}."
+                    if rows
+                    else f"No crew are at or below {cutoff}h headroom on {on_date}.",
+                    [f"scan_duty_headroom.{on_date}.total_matched"],
+                )
+            ],
+            citations=[cite("duty_clocks.json", f"as of {on_date}")],
+            timer=timer,
+            truncated=len(shown) < len(rows),
         )
 
     # ============================================================== tier 3
