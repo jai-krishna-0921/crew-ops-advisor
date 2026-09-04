@@ -25,6 +25,7 @@ __all__ = [
     "STATIONS",
     "Entities",
     "Triage",
+    "canonical_question",
     "extract_entities",
     "triage_question",
 ]
@@ -268,12 +269,73 @@ def _is_greeting(question: str) -> bool:
     return all(token in _GREETING_TOKENS for token in tokens)
 
 
+#: Station names to the eight codes this airline actually serves.
+#:
+#: Deliberately closed. An alias for a station outside the network would turn
+#: "who is on reserve at heathrow" from an honest refusal into a lookup against
+#: the wrong place, which is worse than not understanding the word.
+_STATION_ALIASES: Final[dict[str, str]] = {
+    "bangalore": "BLR",
+    "bengaluru": "BLR",
+    "delhi": "DEL",
+    "new delhi": "DEL",
+    "mumbai": "BOM",
+    "bombay": "BOM",
+    "chennai": "MAA",
+    "madras": "MAA",
+    "kolkata": "CCU",
+    "calcutta": "CCU",
+    "hyderabad": "HYD",
+    "kochi": "COK",
+    "cochin": "COK",
+    "goa": "GOI",
+}
+
+_STATION_ALIAS_RE: Final = re.compile(
+    r"\b(" + "|".join(sorted(_STATION_ALIASES, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
+
+#: `C1042`, `c 1042` and `C-1042` are the same crew member. The four digit tail
+#: is what keeps this from firing on prose: gate `C 12` and terminal `2` have
+#: too few digits to be an identifier in this dataset, where every crew and
+#: pairing id carries exactly four.
+_LOOSE_CREW_RE: Final = re.compile(r"\b([CP])[\s-]?(\d{4})\b", re.IGNORECASE)
+
+#: `DX 412` and `dx412` are the same leg.
+_LOOSE_FLIGHT_RE: Final = re.compile(r"\b(DX)[\s-]?(\d{3,4})\b", re.IGNORECASE)
+
+
+def canonical_question(question: str) -> str:
+    """Rewrite a question into the spelling the dataset uses.
+
+    The offline path matches fixed shapes, and those shapes expect `C-1042`,
+    `BLR` and an ISO date. A controller types `C1042` and `bangalore`. The
+    agent path reads both without being told, which is precisely why this
+    belongs here: the deterministic path is the one that has to be rigid, and
+    it is the one that runs with no key, no network and no budget.
+
+    Only the *question* is rewritten, never the answer, so nothing here can put
+    a value in front of a controller that a tool did not produce. Idempotent,
+    because both the resolver and the graph's triage call it.
+    """
+    if not question.strip():
+        return question
+
+    text = _LOOSE_CREW_RE.sub(lambda m: f"{m.group(1).upper()}-{m.group(2)}", question)
+    text = _LOOSE_FLIGHT_RE.sub(lambda m: f"{m.group(1).upper()}{m.group(2)}", text)
+    return _STATION_ALIAS_RE.sub(
+        lambda m: _STATION_ALIASES[m.group(1).lower()], text
+    )
+
+
 def triage_question(question: str) -> Triage:
     """Classify a question without spending anything.
 
     Returns `in_scope=False` only when the question is confidently outside
     crew operations on this dataset. Everything else goes forward.
     """
+    question = canonical_question(question)
     entities = extract_entities(question)
     words = set(re.findall(r"[a-z][a-z-]+", question.lower()))
 

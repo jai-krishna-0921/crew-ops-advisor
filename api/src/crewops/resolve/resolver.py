@@ -31,7 +31,7 @@ from crewops.contracts import (
 )
 from crewops.resolve.intents import Intent, PlannedCall, match_intent
 from crewops.resolve.render import render
-from crewops.resolve.triage import triage_question
+from crewops.resolve.triage import canonical_question, triage_question
 from crewops.verify import Verifier
 
 __all__ = ["SUPPORTED_SHAPES", "DeterministicResolver"]
@@ -77,7 +77,13 @@ class DeterministicResolver:
     ) -> Reply:
         started = time.monotonic()
         snapshot = as_of or self.snapshot
-        triage = triage_question(question)
+        # Normalise once, here, so triage, intent matching and every argument
+        # built downstream all see the dataset's spelling. `question` itself is
+        # left alone: it becomes `Reply.question`, and the audit trail should
+        # show a controller what they actually typed, not a tidied version of
+        # it.
+        asked = canonical_question(question)
+        triage = triage_question(asked)
 
         if not triage.in_scope:
             # A greeting is answered, not refused. It carries no "I cannot" and
@@ -103,7 +109,7 @@ class DeterministicResolver:
                 tier=triage.tier,
             )
 
-        intent = match_intent(question)
+        intent = match_intent(asked)
         if intent is None:
             return self._abstain(
                 question,

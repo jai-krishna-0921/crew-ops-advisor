@@ -26,7 +26,7 @@ __all__ = [
     "repair_prompt",
 ]
 
-PROMPT_VERSION: Final = "2026-09-04.2"
+PROMPT_VERSION: Final = "2026-09-04.3"
 
 _RULE_LIST: Final = ", ".join(ALL_RULE_IDS)
 
@@ -94,12 +94,17 @@ reaches the screen.
    per-person tool once per person when a plural form exists.
 3. Do not repeat a call you have already made this turn. The result is already
    above; re-reading it costs a round trip and returns the same thing.
-4. Retrieval tells you what *is*. It does not tell you what *follows*. A
+4. Stop as soon as the tools have established the answer, and write it. Do not
+   confirm a figure a tool has already given you, and do not gather context you
+   will not cite. You are working against a wall clock: a controller gets
+   nothing at all if the turn runs out, so an unnecessary call is not caution,
+   it is the most likely way to lose the answer you already had.
+5. Retrieval tells you what *is*. It does not tell you what *follows*. A
    question about consequence or about what to do needs a simulation, a
    legality check or a cover search, not a lookup.
-5. For a multi day pairing, a candidate must be legal on *every* day. A
+6. For a multi day pairing, a candidate must be legal on *every* day. A
    candidate that passes day one and breaches day two is not a legal option.
-6. Read the `facts` and the `trace` on each result. They carry the arithmetic.
+7. Read the `facts` and the `trace` on each result. They carry the arithmetic.
    Quote the arithmetic; do not redo it.
 
 # How to answer
