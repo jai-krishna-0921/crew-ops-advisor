@@ -26,9 +26,9 @@ from collections.abc import Sequence
 from datetime import date as DateType  # noqa: N812
 from datetime import datetime as DateTime  # noqa: N812
 from datetime import timedelta
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
-from crewops.contracts.evidence import Fact, ToolEnvelope
+from crewops.contracts.evidence import Fact, FactUnit, ToolEnvelope
 from crewops.contracts.rules import ALL_RULE_IDS
 from crewops.contracts.tools import TimeOfDay
 from crewops.domain import (
@@ -125,6 +125,52 @@ RuleComparison: dict[str, str] = {
         "positioning flight exists"
     ),
 }
+
+
+def _apply_metric(
+    metric: str, field: str | None, rows: Sequence[dict[str, Any]]
+) -> float | int:
+    """The one piece of arithmetic `aggregate` performs, on the caller's behalf.
+
+    This exists precisely so the model never does it: "how many", "which is
+    longest" and "which stations do we serve" are counts, extrema and distinct
+    counts over a filtered collection, not free arithmetic in prose.
+    """
+    if metric == "count":
+        return len(rows)
+    values: list[Any] = [r[field] for r in rows if field in r and r[field] is not None]
+    if metric == "distinct":
+        return len({v for v in values})
+    if not values:
+        return 0
+    if metric == "sum":
+        return cast(float, round(sum(values), 2))
+    if metric == "max":
+        return cast("float | int", max(values))
+    if metric == "min":
+        return cast("float | int", min(values))
+    if metric == "mean":
+        return cast(float, round(sum(values) / len(values), 2))
+    raise ValueError(f"Unknown metric {metric!r}")
+
+
+def _infer_unit(metric: str, field: str | None) -> FactUnit:
+    """A reasonable `Fact.unit` for a figure the caller named by field, not type.
+
+    `aggregate` is generic across collections, so the field name is the only
+    signal. This is a best effort label, not a computation: the value itself
+    always comes straight from `_apply_metric`.
+    """
+    if metric in ("count", "distinct") or field is None:
+        return "count"
+    lowered = field.lower()
+    if "hour" in lowered:
+        return "hours"
+    if "minute" in lowered:
+        return "minutes"
+    if "inr" in lowered or "cost" in lowered:
+        return "inr"
+    return "count"
 
 
 class Tools:
@@ -988,6 +1034,298 @@ class Tools:
             timer=timer,
         )
 
+    def find_crew_at_risk(
+        self,
+        *,
+        min_score: float | None = None,
+        base: str | None = None,
+        on_date: DateType | None = None,
+        limit: int = 20,
+    ) -> ToolEnvelope:
+        timer = ToolTimer()
+        args = {"min_score": min_score, "base": base, "on_date": on_date, "limit": limit}
+        rostered_ids: set[str] | None = None
+        if on_date is not None:
+            rostered_ids = {
+                member.crew_id
+                for pairing in self.world.pairings_on(on_date)
+                for member in pairing.crew
+            }
+
+        rows: list[tuple[Any, Crew]] = []
+        for signal in self.world.risk_signals:
+            member = self.world.crew_member(signal.crew_id)
+            if member is None:
+                continue
+            if base and member.base != base:
+                continue
+            if min_score is not None and signal.disruption_risk_score < min_score:
+                continue
+            rows.append((signal, member))
+        rows.sort(key=lambda pair: pair[0].disruption_risk_score, reverse=True)
+        shown = rows[:limit]
+
+        entries = tuple(
+            P.RiskEntry(
+                crew_id=signal.crew_id,
+                name=member.name,
+                rank=member.rank,
+                base=member.base,
+                score=signal.disruption_risk_score,
+                drivers=signal.drivers,
+                rostered_on_date=(
+                    signal.crew_id in rostered_ids if rostered_ids is not None else None
+                ),
+            )
+            for signal, member in shown
+        )
+        payload = P.RiskList(
+            entries=entries,
+            total_matched=len(rows),
+            filters={k: str(v) for k, v in args.items() if v is not None and k != "limit"},
+        )
+        facts = [
+            computed_fact(
+                "find_crew_at_risk.total_matched",
+                "Crew matching the filter",
+                len(rows),
+                "count",
+                self._filter_derivation(args),
+                _SOURCE,
+            ),
+            *[
+                dataset_fact(
+                    f"{signal.crew_id}.risk.score",
+                    f"{signal.crew_id} disruption risk score, provided not computed",
+                    signal.disruption_risk_score,
+                    "percent",
+                    f"risk_signals.json#{signal.crew_id}",
+                )
+                for signal, _ in shown
+            ],
+        ]
+        return ok_envelope(
+            "find_crew_at_risk",
+            args,
+            payload,
+            facts=facts,
+            trace=[
+                step(
+                    "Rank by disruption risk",
+                    f"{len(rows)} crew match the filter, showing the top {len(shown)}."
+                    if rows
+                    else "No crew match that filter, which is a finding, not a failure.",
+                    ["find_crew_at_risk.total_matched"],
+                )
+            ],
+            citations=[
+                cite("risk_signals.json", "provided disruption risk score, never modelled here"),
+                cite("crew.json", "rank and base"),
+            ],
+            timer=timer,
+            truncated=len(shown) < len(rows),
+        )
+
+    def aggregate(
+        self,
+        *,
+        collection: Literal["flights", "crew", "pairings", "certifications", "reserves"],
+        metric: Literal["count", "sum", "max", "min", "mean", "distinct"],
+        field: str | None = None,
+        group_by: str | None = None,
+        filters: dict[str, str | int | float | bool | None] | None = None,
+        limit: int = 50,
+    ) -> ToolEnvelope:
+        timer = ToolTimer()
+        args: dict[str, Any] = {
+            "collection": collection,
+            "metric": metric,
+            "field": field,
+            "group_by": group_by,
+            "filters": filters,
+            "limit": limit,
+        }
+        if metric != "count" and field is None:
+            return error_envelope(
+                "aggregate",
+                args,
+                f"metric {metric!r} needs a field to {metric} over.",
+                timer=timer,
+            )
+        try:
+            rows = self._aggregate_rows(collection)
+        except KeyError as exc:
+            return error_envelope("aggregate", args, str(exc), timer=timer)
+
+        active = {k: v for k, v in (filters or {}).items() if v is not None}
+        for key, value in active.items():
+            rows = [r for r in rows if r.get(key) == value]
+        if not rows:
+            reason = (
+                f"No {collection} rows match filters {active}."
+                if active
+                else f"{collection} is empty."
+            )
+            return error_envelope("aggregate", args, reason, timer=timer)
+
+        if group_by:
+            groups: dict[str, list[dict[str, Any]]] = {}
+            for row in rows:
+                key = str(row.get(group_by))
+                groups.setdefault(key, []).append(row)
+            computed = sorted(
+                (
+                    (key, _apply_metric(metric, field, sub))
+                    for key, sub in groups.items()
+                ),
+                key=lambda kv: kv[1],
+                reverse=True,
+            )[:limit]
+            payload = P.AggregateResult(
+                collection=collection,
+                metric=metric,
+                field=field,
+                group_by=group_by,
+                groups=tuple(computed),
+                matched=len(rows),
+                filters={k: str(v) for k, v in active.items()},
+            )
+            facts = [
+                computed_fact(
+                    f"aggregate.{collection}.{metric}.{group_by}.{key}",
+                    f"{metric} of {field or collection} where {group_by}={key}",
+                    value,
+                    _infer_unit(metric, field),
+                    f"{metric} over {len(groups[key])} rows grouped by {group_by}={key}",
+                    _SOURCE,
+                )
+                for key, value in computed
+            ]
+        else:
+            value = _apply_metric(metric, field, rows)
+            payload = P.AggregateResult(
+                collection=collection,
+                metric=metric,
+                field=field,
+                group_by=None,
+                value=value,
+                matched=len(rows),
+                filters={k: str(v) for k, v in active.items()},
+            )
+            facts = [
+                computed_fact(
+                    f"aggregate.{collection}.{metric}.{field or 'rows'}",
+                    f"{metric} of {field or collection}",
+                    value,
+                    _infer_unit(metric, field),
+                    f"{metric} over {len(rows)} {collection} rows"
+                    + (f" filtered on {active}" if active else ""),
+                    _SOURCE,
+                )
+            ]
+        return ok_envelope(
+            "aggregate",
+            args,
+            payload,
+            facts=facts,
+            trace=[
+                step(
+                    f"Aggregate {collection}",
+                    f"{metric} over {len(rows)} rows"
+                    + (f", grouped by {group_by}" if group_by else "")
+                    + (f", filtered on {active}" if active else "")
+                    + ".",
+                    [f.key for f in facts[:3]],
+                )
+            ],
+            citations=[cite(f"{collection}.json", "aggregated query")],
+            timer=timer,
+        )
+
+    def get_cost_rates(self, *, rate_key: str | None = None) -> ToolEnvelope:
+        timer = ToolTimer()
+        args = {"rate_key": rate_key}
+        costs = self.world.costs
+        all_rates: tuple[tuple[str, int, str], ...] = (
+            (
+                "reserve_callout_pilot",
+                costs.reserve_callout_pilot,
+                "Charged once per assignment for a reserve pilot (Captain or First Officer)",
+            ),
+            (
+                "reserve_callout_cabin",
+                costs.reserve_callout_cabin,
+                "Charged once per assignment for a reserve cabin crew member",
+            ),
+            (
+                "dayoff_callout_pilot",
+                costs.dayoff_callout_pilot,
+                "Charged once per assignment for a day-off pilot",
+            ),
+            (
+                "dayoff_callout_cabin",
+                costs.dayoff_callout_cabin,
+                "Charged once per assignment for a day-off cabin crew member",
+            ),
+            (
+                "deadhead_positioning",
+                costs.deadhead_positioning,
+                "Charged once when the candidate is not based at the required station",
+            ),
+            (
+                "delay_cost_per_duty_hour",
+                costs.delay_cost_per_duty_hour,
+                "Per hour the duty's first departure is delayed",
+            ),
+            (
+                "cancellation_per_flight",
+                costs.cancellation_per_flight,
+                "Per leg cancelled, not per pairing",
+            ),
+            (
+                "hotel_overnight",
+                costs.hotel_overnight,
+                "Never charged in any shipped answer key, including a DEL overnight",
+            ),
+        )
+        if rate_key:
+            matched = tuple(r for r in all_rates if r[0] == rate_key)
+            if not matched:
+                known = ", ".join(r[0] for r in all_rates)
+                return error_envelope(
+                    "get_cost_rates",
+                    args,
+                    f"No cost rate named {rate_key!r}. Known rates: {known}.",
+                    timer=timer,
+                )
+        else:
+            matched = all_rates
+
+        payload = P.CostRateTable(
+            currency=costs.currency,
+            rates=tuple(P.CostRate(key=k, value=v, unit="inr", note=n) for k, v, n in matched),
+        )
+        facts = [
+            dataset_fact(f"costs.{key}", key.replace("_", " "), value, "inr", "costs.json")
+            for key, value, _ in matched
+        ]
+        return ok_envelope(
+            "get_cost_rates",
+            args,
+            payload,
+            facts=facts,
+            trace=[
+                step(
+                    "Read cost rates",
+                    f"{len(matched)} rate{'s' if len(matched) != 1 else ''} in {costs.currency}, "
+                    "as shipped in costs.json.",
+                    [f.key for f in facts[:3]],
+                )
+            ],
+            citations=[cite("costs.json", rate_key or "all rates")],
+            timer=timer,
+        )
+
     # ============================================================== tier 2
 
     def check_legality(
@@ -1685,6 +2023,79 @@ class Tools:
             for key, value in sorted(applied.items())
         )
         return f"Counted records matching {rendered}"
+
+    def _aggregate_rows(self, collection: str) -> list[dict[str, Any]]:
+        """Every record of one collection, flattened to scalar fields.
+
+        Dates and times are rendered as ISO strings so a `filters` value
+        (which travels as `str | int | float | bool | None`) compares equal
+        to the row without the caller needing to know the internal type.
+        """
+        if collection == "flights":
+            return [
+                {
+                    "flight_id": f.flight_id,
+                    "flight_no": f.flight_no,
+                    "date": f.date.isoformat(),
+                    "dep_station": f.dep_station,
+                    "arr_station": f.arr_station,
+                    "block_hours": f.block_hours,
+                    "aircraft": f.aircraft,
+                    "aircraft_type": f.aircraft_type,
+                    "seats": f.seats,
+                }
+                for f in self.world.flights
+            ]
+        if collection == "crew":
+            return [
+                {
+                    "crew_id": c.crew_id,
+                    "name": c.name,
+                    "rank": c.rank,
+                    "base": c.base,
+                    "seniority": c.seniority,
+                    "reachability_minutes": c.reachability_minutes,
+                    "status": c.status,
+                }
+                for c in self.world.crew
+            ]
+        if collection == "pairings":
+            return [
+                {
+                    "pairing_id": p.pairing_id,
+                    "aircraft": p.aircraft,
+                    "aircraft_type": self.world.require_flight(
+                        p.days[0].flights[0]
+                    ).aircraft_type,
+                    "duty_days": len(p.days),
+                    "total_legs": len(p.flight_ids),
+                    "total_seats": self.world.seats_of(p.flight_ids),
+                }
+                for p in self.world.pairings
+            ]
+        if collection == "certifications":
+            return [
+                {
+                    "crew_id": c.crew_id,
+                    "cert_type": c.cert_type,
+                    "valid_to": c.valid_to.isoformat(),
+                }
+                for c in self.world.certifications
+            ]
+        if collection == "reserves":
+            return [
+                {
+                    "crew_id": r.crew_id,
+                    "base": r.base,
+                    "window_start": r.oncall_window_utc.start,
+                    "window_end": r.oncall_window_utc.end,
+                }
+                for r in self.world.reserves
+            ]
+        raise KeyError(
+            f"Unknown collection {collection!r}. Choose one of flights, crew, "
+            "pairings, certifications, reserves."
+        )
 
     def _crew_summary(self, crew_id: str) -> P.CrewSummary:
         member = self.world.require_crew(crew_id)

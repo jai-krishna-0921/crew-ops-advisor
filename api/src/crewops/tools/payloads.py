@@ -160,6 +160,66 @@ class CertificationList(Payload):
     note: str = ""
 
 
+# ------------------------------------------------------------------- risk
+
+
+class RiskEntry(Payload):
+    """One crew member's precomputed disruption risk.
+
+    The score and drivers are a provided input, read from risk_signals.json,
+    never modelled here.
+    """
+
+    crew_id: str
+    name: str
+    rank: str
+    base: str
+    score: float
+    drivers: tuple[str, ...]
+    rostered_on_date: bool | None = None
+
+
+class RiskList(Payload):
+    entries: tuple[RiskEntry, ...]
+    total_matched: int
+    filters: dict[str, str] = Field(default_factory=dict)
+
+
+# --------------------------------------------------------------- aggregate
+
+
+class AggregateResult(Payload):
+    """One counted, summed or grouped figure over a collection.
+
+    `groups` is populated only when `group_by` was given; otherwise `value`
+    carries the single scalar result.
+    """
+
+    collection: str
+    metric: str
+    field: str | None = None
+    group_by: str | None = None
+    value: float | int | None = None
+    groups: tuple[tuple[str, float], ...] = ()
+    matched: int = 0
+    filters: dict[str, str] = Field(default_factory=dict)
+
+
+# ------------------------------------------------------------------- costs
+
+
+class CostRate(Payload):
+    key: str
+    value: float
+    unit: str
+    note: str = ""
+
+
+class CostRateTable(Payload):
+    currency: str
+    rates: tuple[CostRate, ...]
+
+
 # ---------------------------------------------------------------- rosters
 
 
@@ -277,9 +337,12 @@ class NotificationDraft(Payload):
 
 
 __all__ = [
+    "AggregateResult",
     "CertificationList",
     "CertificationSummary",
     "ClockSummary",
+    "CostRate",
+    "CostRateTable",
     "CrewDetail",
     "CrewList",
     "CrewSummary",
@@ -294,6 +357,8 @@ __all__ = [
     "Payload",
     "ReserveList",
     "ReserveSummary",
+    "RiskEntry",
+    "RiskList",
     "RosterView",
     "RuleExplanation",
     "WorldSummary",
