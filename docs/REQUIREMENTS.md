@@ -20,17 +20,22 @@ mandatory or uses "must", **expected** where it says "strongly expected" or
 "should", **stretch** for the tier it labels stretch, **optional** for the
 enhancements list, **non-goal** for the "You are NOT expected to build" list.
 
+One note on the quotations. Wording is exact. Punctuation is not: this
+repository uses no em dashes anywhere, so where the PDF sets a clause off with
+one, the quotation here uses a colon or a comma instead. Nothing else is
+changed, and no quotation is shortened without an ellipsis.
+
 ---
 
 ## 1. Expected output (PDF section 5, page 5)
 
 | Id | Requirement, verbatim | Class | How we satisfy it | Where | Verified by |
 |---|---|---|---|---|---|
-| REQ-01 | "Conversational interface — web chat, voice, or a well-designed CLI" | mandatory | Both: a Typer/Rich CLI (`crewops chat`, `crewops ask`) and a Next.js web console streaming over SSE | `api/src/crewops/cli.py`, `web/` | manual demo; `GET /api/health` |
+| REQ-01 | "Conversational interface: web chat, voice, or a well-designed CLI" | mandatory | Both: a Typer/Rich CLI (`crewops chat`, `crewops ask`) and a Next.js web console streaming over SSE | `api/src/crewops/cli.py`, `web/` | manual demo; `GET /api/health` |
 | REQ-02 | "Reasoning layer answering questions across as many tiers as you reach" | mandatory | LangGraph agent selecting deterministic tools, with a deterministic offline resolver behind the same `Reply` type | `api/src/crewops/agent/`, `api/src/crewops/resolve/` | `make eval`, per-tier scorecard |
 | REQ-03 | "Visible explanations on all non-trivial answers" | mandatory | Every tool returns a `ToolEnvelope` carrying `trace` and `facts`; every rule verdict carries a `RuleTrace.arithmetic` string with both operands, the operator, the result and the limit | `contracts/evidence.py`, `contracts/rules.py` | `make golden`; UI evidence drawer |
-| REQ-04 | "Architecture diagram — showing the boundary you drew between LLM reasoning and deterministic logic" | mandatory | Not yet drawn. Owner: presentation. The boundary itself is enforced by `tests/test_boundary.py`, which is the stronger claim and should be shown next to the diagram | `docs/` (pending) | n/a, it is a document |
-| REQ-05 | "README — setup, approach, key trade-offs, known limitations" | mandatory | Not yet written | `README.md` (pending) | n/a |
+| REQ-04 | "Architecture diagram: showing the boundary you drew between LLM reasoning and deterministic logic" | mandatory | Not yet drawn. Owner: presentation. The boundary itself is enforced by `tests/test_boundary.py`, which is the stronger claim and should be shown next to the diagram | `docs/` (pending) | n/a, it is a document |
+| REQ-05 | "README: setup, approach, key trade-offs, known limitations" | mandatory | Not yet written | `README.md` (pending) | n/a |
 | REQ-06 | "Sample inputs and outputs, including at least one case your system handles poorly, with your analysis" | mandatory | `docs/FAILURE-ANALYSIS.md` plus a generated transcript set from the scorecard | `docs/FAILURE-ANALYSIS.md`, `make eval` artefact | `make eval` writes the transcripts |
 | REQ-07 | "Presentation deck and live demo" | mandatory | Not yet built | pending | n/a |
 
@@ -46,9 +51,9 @@ nothing on the other side of it is decorative. A diagram asserts the boundary.
 
 | Id | Requirement, verbatim | Class | Status | Where | Verified by |
 |---|---|---|---|---|---|
-| REQ-08 | "Tier 1 — Lookup & Retrieval (mandatory). Answerable directly from the data. No domain modelling required." | mandatory | planned | `tools/` tier 1 group | `make eval`, Tier 1 rows; `docs/TIER-COVERAGE.md` section 1 |
-| REQ-09 | "Tier 2 — Consequence & Simulation (strongly expected). Requires reasoning about impact, not just retrieval." | expected | planned | `ops/`, `rules/`, `tools/` tier 2 group | `make eval`, Tier 2 rows |
-| REQ-10 | "Tier 3 — Recommendation & Action (stretch). Requires ranking legal options against real trade-offs. Expected: ranked, rule-compliant options with cost, legality status, reachability and reasoning." | stretch | planned | `ops/rank`, `find_cover_options` | `make golden` against S1, S2, S5; `make eval` Tier 3 rows |
+| REQ-08 | "Tier 1: Lookup & Retrieval (mandatory). Answerable directly from the data. No domain modelling required." | mandatory | planned | `tools/` tier 1 group | `make eval`, Tier 1 rows; `docs/TIER-COVERAGE.md` section 1 |
+| REQ-09 | "Tier 2: Consequence & Simulation (strongly expected). Requires reasoning about impact, not just retrieval." | expected | planned | `ops/`, `rules/`, `tools/` tier 2 group | `make eval`, Tier 2 rows |
+| REQ-10 | "Tier 3: Recommendation & Action (stretch). Requires ranking legal options against real trade-offs. Expected: ranked, rule-compliant options with cost, legality status, reachability and reasoning." | stretch | planned | `ops/rank`, `find_cover_options` | `make golden` against S1, S2, S5; `make eval` Tier 3 rows |
 | REQ-11 | "Bonus: draft the notification message to the affected crew." | optional | planned | `draft_notification` | Q36 golden test |
 | REQ-12 | "Explainability is mandatory. Every non-trivial answer must carry reasoning a controller can read and challenge. A correct answer with no visible reasoning scores poorly." | mandatory | planned | `narrate/`, `RuleTrace`, `TraceStep`, `Citation` | grounding guard; UI reasoning trail |
 | REQ-13 | "What should the language model do, what should deterministic code do, and how do you compose them into a system that is both conversational and correct?" | mandatory | The submission's entire thesis: the model plans and explains, deterministic code computes, and a guard node rejects any sentence containing a number, identifier, date or rule id that no tool emitted this turn | `docs/CONTRACTS.md` "The boundary rule, stated precisely"; `agent/graph.py`; `verify/` | `make boundary`; verification status on every `Reply` |
@@ -65,10 +70,10 @@ the PDF asks for them and because a controller needs them.
 
 | Id | Requirement, verbatim | Class | How we satisfy it | Verified by |
 |---|---|---|---|---|
-| REQ-14 | "Use the provided synthetic dataset — no external or real airline data" | mandatory | `data/` is read only for every workstream. A test walks the whole source tree and fails on any write call in a module that also references the dataset path | `tests/test_boundary.py::test_nothing_writes_to_the_dataset` |
+| REQ-14 | "Use the provided synthetic dataset, no external or real airline data" | mandatory | `data/` is read only for every workstream. A test walks the whole source tree and fails on any write call in a module that also references the dataset path | `tests/test_boundary.py::test_nothing_writes_to_the_dataset` |
 | REQ-15 | "Natural language must be the primary interface" | mandatory | `crewops chat` and the web console are the primary entry points. The deterministic HTTP routes (`/api/simulate`, `/api/legality`, `/api/cover`) exist so a judge can watch the rules engine run with no API key, not as the main path | manual demo |
 | REQ-16 | "Non-trivial answers must be explainable" | mandatory | Same mechanism as REQ-03 and REQ-12 | grounding guard |
-| REQ-17 | "Answers must be grounded in the data — invented facts are treated as failures, not rounding errors" | mandatory | The `Fact` contract: if a number can appear in an answer, a tool must have emitted a `Fact` for it. The guard extracts every number, identifier, date, currency amount, station and rule id from the drafted reply and rejects any that no tool attested. When the guard fires, the fix is to add the missing `Fact`, never to relax the guard | `verify/`; `VerificationReport` on every `Reply`; scorecard grounding column |
+| REQ-17 | "Answers must be grounded in the data, invented facts are treated as failures, not rounding errors" | mandatory | The `Fact` contract: if a number can appear in an answer, a tool must have emitted a `Fact` for it. The guard extracts every number, identifier, date, currency amount, station and rule id from the drafted reply and rejects any that no tool attested. When the guard fires, the fix is to add the missing `Fact`, never to relax the guard | `verify/`; `VerificationReport` on every `Reply`; scorecard grounding column |
 
 REQ-17 is the requirement most likely to be tested adversarially by a judge,
 and it is the one this architecture is built around. The phrase "not rounding
@@ -107,7 +112,7 @@ failure, which is why it is filed as high severity rather than medium.
 | Id | Item | Status |
 |---|---|---|
 | REQ-27 | "Source code repository (GitHub / GitLab)" | done |
-| REQ-04 | "Architecture diagram — including the LLM vs deterministic boundary" | not yet |
+| REQ-04 | "Architecture diagram: including the LLM vs deterministic boundary" | not yet |
 | REQ-05 | "README with setup instructions, approach and trade-offs" | not yet |
 | REQ-06 | "Sample inputs and outputs, including one failure case with analysis" | partial, `docs/FAILURE-ANALYSIS.md` started |
 | REQ-07a | "Presentation deck" | not yet |
@@ -137,8 +142,8 @@ creep costs them and costs hours we do not have.
 | NG-03 | "Production infrastructure, CI/CD or deployment pipelines" | 6 | **We have partially crossed this line and it is defensible.** `.github/workflows/ci.yml` exists. It is not a deployment pipeline: it runs lint, types, the boundary test and the golden tests. Its purpose is to fail if the dataset moves or the boundary leaks, which is a correctness guarantee for REQ-14 and REQ-13, not infrastructure. We add nothing further: no containers, no deploy step, no environments |
 | NG-04 | "Integrations with real airline systems" | 6 | None. The only data source is `data/`, which REQ-14 also requires |
 | NG-05 | "A mobile application" | 6 | None. The web console is responsive because that is free, not because we are targeting mobile |
-| NG-06 | "A full mathematical optimisation solver — heuristic ranking with clear reasoning is sufficient" | 6 | We rank by cost then crew id, exactly as the answer keys do, and state the ranking basis in `Recommendation.ranking_basis` so it can be argued with. The joint allocation in GAP-2 is a two-gap exhaustive enumeration over a candidate list of tens, not a solver. If that ever needs an LP, we have misread the problem |
-| NG-07 | "Coverage of all real regulations — the seven provided rules are the full scope" | 6 | Seven rules, loaded from `rules.json` params, no eighth. `RuleId` is a closed `Literal` of exactly seven values, so an eighth rule is a type error rather than a judgement call. When a question needs a rule we do not model, the system abstains with `AbstentionReason.REQUIRES_UNMODELLED_RULE` and names what it would need. See the caveat below |
+| NG-06 | "A full mathematical optimisation solver, heuristic ranking with clear reasoning is sufficient" | 6 | We rank by cost then crew id, exactly as the answer keys do, and state the ranking basis in `Recommendation.ranking_basis` so it can be argued with. The joint allocation in GAP-2 is a two-gap exhaustive enumeration over a candidate list of tens, not a solver. If that ever needs an LP, we have misread the problem |
+| NG-07 | "Coverage of all real regulations, the seven provided rules are the full scope" | 6 | Seven rules, loaded from `rules.json` params, no eighth. `RuleId` is a closed `Literal` of exactly seven values, so an eighth rule is a type error rather than a judgement call. When a question needs a rule we do not model, the system abstains with `AbstentionReason.REQUIRES_UNMODELLED_RULE` and names what it would need. See the caveat below |
 
 ### The NG-07 caveat, stated plainly
 
@@ -190,7 +195,7 @@ Not requirements, but instructions we are following.
 
 | Id | Text, verbatim | Page | Effect |
 |---|---|---|---|
-| C-01 | "The dataset runs on a laptop. Do not spend hackathon hours on infrastructure — a local SQLite file plus a clean interface scores better than an unfinished distributed deployment." | 3 | SQLite projection for retrieval, SQLite for agent memory, everything runs locally with `make dev`. No container, no cloud |
-| C-02 | "Volume is small by design — retrieval strategy is a design choice, not a scaling necessity." | 6 | We are not required to justify retrieval on performance grounds, and should not pretend to. The Scalability criterion asks for reasoned commentary, which is a README paragraph, not an engineering effort |
+| C-01 | "The dataset runs on a laptop. Do not spend hackathon hours on infrastructure, a local SQLite file plus a clean interface scores better than an unfinished distributed deployment." | 3 | SQLite projection for retrieval, SQLite for agent memory, everything runs locally with `make dev`. No container, no cloud |
+| C-02 | "Volume is small by design, retrieval strategy is a design choice, not a scaling necessity." | 6 | We are not required to justify retrieval on performance grounds, and should not pretend to. The Scalability criterion asks for reasoned commentary, which is a README paragraph, not an engineering effort |
 | C-03 | "Base rates are synthetic and not statistically calibrated." | 6 | No claim anywhere in the deck or README about realistic sick-call rates, expected annual savings, or anything else derived from base rates |
 | C-04 | "It targets relational and constraint realism, not statistical realism. What is guaranteed is: every roster is legal or explicitly flagged, every duty clock sums correctly, every pairing obeys the ruleset. Your reasoning is therefore objectively checkable against the rules and answer keys." | 5 | This is the licence for the golden tests. Exact parity against the keys is a legitimate bar because the data was built to make it one |

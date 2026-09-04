@@ -7,6 +7,10 @@ The self assessment column is deliberately unflattering. A rubric map that
 scores itself well is a marketing document and is worth nothing to the people
 building this.
 
+Quotations from the PDF are exact in wording. Punctuation is normalised: this
+repository uses no em dashes, so a clause the PDF sets off with one is set off
+here with a colon or a comma instead.
+
 | Criterion | Weight |
 |---|---|
 | AI Utilization | 20% |
@@ -34,7 +38,7 @@ currently investing the tool surface as though the reverse were true.
 `find_cover_options` is the most elaborate tool in the contract and there is no
 way to count flights.
 
-**2. "Correctness outweighs coverage — answering ten questions correctly and
+**2. "Correctness outweighs coverage, answering ten questions correctly and
 saying 'I can't answer that reliably' on the eleventh scores higher than
 answering all eleven with three wrong."**
 
@@ -234,7 +238,7 @@ written.
 
 ## 7. Business Impact, 5%
 
-> "Credible link to operational value — time saved, disruptions avoided, cost
+> "Credible link to operational value, time saved, disruptions avoided, cost
 > reduced"
 
 **What addresses it.** The cost model is real and comes from `costs.json`:
