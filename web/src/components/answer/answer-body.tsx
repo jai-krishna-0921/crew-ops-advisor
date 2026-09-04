@@ -17,7 +17,7 @@ import { latency, MODE_LABEL, MODE_NOTE } from "@/lib/format";
 import { AbstentionCard } from "@/components/answer/abstention";
 import { RecommendationView } from "@/components/answer/cover-options";
 import { DataTable } from "@/components/answer/data-table";
-import { GroundedProse } from "@/components/answer/grounded-prose";
+import { Markdown } from "@/components/answer/markdown";
 import { ImpactReportView } from "@/components/answer/impact-report";
 import { RuleTraceCard } from "@/components/answer/rule-trace";
 import { VerificationBadge, VerificationPanel } from "@/components/answer/verification";
@@ -66,7 +66,7 @@ export function AnswerBody({
         ) : null}
       </header>
 
-      {reply.text ? <GroundedProse text={reply.text} facts={facts} /> : null}
+      {reply.text ? <Markdown text={reply.text} facts={facts} /> : null}
 
       {reply.abstention ? (
         <AbstentionCard
@@ -81,7 +81,7 @@ export function AnswerBody({
       {reply.rule_traces.length > 0 ? (
         <section aria-label="Rule traces" className="space-y-1.5">
           <Eyebrow>Rules evaluated</Eyebrow>
-          <div className="grid gap-1.5 md:grid-cols-2">
+          <div className="divide-y divide-line-soft">
             {reply.rule_traces.map((trace, index) => (
               // Traces from every candidate land in one flat list, so rule id
               // plus date repeats. Keep the index in the key or React omits

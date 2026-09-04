@@ -85,19 +85,26 @@
     0 2px 6px -2px oklch(23.5% 0.008 264 / 0.14);
 
   /* ---- type ----------------------------------------------------------- */
+  --font-display: var(--font-app-display), var(--font-app-sans), ui-sans-serif,
+    system-ui, sans-serif;
   --font-sans: var(--font-app-sans), ui-sans-serif, system-ui, "Segoe UI",
     Roboto, sans-serif;
   --font-mono: var(--font-app-mono), ui-monospace, "SF Mono", "Cascadia Mono",
     "Roboto Mono", monospace;
 
-  --t-2xs: 0.625rem; /* 10px, micro labels */
-  --t-xs: 0.6875rem; /* 11px, dense meta */
-  --t-sm: 0.75rem; /* 12px, table cells, chips */
-  --t-base: 0.8125rem; /* 13px, panel body */
-  --t-md: 0.875rem; /* 14px, conversation prose */
-  --t-lg: 1rem; /* 16px, headline */
-  --t-xl: 1.1875rem; /* 19px, page title */
-  --t-2xl: 1.5rem; /* 24px, figures */
+  /* The scale is set from the conversation outwards. Prose is the thing a
+     controller actually reads, so it gets a comfortable 16px, and everything
+     else is sized in relation to it. An earlier pass had prose at 14px with
+     11px meta and 10px labels, which is cockpit density: correct for a
+     telemetry panel, wrong for something you read a paragraph of at 6 a.m. */
+  --t-2xs: 0.6875rem; /* 11px, micro labels */
+  --t-xs: 0.75rem; /* 12px, meta */
+  --t-sm: 0.8125rem; /* 13px, table cells, chips */
+  --t-base: 0.875rem; /* 14px, panel body */
+  --t-md: 1rem; /* 16px, conversation prose */
+  --t-lg: 1.125rem; /* 18px, answer headline */
+  --t-xl: 1.375rem; /* 22px, page title */
+  --t-2xl: 1.75rem; /* 28px, figures */
 
   /* ---- motion, communicates state and nothing else ------------------- */
   --ease: cubic-bezier(0.2, 0, 0, 1);
@@ -268,6 +275,7 @@
   --color-na-tint: var(--na-tint);
   --color-na-line: var(--na-line);
 
+  --font-display: var(--font-display);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
@@ -304,7 +312,7 @@
     color: var(--ink);
     font-family: var(--font-sans);
     font-size: var(--t-md);
-    line-height: 1.5;
+    line-height: 1.6;
     letter-spacing: -0.006em;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
@@ -325,7 +333,8 @@
   h2,
   h3,
   h4 {
-    letter-spacing: -0.018em;
+    font-family: var(--font-display);
+    letter-spacing: -0.022em;
     font-weight: 600;
   }
 

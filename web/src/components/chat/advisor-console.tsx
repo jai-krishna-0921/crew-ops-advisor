@@ -1,140 +1,106 @@
 "use client";
 
 /**
- * The Advisor: a three region console, not a chat page.
+ * The Advisor: a conversation.
  *
- * Left, what you can ask and what you have asked. Centre, the conversation as
- * structured answers. Right, the evidence behind whichever turn you are
- * looking at.
+ * The problem statement asks for a conversational interface, so the
+ * conversation is the page. One column, centred, at a comfortable reading
+ * measure. Nothing sits permanently beside it competing for the eye.
  *
- * All fact linking state sits here, above all three regions, which is what
- * lets a figure in the centre light a row on the right.
+ * Everything that used to be a fixed panel is now summoned: threads from the
+ * top bar, evidence from the answer it belongs to. That is the difference
+ * between a controller talking to something and a controller operating a
+ * dashboard, and only one of those is what was asked for.
  *
- * This component contains no answering logic. It folds events into turn state
- * and hands the result to presentation components.
+ * Fact linking state still lives here, above the whole exchange, so pointing
+ * at a figure in any answer resolves against every fact the session has seen.
+ *
+ * No answering logic here. This folds events into turn state and hands the
+ * result to presentation components.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { SidebarSimpleIcon, TableIcon } from "@phosphor-icons/react/dist/ssr";
+import {
+  ListIcon,
+  PlusIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react/dist/ssr";
 
 import type {
   AnswerMode,
   Citation,
   SampleQuestion,
-  StreamEvent,
   ThreadSummary,
 } from "@/lib/contracts";
-import { api, chat, newThreadId } from "@/lib/api";
+import { api } from "@/lib/api";
 import { collectFacts } from "@/lib/fact-link";
-import {
-  emptyTurn,
-  reduceTurn,
-  threadTitle,
-  type TurnState,
-} from "@/lib/turn";
+import { threadTitle } from "@/lib/turn";
+import { useConversation } from "@/lib/use-conversation";
 import { TurnView } from "@/components/chat/turn";
 import { Composer } from "@/components/chat/composer";
 import { EvidenceDrawer } from "@/components/evidence/evidence-drawer";
 import { FactProvider } from "@/components/evidence/fact-context";
 import { SideRail } from "@/components/shell/side-rail";
-import { EmptyState, IconButton } from "@/components/ui/primitives";
+import { EmptyState } from "@/components/ui/primitives";
 import { cx } from "@/components/ui/tone";
 
 export function AdvisorConsole() {
   const router = useRouter();
   const params = useSearchParams();
 
-  const [turns, setTurns] = useState<TurnState[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [threadId, setThreadId] = useState<string | null>(null);
   const [mode, setMode] = useState<AnswerMode | "auto">("auto");
-  const [drawerOpen, setDrawerOpen] = useState(true);
-  const [railOpen, setRailOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [railOpen, setRailOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const [questions, setQuestions] = useState<SampleQuestion[]>([]);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [catalogueError, setCatalogueError] = useState<string | null>(null);
 
-  const abortRef = useRef<AbortController | null>(null);
+  const conversation = useConversation(mode);
+  const { turns, threadId, status, loadError, ask, stop, newThread, openThread } =
+    conversation;
+  const busy = status === "streaming";
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const seededRef = useRef<string | null>(null);
 
+  const refreshThreads = useCallback(() => {
+    api
+      .threads()
+      .then(setThreads)
+      .catch(() => {
+        // The thread list is a convenience. Losing it does not stop anyone
+        // asking a question, so it fails quietly.
+      });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.questions(), api.threads()])
-      .then(([q, t]) => {
-        if (cancelled) return;
-        setQuestions(q);
-        setThreads(t);
+    api
+      .questions()
+      .then((rows) => {
+        if (!cancelled) setQuestions(rows);
       })
       .catch(() => {
-        // The rail degrades to an empty list. Typing still works.
+        if (!cancelled) {
+          setCatalogueError(
+            "The sample questions could not be loaded. Typing a question still works.",
+          );
+        }
       });
+    refreshThreads();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshThreads]);
 
-  const ask = useCallback(
-    (question: string) => {
-      const trimmed = question.trim();
-      if (!trimmed) return;
-
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      const localId = `L-${Date.now().toString(36)}-${Math.random()
-        .toString(36)
-        .slice(2, 6)}`;
-      const turn = emptyTurn(trimmed, localId);
-      setTurns((current) => [...current, turn]);
-      setActiveId(localId);
-      setBusy(true);
-
-      const apply = (event: StreamEvent) => {
-        setTurns((current) =>
-          current.map((item) =>
-            item.localId === localId ? reduceTurn(item, event) : item,
-          ),
-        );
-        if (event.type === "run_started") setThreadId(event.thread_id);
-      };
-
-      const activeThread = threadId ?? newThreadId();
-      setThreadId(activeThread);
-
-      chat(
-        {
-          question: trimmed,
-          thread_id: turns.length === 0 ? null : activeThread,
-          force_mode: mode === "auto" ? null : mode,
-        },
-        {
-          onEvent: apply,
-          onError: (error) => {
-            setTurns((current) =>
-              current.map((item) =>
-                item.localId === localId
-                  ? {
-                      ...item,
-                      error: {
-                        message: error.message,
-                        recoverable: error.recoverable,
-                      },
-                    }
-                  : item,
-              ),
-            );
-          },
-          onClose: () => setBusy(false),
-        },
-        controller.signal,
-      ).catch(() => setBusy(false));
-    },
-    [mode, threadId, turns.length],
-  );
+  // A finished answer may have created a thread, so the list is refetched
+  // once the run settles rather than on every event.
+  useEffect(() => {
+    if (status === "idle" && turns.length > 0) refreshThreads();
+  }, [status, turns.length, refreshThreads]);
 
   // A question in the URL fires once. This makes every demo question a link.
   useEffect(() => {
@@ -150,20 +116,6 @@ export function AdvisorConsole() {
     if (!node) return;
     node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
   }, [turns.length]);
-
-  const stop = () => {
-    abortRef.current?.abort();
-    setBusy(false);
-  };
-
-  const newThread = () => {
-    abortRef.current?.abort();
-    setTurns([]);
-    setThreadId(null);
-    setActiveId(null);
-    setBusy(false);
-    seededRef.current = null;
-  };
 
   const activeTurn =
     turns.find((turn) => turn.localId === activeId) ?? turns[turns.length - 1] ?? null;
@@ -217,57 +169,69 @@ export function AdvisorConsole() {
       drawerOpen={drawerOpen}
       setDrawerOpen={setDrawerOpen}
     >
-      <div className="flex h-full min-h-0">
-        <aside
-          aria-label="Threads and sample questions"
-          className={cx(
-            "hidden min-h-0 shrink-0 border-r border-line lg:block",
-            railOpen ? "w-[17rem]" : "w-0 overflow-hidden border-r-0",
-          )}
-        >
-          {railOpen ? (
-            <SideRail
-              threads={threads}
-              activeThreadId={threadId}
-              questions={questions}
-              onNewThread={newThread}
-              onOpenThread={(id) => setThreadId(id)}
-              onAsk={ask}
-            />
-          ) : null}
-        </aside>
+      <div className="relative flex h-full min-h-0 flex-col">
+        <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-3">
+          <button
+            type="button"
+            onClick={() => setRailOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-base text-ink-2 transition-colors duration-100 hover:bg-hover hover:text-ink"
+          >
+            <ListIcon size={13} weight="bold" aria-hidden />
+            Threads
+          </button>
+          <span className="num truncate text-xs text-ink-3">
+            {turns.length > 0 ? threadTitle(turns[0].question) : "New conversation"}
+          </span>
+          <button
+            type="button"
+            onClick={newThread}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-base text-ink-2 transition-colors duration-100 hover:bg-hover hover:text-ink"
+          >
+            <PlusIcon size={13} weight="bold" aria-hidden />
+            New
+          </button>
+        </div>
 
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line px-3">
-            <IconButton
-              label={railOpen ? "Hide the thread rail" : "Show the thread rail"}
-              onClick={() => setRailOpen((v) => !v)}
-              active={railOpen}
-              className="hidden lg:inline-flex"
-            >
-              <SidebarSimpleIcon size={13} weight="bold" aria-hidden />
-            </IconButton>
-            <h1 className="text-base font-semibold text-ink">Advisor</h1>
-            <span className="num text-xs text-ink-3">
-              {threadId ? threadId : "new thread"}
-              {turns.length > 0 ? ` · ${threadTitle(turns[0].question)}` : ""}
-            </span>
-            <div className="ml-auto">
-              <IconButton
-                label={drawerOpen ? "Hide evidence" : "Show evidence"}
-                onClick={() => setDrawerOpen(!drawerOpen)}
-                active={drawerOpen}
-              >
-                <TableIcon size={13} weight="bold" aria-hidden />
-              </IconButton>
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+          {loadError ? (
+            <div className="mx-auto w-full max-w-3xl px-4 pt-6 sm:px-6">
+              <div className="flex items-start gap-2 rounded-lg bg-breach-wash px-3 py-2.5 ring-1 ring-breach-line">
+                <WarningCircleIcon
+                  size={14}
+                  weight="fill"
+                  aria-hidden
+                  className="mt-0.5 shrink-0 text-breach"
+                />
+                <p className="min-w-0 flex-1 text-base text-ink">{loadError}</p>
+                <button
+                  type="button"
+                  onClick={conversation.dismissLoadError}
+                  className="shrink-0 rounded-sm px-1.5 py-0.5 text-xs text-ink-2 transition-colors duration-100 hover:bg-hover hover:text-ink"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
 
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-            {turns.length === 0 ? (
-              <Welcome questions={questions} onAsk={ask} />
-            ) : (
-              turns.map((turn) => (
+          {status === "loading" ? (
+            <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6 sm:px-6">
+              {[0, 1].map((row) => (
+                <div key={row} className="space-y-2">
+                  <div className="ml-auto h-9 w-2/5 animate-pulse rounded-lg bg-surface" />
+                  <div className="h-24 w-full animate-pulse rounded-lg bg-surface" />
+                </div>
+              ))}
+            </div>
+          ) : turns.length === 0 ? (
+            <Welcome
+              questions={questions}
+              onAsk={ask}
+              catalogueError={catalogueError}
+            />
+          ) : (
+            <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+              {turns.map((turn) => (
                 <TurnView
                   key={turn.localId}
                   turn={turn}
@@ -275,47 +239,135 @@ export function AdvisorConsole() {
                   onRetry={ask}
                   onFocus={() => setActiveId(turn.localId)}
                   isActive={turn.localId === activeTurn?.localId}
+                  onOpenEvidence={() => {
+                    setActiveId(turn.localId);
+                    setDrawerOpen(true);
+                  }}
                 />
-              ))
-            )}
-          </div>
-
-          <Composer
-            onSubmit={ask}
-            onStop={stop}
-            busy={busy}
-            mode={mode}
-            onModeChange={setMode}
-          />
-        </section>
-
-        <aside
-          aria-label="Evidence panel"
-          className={cx(
-            "hidden min-h-0 shrink-0 border-l border-line xl:block",
-            drawerOpen ? "w-[24rem]" : "w-0 overflow-hidden border-l-0",
+              ))}
+            </div>
           )}
-        >
-          {drawerOpen ? (
-            <EvidenceDrawer
-              facts={drawerFacts}
-              tools={activeTurn?.tools ?? []}
-              citations={drawerCitations}
-              onClose={() => setDrawerOpen(false)}
+        </div>
+
+        <div className="shrink-0 border-t border-line">
+          <div className="mx-auto w-full max-w-3xl">
+            <Composer
+              onSubmit={ask}
+              onStop={stop}
+              busy={busy}
+              mode={mode}
+              onModeChange={setMode}
             />
-          ) : null}
-        </aside>
+          </div>
+        </div>
+
+        {/* Threads and the question bank are summoned, not resident. A chat
+            that keeps a menu open beside it is a dashboard. */}
+        <Sheet
+          open={railOpen}
+          onClose={() => setRailOpen(false)}
+          side="left"
+          label="Threads and sample questions"
+        >
+          <SideRail
+            threads={threads}
+            activeThreadId={threadId}
+            questions={questions}
+            onNewThread={() => {
+              newThread();
+              setRailOpen(false);
+            }}
+            onOpenThread={(id) => {
+              // openThread aborts any running stream and loads that thread's
+              // history. Setting the id alone used to leave the current turns
+              // on screen under a different conversation's name.
+              openThread(id);
+              setActiveId(null);
+              setRailOpen(false);
+            }}
+            onAsk={(question) => {
+              ask(question);
+              setRailOpen(false);
+            }}
+          />
+        </Sheet>
+
+        <Sheet
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          side="right"
+          label="Evidence panel"
+        >
+          <EvidenceDrawer
+            facts={drawerFacts}
+            tools={activeTurn?.tools ?? []}
+            citations={drawerCitations}
+            onClose={() => setDrawerOpen(false)}
+          />
+        </Sheet>
       </div>
     </FactProvider>
+  );
+}
+
+/**
+ * An overlay panel. Escape closes it, the backdrop closes it, and it traps
+ * nothing: a controller mid-disruption should never have to hunt for the way
+ * out of a panel they opened by accident.
+ */
+function Sheet({
+  open,
+  onClose,
+  side,
+  label,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  side: "left" | "right";
+  label: string;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="absolute inset-0 z-30">
+      <button
+        type="button"
+        aria-label={`Close ${label}`}
+        onClick={onClose}
+        className="absolute inset-0 bg-ink/20"
+      />
+      <aside
+        aria-label={label}
+        className={cx(
+          "absolute inset-y-0 flex w-[min(23rem,88vw)] flex-col bg-canvas shadow-xl",
+          side === "left" ? "left-0 border-r border-line" : "right-0 border-l border-line",
+        )}
+      >
+        {children}
+      </aside>
+    </div>
   );
 }
 
 function Welcome({
   questions,
   onAsk,
+  catalogueError,
 }: {
   questions: SampleQuestion[];
   onAsk: (question: string) => void;
+  catalogueError: string | null;
 }) {
   const byTier = [1, 2, 3].map((tier) => ({
     tier,
@@ -323,7 +375,7 @@ function Welcome({
   }));
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <h2 className="text-xl font-semibold text-ink">
         Ask about crew, flights, legality or cover.
       </h2>
@@ -361,12 +413,9 @@ function Welcome({
         ))}
       </div>
 
-      {questions.length === 0 ? (
+      {catalogueError ? (
         <div className="mt-6">
-          <EmptyState
-            title="Sample questions are not loaded"
-            detail="The question bank comes from the API. Typing a question directly still works."
-          />
+          <EmptyState title="Sample questions are not loaded" detail={catalogueError} />
         </div>
       ) : null}
     </div>

@@ -29,7 +29,7 @@ import {
 } from "@/lib/format";
 import { GroundedText } from "@/components/answer/grounded-prose";
 import { MarginGauge, Pill, Token } from "@/components/ui/primitives";
-import { cx, TONE } from "@/components/ui/tone";
+import { cx } from "@/components/ui/tone";
 
 const VERDICT_ICON: Record<Verdict, typeof CheckCircleIcon> = {
   pass: CheckCircleIcon,
@@ -62,12 +62,15 @@ export function RuleTraceCard({
   return (
     <article
       className={cx(
-        "rounded-md bg-surface hairline",
-        (breach || unknown) && TONE[tone].edge,
-        breach && "bg-breach-wash",
+        // A row, not a card. Seven of these stacked as bordered boxes inside
+        // another bordered box was three frames deep and read as clutter. A
+        // hairline between rows carries the same separation for nothing.
+        "px-1 py-3.5",
+        breach && "-mx-3 rounded-md bg-breach-wash px-4",
+        unknown && "-mx-3 rounded-md bg-surface px-4",
       )}
     >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-2">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
         <Token className={breach ? "text-breach" : undefined}>{trace.rule_id}</Token>
         <span className="text-base font-medium text-ink">{trace.title}</span>
         {trace.duty_date ? (
@@ -79,7 +82,7 @@ export function RuleTraceCard({
       </div>
 
       {trace.limit !== null && trace.limit !== undefined ? (
-        <div className="grid grid-cols-3 gap-2 border-t border-line-soft px-2.5 py-2">
+        <div className="mt-3 grid grid-cols-3 gap-4">
           <Figure label="Limit" value={withUnit(trace.limit, trace.unit)} />
           <Figure
             label="Observed"
@@ -113,7 +116,7 @@ export function RuleTraceCard({
         </div>
       ) : null}
 
-      <div className="border-t border-line-soft px-2.5 py-2">
+      <div className="mt-2.5">
         <p className="num text-xs leading-relaxed text-ink-2">
           <GroundedText text={trace.arithmetic} facts={trace.inputs} />
         </p>
@@ -173,7 +176,7 @@ export function DayLegalityBlock({ day }: { day: DayLegality }) {
             : ", none breached"}
         </span>
       </div>
-      <div className="grid gap-1.5 md:grid-cols-2">
+      <div className="divide-y divide-line-soft">
         {day.traces.map((trace, index) => (
           // The index is part of the key because one turn flattens the traces
           // of every candidate into one list, so a rule id and a date together
