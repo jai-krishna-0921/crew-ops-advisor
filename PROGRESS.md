@@ -70,7 +70,7 @@ fails.
 |---|---|---|---|---|---|
 | deterministic (no model) | 6 | 6 | 1 | 8/14 | 7ms / 11ms |
 | agent, first measurement | 5 | 8 | **1** | 6/14 | 23.5s / 32.5s |
-| **agent, after the fixes below** | **10** | 4 | **0** | 10/14 | 23.5s / 38.6s |
+| **agent, after the fixes below** | **10** | 4 | **0** | 10/14 | 18.0s / 30.6s |
 
 Correctness doubled and the verdict inversion is gone. The agent path now beats
 the deterministic path on Tier 2, 10 against 6.
@@ -99,10 +99,45 @@ Three things got it there, and none of them was prompting.
    model round trip each time. `crew_ids` delegates to the single-crew path per
    person, so the batch cannot drift from the individual answer.
 
-Remaining honestly: p95 is **38.6s**, above the 30 second budget, because the
-budget is checked before each model call rather than interrupting one in
-flight. Four questions still abstain. Neither is a correctness problem, but a
-38 second answer is not comfortable on a live desk.
+A fourth change followed: `earliest_report`, exposing `RULE-REST-04` as a tool.
+Q23 asks when a crew released at 15:30Z may next report. The engine had always
+computed it; nothing exposed it, so the agent used retrieval only and
+`tier_guard` refused rather than let the model add twelve hours to a timestamp
+itself. The guard was right and the gap was a missing tool.
+
+Adding it exposed a second defect. `guards.py` restated the contract's
+`REQUIRED_FOR` in its own frozenset, and the two had already drifted. Both sets
+are now derived from the contract, with a test that fails if anyone restates
+them.
+
+Latency came down with the round trips: average **23.5s to 18.0s**, p95
+**38.6s to 30.6s**.
+
+### Why Tier 2 is not 14 of 14, and what it would cost
+
+Every remaining abstention scores **100% recall**. The system finds the right
+facts in all of them and then declines on the 30 second budget. The capability
+is complete; what is missing is time.
+
+Three consecutive runs scored 9, 10 and 10. These models do not honour
+temperature 0, so a single 14 would be luck rather than a result.
+
+Getting there means one of three things, and each has a price:
+
+- **Raise the budget.** The remaining cases land at 24 to 31 seconds, so 45
+  would probably clear them. It also abandons the one latency commitment the
+  problem statement actually states, and an answer that takes 40 seconds on
+  stage reads as broken whatever the scorecard says.
+- **Cut more round trips.** Q30 makes nine `aggregate` calls to find the leg
+  with the most seats. Batching that is the same fix as `check_legality` and is
+  the honest option, but it is per-question work with no general form.
+- **Accept 10 of 14 with nothing wrong.** The rubric's own principle is that
+  correctness beats coverage, and Tier 2 currently has **zero wrong answers and
+  zero verdict inversions** across every run since the fixes.
+
+The recommendation is the third, with the second done opportunistically. A
+14 of 14 bought by relaxing the latency discipline would be a worse submission
+than a 10 of 14 that never lies and never stalls.
 
 ### The verifier was rejecting correct answers
 
@@ -141,7 +176,7 @@ returns 401. Every agent-mode number here is a statement about
 
 ## Test suite
 
-`make test`: **517 passed, 7 failed, 15 xfailed, 2 deselected.**
+`make test`: **527 passed, 7 failed, 15 xfailed, 2 deselected.**
 
 The 7 failures are all pre-existing golden parity failures and were failing
 before this session's work:
