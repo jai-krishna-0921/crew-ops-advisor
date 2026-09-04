@@ -29,6 +29,8 @@ __all__ = [
     "LEGALITY_BEARING_TOOLS",
     "RANKING_BEARING_TOOLS",
     "GuardFailure",
+    "breach_agreement_guard",
+    "computed_breaches",
     "run_guards",
     "strip_em_dashes",
 ]
@@ -200,12 +202,107 @@ def substance_guard(draft: str) -> GuardFailure | None:
     )
 
 
+#: Every way an answer says "all clear". Matched against the lead only.
+_ALL_CLEAR_RE: Final = re.compile(
+    r"\b(?:"
+    r"passes\s+(?:all|every|the)\b"
+    r"|breaches\s+no\b"
+    r"|no\s+(?:rule\s+)?(?:is\s+)?breach(?:ed|es)?\b"
+    r"|does\s+not\s+breach\b"
+    r"|within\s+(?:all\s+)?(?:the\s+)?limits?\b"
+    r"|is\s+legal\s+to\s+(?:operate|fly)\b"
+    r"|no\s+limit\s+is\s+breached\b"
+    r")",
+    re.IGNORECASE,
+)
+
+#: Saying a limit *was* broken. Used to decide ordering, not presence.
+_BREACH_MENTION_RE: Final = re.compile(
+    r"\b(?:breach(?:ed|es|ing)?|exceed(?:s|ed)?|over\s+the\s+limit|illegal|"
+    r"not\s+legal|cannot\s+legally)\b",
+    re.IGNORECASE,
+)
+
+#: How many leading characters count as "the lead". A controller reads the
+#: first line and acts on it, so that is where agreement is enforced.
+_LEAD_CHARS: Final = 240
+
+
+def computed_breaches(envelopes: Sequence[ToolEnvelope]) -> list[str]:
+    """Every breach the deterministic layer computed this turn.
+
+    Reads the typed `Fact` channel and the payload flag. A failed envelope
+    establishes nothing, which is the verifier's invariant 4 applied here: a
+    call that errored is exactly the case where nothing was computed at all.
+    """
+    found: list[str] = []
+    for envelope in envelopes:
+        if not envelope.ok:
+            continue
+        for fact in envelope.facts or ():
+            if fact.key.rsplit(".", 1)[-1] == "breach" and fact.value is True:
+                found.append(fact.derivation or f"{fact.key} is True")
+        payload = envelope.payload
+        if isinstance(payload, dict) and payload.get("breach") is True:
+            detail = payload.get("breach_detail")
+            if isinstance(detail, str) and detail and detail not in found:
+                found.append(detail)
+    return found
+
+
+def breach_agreement_guard(
+    draft: str, envelopes: Sequence[ToolEnvelope]
+) -> GuardFailure | None:
+    """The answer may not lead with a pass when a tool computed a breach.
+
+    This is the one failure worse than an abstention, and neither of the other
+    two mechanisms sees it. The verifier attests values, and every value in
+    "P-2203 passes all seven rules" is real. `verdict_guard` checks that a
+    rules tool ran, and in the case this was written for six of them did, all
+    returning pass, because the pairing *as scheduled* does pass. The question
+    was about the delay.
+
+    So this checks a relation rather than a value: does the lead agree with
+    what the deterministic layer computed? Only the lead, because an answer
+    that opens with the breach and later notes what passes is correct, and
+    reads better than one that refuses to mention a pass at all.
+    """
+    breaches = computed_breaches(envelopes)
+    if not breaches:
+        return None
+
+    lead = draft.strip()[:_LEAD_CHARS]
+    all_clear = _ALL_CLEAR_RE.search(lead)
+    if all_clear is None:
+        return None
+
+    # Ordering, not presence. "RULE-FDP-01 is breached, though as scheduled it
+    # passes all seven rules" is a good answer and mentions both. What is
+    # dangerous is reaching the all-clear first, because that is the sentence
+    # a controller acts on.
+    mention = _BREACH_MENTION_RE.search(lead)
+    if mention is not None and mention.start() < all_clear.start():
+        return None
+    return GuardFailure(
+        guard="breach_agreement",
+        reason=(
+            "The answer opens by reporting a pass, but the rules engine computed "
+            f"a breach this turn: {breaches[0]} A controller reads the first line "
+            "and acts on it, so the breach has to lead. State it first, then say "
+            "what passes and under which assumption."
+        ),
+        required_tools=("check_legality",),
+        abstention_reason=AbstentionReason.CONFLICTING_DATA,
+    )
+
+
 def run_guards(
     *, draft: str, tier: int | None, envelopes: Sequence[ToolEnvelope]
 ) -> GuardFailure | None:
     """First failing guard, in the order a controller would notice them."""
     for failure in (
         substance_guard(draft),
+        breach_agreement_guard(draft, envelopes),
         verdict_guard(draft, envelopes),
         ranking_guard(draft, envelopes),
         tier_guard(tier, envelopes),

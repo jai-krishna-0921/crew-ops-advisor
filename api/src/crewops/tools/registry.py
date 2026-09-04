@@ -1834,6 +1834,34 @@ class Tools:
                 _SOURCE,
             ),
         ]
+        # The FDP evaluation, as a rule trace and not only as prose.
+        #
+        # Without this the assembled Reply carries whatever `check_legality`
+        # returned for the pairing *as scheduled*, which passes, and nothing at
+        # all for the delayed duty, which is the question. Anything reading the
+        # structured verdict rather than the sentence then concludes the
+        # assignment is legal. A pass is emitted as well as a breach: a rule
+        # that was checked and cleared is evidence, and silence would leave a
+        # controller unable to tell "checked, fine" from "never checked".
+        fdp_margin = round(result.fdp_limit - result.fdp_after_delay, 2)
+        fdp_trace = RuleTrace(
+            rule_id="RULE-FDP-01",
+            title=RULE_TITLES["RULE-FDP-01"],
+            verdict=Verdict.BREACH if result.breach else Verdict.PASS,
+            duty_date=result.duty_date,
+            limit=result.fdp_limit,
+            observed=result.fdp_after_delay,
+            unit="hours",
+            margin=fdp_margin,
+            margin_human=format_margin(fdp_margin),
+            arithmetic=(
+                f"{result.fdp_before}h scheduled duty + {result.delay_hours}h delay = "
+                f"{result.fdp_after_delay}h against a {result.fdp_limit}h limit, "
+                f"{format_margin(fdp_margin)}"
+            ),
+            note=result.breach_detail or None,
+        )
+
         payload = {
             "flight_id": flight_id,
             "pairing_id": result.pairing_id,
@@ -1845,6 +1873,7 @@ class Tools:
             "fdp_limit": result.fdp_limit,
             "breach": result.breach,
             "breach_detail": result.breach_detail,
+            "rule_traces": [fdp_trace],
             "partial_duty_flights": list(result.partial_duty_flights),
             "partial_fdp": result.partial_fdp,
             "partial_fdp_limit": result.partial_fdp_limit,
