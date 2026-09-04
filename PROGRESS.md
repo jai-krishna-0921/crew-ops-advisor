@@ -64,6 +64,46 @@ decision aid" to disqualify it. `qwen2.5:7b` returns an empty `tool_calls` list
 for a bound schema, so the agent loop has nothing to execute and every question
 fails.
 
+### Tier 2, agent path
+
+| Stage | correct | abstained | wrong | grounded | avg / p95 |
+|---|---|---|---|---|---|
+| deterministic (no model) | 6 | 6 | 1 | 8/14 | 7ms / 11ms |
+| agent, first measurement | 5 | 8 | **1** | 6/14 | 23.5s / 32.5s |
+| **agent, after the fixes below** | **10** | 4 | **0** | 10/14 | 23.5s / 38.6s |
+
+Correctness doubled and the verdict inversion is gone. The agent path now beats
+the deterministic path on Tier 2, 10 against 6.
+
+Three things got it there, and none of them was prompting.
+
+1. **A verdict inversion, closed.** Q20 asks whether a 90 minute delay pushes
+   the crew over a limit. `simulate_delay` computed the breach correctly and
+   emitted it as a `Fact`, but not as a `RuleTrace`. Six `check_legality` calls
+   on the pairing *as scheduled* emitted 31 PASS traces, because as scheduled
+   it does pass. The assembled `Reply` therefore asserted "legal" for a
+   question whose answer is a breach, and anything reading structured verdicts
+   rather than prose believed it. The tool now emits the FDP evaluation as a
+   rule trace, breach or pass.
+
+2. **`breach_agreement_guard`.** Neither existing mechanism could see that
+   class. The verifier attests values and every value in the headline was real;
+   `verdict_guard` only checks that a rules tool ran, and six did. The new
+   guard checks a relation: if the tools computed a breach, the answer may not
+   reach an all-clear before mentioning it. Ordering, not presence, so the
+   correct answer still passes.
+
+3. **Batched `check_legality`, and a 30 second budget.** Six of the eight
+   abstentions were the turn budget alone, and the computations were never the
+   slow part: the agent asked the same question once per crew member, paying a
+   model round trip each time. `crew_ids` delegates to the single-crew path per
+   person, so the batch cannot drift from the individual answer.
+
+Remaining honestly: p95 is **38.6s**, above the 30 second budget, because the
+budget is checked before each model call rather than interrupting one in
+flight. Four questions still abstain. Neither is a correctness problem, but a
+38 second answer is not comfortable on a live desk.
+
 ### The verifier was rejecting correct answers
 
 The first agent-mode run scored 10 of 16 with four abstentions, and the
@@ -101,7 +141,7 @@ returns 401. Every agent-mode number here is a statement about
 
 ## Test suite
 
-`make test`: **358 passed, 7 failed, 15 xfailed, 2 deselected.**
+`make test`: **517 passed, 7 failed, 15 xfailed, 2 deselected.**
 
 The 7 failures are all pre-existing golden parity failures and were failing
 before this session's work:
