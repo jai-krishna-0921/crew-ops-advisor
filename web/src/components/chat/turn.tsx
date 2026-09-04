@@ -66,36 +66,41 @@ export function TurnView({
 
       {reply ? (
         <div className="mt-6 space-y-4">
+          {/* THE WORKING COMES FIRST, FOLDED. It sat under the answer, on the
+              argument that a controller reads the answer and interrogates it
+              second. That is true of the DETAIL and not of the fact that
+              detail exists: an answer that arrives with no visible account of
+              where it came from has to be trusted before it can be checked,
+              and this product's entire claim is the other way round. One line
+              saying what ran, above, costs nothing to skip and changes what
+              the answer is. */}
+          {turn.plan || turn.tools.length > 0 ? (
+            <Thinking
+              summary="How this was worked out"
+              meta={<TraceSummary turn={turn} />}
+            >
+              {/* The draft is blanked: replaying a stream for an answer that
+                  has already settled would be theatre, and worse, would put
+                  unverified prose back on screen under a verified one. */}
+              <LiveTrace turn={{ ...turn, draft: "" }} />
+            </Thinking>
+          ) : null}
+
           <div className="anim-settle">
             <AnswerBody reply={reply} onAsk={onAsk} />
           </div>
 
-          <div className="space-y-2 pt-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                onClick={onOpenEvidence}
-                className="inline-flex items-center gap-1.5 rounded-full bg-inset px-2.5 py-1 text-xs text-ink-2 hover:bg-hover hover:text-ink"
-              >
-                <MagnifyingGlassIcon size={11} weight="bold" aria-hidden />
-                Evidence
-                {factCount > 0 ? <span className="num">{factCount}</span> : null}
-              </button>
-              <TraceChips turn={turn} />
-            </div>
-
-            {turn.plan || turn.tools.length > 0 ? (
-              <Thinking
-                summary="How this was worked out"
-                meta={<TraceSummary turn={turn} />}
-              >
-                {/* The draft is blanked: replaying a stream for an answer
-                    that has already settled would be theatre, and worse,
-                    would put unverified prose back on screen under a
-                    verified one. */}
-                <LiveTrace turn={{ ...turn, draft: "" }} />
-              </Thinking>
-            ) : null}
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <button
+              type="button"
+              onClick={onOpenEvidence}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-inset px-2.5 py-1 text-xs text-ink-2 hover:bg-hover hover:text-ink"
+            >
+              <MagnifyingGlassIcon size={11} weight="bold" aria-hidden />
+              Evidence
+              {factCount > 0 ? <span className="num">{factCount}</span> : null}
+            </button>
+            <TraceChips turn={turn} />
           </div>
         </div>
       ) : (

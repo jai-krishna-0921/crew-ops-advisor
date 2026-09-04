@@ -93,7 +93,7 @@ export function EvidenceDrawer({
         </span>
         <div className="ml-auto">
           <IconButton label="Close evidence" onClick={onClose}>
-            <XIcon size={14} weight="bold" aria-hidden />
+            <XIcon size={17} weight="bold" aria-hidden />
           </IconButton>
         </div>
       </header>
@@ -184,18 +184,24 @@ function FactRow({ fact }: { fact: Fact }) {
         type="button"
         onClick={() => pin(fact.key)}
         aria-pressed={pinned === fact.key}
-        className="w-full text-left"
+        className="w-full min-w-0 cursor-pointer text-left"
       >
-        <div className="flex items-baseline gap-2">
+        {/* `shrink-0` on the value was right for a number and wrong for the
+            text facts: a rule's full sentence arrives as a Fact too, and an
+            unshrinkable span holding forty words pushed the row 155px past
+            the panel it lives in. The value wraps now, and the label gives way
+            first, because a truncated label is still recognisable and a
+            truncated value is a different value. */}
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <span className="min-w-0 flex-1 truncate text-base font-medium text-ink">
             {fact.label}
           </span>
-          <span className="num shrink-0 text-base text-ink">
+          <span className="num max-w-full min-w-0 break-words text-base text-ink">
             {factValue(fact.value, fact.unit)}
           </span>
         </div>
 
-        <div className="mt-1 flex items-center gap-1.5">
+        <div className="mt-1 flex min-w-0 items-center gap-1.5">
           <Icon
             size={11}
             weight="bold"
@@ -208,18 +214,25 @@ function FactRow({ fact }: { fact: Fact }) {
           >
             {PROVENANCE_LABEL[fact.provenance]}
           </span>
-          <span className="num truncate text-2xs text-ink-3" title={fact.key}>
+          <span
+            className="mono min-w-0 truncate text-2xs text-ink-3"
+            title={fact.key}
+          >
             {fact.key}
           </span>
         </div>
 
+        {/* `break-words` because a derivation is one long expression with
+            no space the browser is willing to break at, and truncating it
+            would hide the arithmetic that is the entire reason the row is
+            here. */}
         {fact.derivation ? (
-          <p className="num mt-1.5 rounded-sm bg-inset p-1.5 text-xs leading-relaxed text-ink-2">
+          <p className="mono mt-1.5 rounded-sm bg-inset p-2 text-xs leading-relaxed break-words text-ink-2">
             {fact.derivation}
           </p>
         ) : null}
 
-        <p className="num mt-1 truncate text-2xs text-ink-3" title={fact.source}>
+        <p className="mono mt-1 truncate text-2xs text-ink-3" title={fact.source}>
           {fact.source}
         </p>
       </button>

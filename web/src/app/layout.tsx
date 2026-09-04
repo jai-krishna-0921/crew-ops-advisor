@@ -87,10 +87,29 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${display.variable} ${sans.variable} ${mono.variable}`}
-      >
+    /*
+     * THE FONT VARIABLES GO ON `<html>`, NOT ON `<body>`, and this was the
+     * whole reason four typefaces in a row "did not change anything".
+     *
+     * `next/font` puts `--font-app-sans` and friends on whatever element
+     * carries `.variable`. They were on `<body>`. `globals.css` then builds
+     * `--font-display` and `--font-sans` from them on `:root`, which is
+     * `<html>`, the PARENT. Custom properties inherit downward and never up,
+     * so at `:root` the reference was to an undefined variable, the whole
+     * declaration became invalid at computed-value time, and both tokens
+     * resolved to the empty string. `body { font-family: var(--font-sans) }`
+     * then fell through to the browser's default stack.
+     *
+     * Nothing errored and the woff2 files were requested and served, which is
+     * exactly what made it survive four attempts: every check confirmed the
+     * font had been DELIVERED, and none of them confirmed it was being USED.
+     * The check that finds this is `getComputedStyle(document.body).fontFamily`.
+     */
+    <html
+      lang="en"
+      className={`${display.variable} ${sans.variable} ${mono.variable}`}
+    >
+      <body>
         <AppShell>{children}</AppShell>
       </body>
     </html>

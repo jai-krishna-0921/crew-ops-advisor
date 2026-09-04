@@ -43,3 +43,4 @@ data/crew-ops-advisor-dataset/internal/
 # Browser automation scratch output
 .playwright-mcp/
 .env.local.bak
+chat-empty.png

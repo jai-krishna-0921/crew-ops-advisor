@@ -120,9 +120,9 @@ export function SideRail({
             onClick={() => setConfirmingAll(true)}
             aria-label="Delete every conversation"
             title="Delete every conversation"
-            className="inline-flex size-7 cursor-pointer items-center justify-center rounded-sm text-ink-3 hover:bg-hover hover:text-breach"
+            className="inline-flex size-8 cursor-pointer items-center justify-center rounded-sm text-ink-3 hover:bg-hover hover:text-breach"
           >
-            <TrashIcon size={14} weight="bold" aria-hidden />
+            <TrashIcon size={17} weight="bold" aria-hidden />
           </button>
         ) : null}
         {onCollapse ? (
@@ -131,9 +131,9 @@ export function SideRail({
             onClick={onCollapse}
             aria-label="Hide conversations"
             title="Hide conversations"
-            className="inline-flex size-7 cursor-pointer items-center justify-center rounded-sm text-ink-3 hover:bg-hover hover:text-ink"
+            className="inline-flex size-8 cursor-pointer items-center justify-center rounded-sm text-ink-3 hover:bg-hover hover:text-ink"
           >
-            <SidebarSimpleIcon size={15} weight="bold" aria-hidden />
+            <SidebarSimpleIcon size={18} weight="bold" aria-hidden />
           </button>
         ) : null}
       </div>

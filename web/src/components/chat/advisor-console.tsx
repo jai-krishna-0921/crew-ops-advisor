@@ -313,9 +313,9 @@ export function AdvisorConsole() {
                 onClick={() => setRailOpen(true)}
                 aria-label="Show conversations"
                 title="Show conversations"
-                className="hidden size-8 items-center justify-center rounded-sm text-ink-3 hover:bg-hover hover:text-ink md:inline-flex"
+                className="hidden size-9 cursor-pointer items-center justify-center rounded-sm text-ink-3 hover:bg-hover hover:text-ink md:inline-flex"
               >
-                <SidebarSimpleIcon size={15} weight="bold" aria-hidden />
+                <SidebarSimpleIcon size={18} weight="bold" aria-hidden />
               </button>
             ) : null}
 

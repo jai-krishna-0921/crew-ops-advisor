@@ -40,6 +40,23 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
 - [x] Session persistence across a reload
 - [x] Contextual memory stubs, wired per thread
 
+## Landed: the font finally applies
+
+- [x] Fonts, verified by computed style rather than by network requests. The
+      `--font-app-*` variables were on `<body>` and read on `:root`, its
+      parent, so both tokens resolved to empty and every surface fell back to
+      the UA stack. Four typefaces in a row "did not change anything" for this
+      one reason.
+- [x] Reasoning above the answer, folded, so an answer never arrives with no
+      visible account of where it came from
+- [x] A fact popover closes on click-away and on Escape
+- [x] Bigger toggles on the threads rail and the evidence panel
+- [x] The evidence panel no longer overflows: grid columns can shrink, long
+      derivations wrap, and a long text Fact stopped pushing its row 155px
+      past the panel
+- [x] `fonts/.gitignore` fixed, so the extracted archives stop showing as 93
+      untracked changes
+
 ## Landed: agent mode
 
 - [x] Fix: the API and the CLI never read `.env.local`, so a configured key

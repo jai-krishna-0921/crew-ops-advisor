@@ -59,6 +59,7 @@ export function FactChip({
       <button
         type="button"
         data-fact={factKey}
+        data-fact-ui=""
         onMouseEnter={() => {
           setShowing(true);
           context.setActive(factKey);
@@ -90,6 +91,7 @@ export function FactChip({
       {open ? (
         <span
           role="tooltip"
+          data-fact-ui=""
           className="anim-fade-up pointer-events-none absolute bottom-[calc(100%+6px)] left-0 z-40 block w-72 rounded-md bg-surface p-2.5 text-left shadow-[var(--shadow-pop)] hairline-strong"
         >
           <span className="flex items-center gap-1.5">
@@ -106,7 +108,7 @@ export function FactChip({
             {factValue(fact.value, fact.unit)}
           </span>
           {fact.derivation ? (
-            <span className="num mt-1.5 block rounded-sm bg-inset p-1.5 text-xs leading-relaxed text-ink-2">
+            <span className="mono mt-1.5 block rounded-sm bg-inset p-2 text-xs leading-relaxed break-words text-ink-2">
               {fact.derivation}
             </span>
           ) : null}

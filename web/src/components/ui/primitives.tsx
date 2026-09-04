@@ -325,7 +325,7 @@ export function IconButton({
       aria-pressed={active}
       onClick={onClick}
       className={cx(
-        "inline-flex h-8 w-8 items-center justify-center rounded-full",
+        "inline-flex size-9 cursor-pointer items-center justify-center rounded-full",
         active ? "bg-accent-tint text-accent-ink" : "text-ink-3 hover:bg-hover hover:text-ink",
         className,
       )}
