@@ -185,6 +185,32 @@ class PairingView(Payload):
     overnights_away_from_base: bool
 
 
+class PairingSummary(Payload):
+    """One pairing, without the full per-leg detail `PairingView` carries.
+
+    The route back to a pairing from an aircraft tail, a crew member or a
+    single leg. `find_pairings` returns these; `get_pairing` returns the full
+    `PairingView` once the pairing id is known.
+    """
+
+    pairing_id: str
+    aircraft: str
+    aircraft_type: str
+    first_date: DateType
+    last_date: DateType
+    duty_days: int
+    total_legs: int
+    total_seats: int
+    crew_ids: tuple[str, ...]
+
+
+class PairingList(Payload):
+    pairings: tuple[PairingSummary, ...]
+    total_matched: int
+    all_pairing_ids: tuple[str, ...]
+    filters: dict[str, str] = Field(default_factory=dict)
+
+
 class RosterView(Payload):
     crew_id: str
     from_date: DateType
@@ -262,6 +288,8 @@ __all__ = [
     "FlightSummary",
     "NotificationDraft",
     "PairingDayView",
+    "PairingList",
+    "PairingSummary",
     "PairingView",
     "Payload",
     "ReserveList",

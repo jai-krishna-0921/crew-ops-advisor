@@ -315,6 +315,7 @@ class Tools:
         flight_numbers: list[str] | None = None,
         pairing_id: str | None = None,
         aircraft_type: str | None = None,
+        registration: str | None = None,
         limit: int = 100,
     ) -> ToolEnvelope:
         timer = ToolTimer()
@@ -328,6 +329,7 @@ class Tools:
             "flight_numbers": flight_numbers,
             "pairing_id": pairing_id,
             "aircraft_type": aircraft_type,
+            "registration": registration,
             "limit": limit,
         }
         if pairing_id and self.world.pairing(pairing_id) is None:
@@ -346,6 +348,13 @@ class Tools:
             pairing_id=pairing_id,
             aircraft_type=aircraft_type,
         )
+        if registration:
+            # The tail is not indexed in the SQLite projection, so this filters
+            # the already narrowed id list rather than widening the store's
+            # query surface. `flights.aircraft` is the tail for every leg.
+            matched = [
+                fid for fid in matched if self.world.require_flight(fid).aircraft == registration
+            ]
         shown = matched[:limit]
         flights = tuple(self._flight_summary(f) for f in shown)
         total_seats = self.world.seats_of(tuple(matched))
@@ -392,6 +401,97 @@ class Tools:
                 )
             ],
             citations=[cite("flights.json", "filtered query")],
+            timer=timer,
+            truncated=len(shown) < len(matched),
+        )
+
+    def find_pairings(
+        self,
+        *,
+        registration: str | None = None,
+        on_date: DateType | None = None,
+        base: str | None = None,
+        aircraft_type: str | None = None,
+        crew_id: str | None = None,
+        flight_number: str | None = None,
+        limit: int = 100,
+    ) -> ToolEnvelope:
+        timer = ToolTimer()
+        args = {
+            "registration": registration,
+            "on_date": on_date,
+            "base": base,
+            "aircraft_type": aircraft_type,
+            "crew_id": crew_id,
+            "flight_number": flight_number,
+            "limit": limit,
+        }
+        if crew_id and self.world.crew_member(crew_id) is None:
+            return error_envelope("find_pairings", args, self._unknown_crew(crew_id), timer=timer)
+
+        def matches(pairing: Any) -> bool:
+            if registration and pairing.aircraft != registration:
+                return False
+            if on_date and not any(day.date == on_date for day in pairing.days):
+                return False
+            first_leg = (
+                pairing.days[0].flights[0]
+                if pairing.days and pairing.days[0].flights
+                else None
+            )
+            first_flight = self.world.flight(first_leg) if first_leg else None
+            if aircraft_type and (
+                first_flight is None or first_flight.aircraft_type != aircraft_type
+            ):
+                return False
+            if base and (first_flight is None or first_flight.dep_station != base):
+                return False
+            if crew_id and pairing.role_of(crew_id) is None:
+                return False
+            return not flight_number or any(
+                self.world.require_flight(fid).flight_no == flight_number
+                for day in pairing.days
+                for fid in day.flights
+            )
+
+        matched = sorted((p for p in self.world.pairings if matches(p)), key=lambda p: p.pairing_id)
+        shown = matched[:limit]
+        summaries = tuple(self._pairing_summary(p) for p in shown)
+        payload = P.PairingList(
+            pairings=summaries,
+            total_matched=len(matched),
+            all_pairing_ids=tuple(p.pairing_id for p in matched),
+            filters={k: str(v) for k, v in args.items() if v is not None and k != "limit"},
+        )
+        facts = [
+            computed_fact(
+                "find_pairings.total_matched",
+                "Pairings matching the filter",
+                len(matched),
+                "count",
+                self._filter_derivation(args),
+                _SOURCE,
+            ),
+            *self._pairing_summary_facts(shown),
+        ]
+        return ok_envelope(
+            "find_pairings",
+            args,
+            payload,
+            facts=facts,
+            trace=[
+                step(
+                    "Filter pairings",
+                    f"{len(matched)} pairings match."
+                    if matched
+                    else "No pairings match that filter, which is a finding, not a failure.",
+                    ["find_pairings.total_matched"],
+                )
+            ],
+            citations=[
+                cite("rosters.json", "filtered query"),
+                cite("flights.json", "tail and route lookups"),
+            ],
             timer=timer,
             truncated=len(shown) < len(matched),
         )
@@ -1663,6 +1763,53 @@ class Tools:
                         flight.seats,
                         "count",
                         f"flights.json#{fid}",
+                    ),
+                )
+            )
+        return facts
+
+    def _pairing_summary(self, pairing: Any) -> P.PairingSummary:
+        first = self.world.require_flight(pairing.days[0].flights[0])
+        return P.PairingSummary(
+            pairing_id=pairing.pairing_id,
+            aircraft=pairing.aircraft,
+            aircraft_type=first.aircraft_type,
+            first_date=pairing.days[0].date,
+            last_date=pairing.days[-1].date,
+            duty_days=len(pairing.days),
+            total_legs=len(pairing.flight_ids),
+            total_seats=self.world.seats_of(pairing.flight_ids),
+            crew_ids=tuple(m.crew_id for m in pairing.crew),
+        )
+
+    def _pairing_summary_facts(self, pairings: Sequence[Any]) -> list[Fact]:
+        facts: list[Fact] = []
+        for pairing in pairings:
+            facts.extend(
+                (
+                    computed_fact(
+                        f"{pairing.pairing_id}.total_legs",
+                        "Legs in the pairing",
+                        len(pairing.flight_ids),
+                        "count",
+                        " + ".join(str(d.sectors) for d in pairing.days)
+                        + f" = {len(pairing.flight_ids)}",
+                        _SOURCE,
+                    ),
+                    computed_fact(
+                        f"{pairing.pairing_id}.total_seats",
+                        "Seats across the pairing",
+                        self.world.seats_of(pairing.flight_ids),
+                        "count",
+                        f"{len(pairing.flight_ids)} legs x seats from flights.json",
+                        _SOURCE,
+                    ),
+                    dataset_fact(
+                        f"{pairing.pairing_id}.duty_days",
+                        "Duty days in the pairing",
+                        len(pairing.days),
+                        "count",
+                        f"rosters.json#{pairing.pairing_id}",
                     ),
                 )
             )
