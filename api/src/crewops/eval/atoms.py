@@ -106,10 +106,10 @@ def _keys_for(kind: str, canon: str) -> frozenset[str]:
     if kind == "duration":
         keys = {f"qty:{canon}"}
         try:
-            minutes = int(canon)
+            total_minutes = int(canon)
         except ValueError:
             return frozenset(keys)
-        as_hours = canonical_number(minutes / 60)
+        as_hours = canonical_number(total_minutes / 60)
         if as_hours is not None:
             keys.add(f"num:{as_hours}")
         return frozenset(keys)

@@ -164,17 +164,6 @@ def held_out_cases() -> list[Case]:
     return [as_case(s) for s in scenarios] if scenarios else []
 
 
-@lru_cache(maxsize=1)
-def stations() -> frozenset[str]:
-    """The station codes actually present in the schedule."""
-    if not dataset_available():
-        from crewops.eval.atoms import DEFAULT_STATIONS
-
-        return DEFAULT_STATIONS
-    flights = _read("flights.json")
-    return frozenset(str(leg[field]) for leg in flights for field in ("dep_station", "arr_station"))
-
-
 __all__ = [
     "DATA_DIR",
     "HELD_OUT",
@@ -190,5 +179,4 @@ __all__ = [
     "load_scenarios",
     "question_cases",
     "scenario_cases",
-    "stations",
 ]
