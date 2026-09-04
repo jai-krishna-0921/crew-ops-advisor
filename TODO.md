@@ -40,18 +40,25 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
 - [x] Session persistence across a reload
 - [x] Contextual memory stubs, wired per thread
 
-## In flight
+## Landed: this pass
 
-- [ ] Fonts: use the Cabinet Grotesk and Clash Grotesk files in `fonts/`
-- [ ] Landing cards: short prompts, not the full dataset question
-- [ ] Landing subtitle: one line, not three
-- [ ] Delete asks in a real dialog, not an inline row
-- [ ] Delete every conversation at once
-- [ ] Group conversations by day, starting with Today
-- [ ] Ctrl-K opens search, and the hint says so
-- [ ] Adopt shadcn primitives for dialog, menu, command, tooltip
-- [ ] A pointer cursor on everything that is pressable
-- [ ] Gradients
+- [x] Fonts: Clash Grotesk display, Cabinet Grotesk text, the variable files
+      from `fonts/`, self hosted, one request each
+- [x] Landing cards: a short prompt on the button, the dataset's exact
+      question sent and shown on hover
+- [x] Landing subtitle cut from three lines to two
+- [x] Delete asks in a real dialog, on Radix, with Keep it as the default
+- [x] Delete every conversation at once, from the rail header
+- [x] Conversations grouped by day: Today, Yesterday, the week, earlier
+- [x] Ctrl-K opens search, and the hint now says Ctrl on a Linux keyboard
+      rather than a Mac key that is not there
+- [x] shadcn primitives for the dialog and the row menu, which also removed
+      three hand-rolled bugs by deleting the code that had them
+- [x] A pointer cursor on everything pressable, restored once in base rather
+      than sprinkled through the markup
+- [x] Gradients: the primary action, the rank-1 marker, one soft light behind
+      the empty conversation, and the rail edge in place of a border
+- [x] Cleared the 26 throwaway runs from the demo database
 
 ## Landed: this pass
 

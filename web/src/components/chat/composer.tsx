@@ -111,7 +111,7 @@ export function Composer({
             busy
               ? "bg-ink text-page"
               : canSend
-                ? "bg-accent text-page hover:scale-105"
+                ? "bg-[image:var(--grad-accent)] text-page shadow-panel hover:scale-105"
                 : "bg-inset text-ink-3",
           )}
         >

@@ -106,7 +106,7 @@ export function SectionRail({ onOpenPalette }: { onOpenPalette?: () => void }) {
         <button
           type="button"
           onClick={onOpenPalette}
-          title="Search, cmd K"
+          title="Search. Ctrl K, or Cmd K on a Mac."
           aria-label="Search"
           className="mt-2 flex w-full flex-col items-center gap-1 py-2 text-2xs font-medium text-ink-3 hover:text-ink-2"
         >

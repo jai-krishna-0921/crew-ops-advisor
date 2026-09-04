@@ -136,14 +136,21 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
         best ? "shadow-raised" : "hairline",
       )}
     >
-      {best ? <span aria-hidden className="block h-1 w-full bg-accent" /> : null}
+      {best ? (
+        <span
+          aria-hidden
+          className="block h-1 w-full bg-[image:var(--grad-rank)]"
+        />
+      ) : null}
 
       <header className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-4 pt-3.5">
         <span
           aria-label={`Rank ${option.rank}`}
           className={cx(
             "num flex size-6 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
-            best ? "bg-accent text-page" : "bg-inset text-ink-2",
+            best
+              ? "bg-[image:var(--grad-accent)] text-page"
+              : "bg-inset text-ink-2",
           )}
         >
           {option.rank}

@@ -137,6 +137,19 @@ export function AdvisorConsole() {
     [refreshThreads],
   );
 
+  /** Clear every conversation. Confirmed in the rail before it gets here. */
+  const deleteAllThreads = useCallback(() => {
+    setThreads([]);
+    newThreadRef.current();
+    api
+      .deleteAllThreads()
+      .then(refreshThreads)
+      .catch(() => {
+        setActionError("The conversations could not be deleted.");
+        refreshThreads();
+      });
+  }, [refreshThreads]);
+
   /**
    * Delete, which removes an audit trail and is not optimistic about it.
    *
@@ -266,7 +279,7 @@ export function AdvisorConsole() {
         <aside
           aria-label="Conversations"
           className={cx(
-            "hidden shrink-0 overflow-hidden transition-[width] duration-300 ease-out-quint md:block",
+            "edge-right hidden shrink-0 overflow-hidden transition-[width] duration-300 ease-out-quint md:block",
             railOpen ? "w-64" : "w-0",
           )}
         >
@@ -277,6 +290,7 @@ export function AdvisorConsole() {
             onCollapse={() => setRailOpen(false)}
             onRename={renameThread}
             onDelete={deleteThread}
+            onDeleteAll={deleteAllThreads}
             onOpenThread={(id) => {
               // openThread aborts any running stream and loads that thread's
               // history. Setting the id alone used to leave the current turns
@@ -414,6 +428,7 @@ export function AdvisorConsole() {
             activeThreadId={threadId}
             onRename={renameThread}
             onDelete={deleteThread}
+            onDeleteAll={deleteAllThreads}
             onNewThread={() => {
               newThread();
               setSheetOpen(false);
@@ -529,6 +544,32 @@ function Sheet({
 }
 
 /**
+ * A short prompt for each of the six questions the empty screen offers.
+ *
+ * THE CARD SAYS THE SHORT ONE AND ASKS THE LONG ONE. The dataset's questions
+ * are written for an evaluation harness, not for a person: "As of the
+ * snapshot, how many duty hours has C-1042 accrued in the 7 calendar days
+ * ending 2026-09-14, and how much headroom does that leave under
+ * RULE-DUTY-02?" is thirty-two words, and six of those on one screen is a
+ * wall people skip past to type something of their own.
+ *
+ * What gets SENT is still the dataset's exact wording, so the answer is the
+ * one the answer key grades, and the full text is on the card's tooltip. This
+ * is a label on a button, not a paraphrase of a question.
+ */
+const SHORT_PROMPT: Record<string, string> = {
+  Q01: "Who is on reserve at BLR?",
+  Q02: "How much duty time has C-1042 left?",
+  Q17: "C-1042 calls in sick. What stops flying?",
+  Q18: "Can C-2087 cover P-2291 legally?",
+  Q31: "Best way to cover P-2291?",
+  Q32: "Two A320 captains sick at once",
+};
+
+/** Two from each tier, so one screen reaches from a lookup to a ranking. */
+const LANDING_QUESTIONS = ["Q01", "Q02", "Q17", "Q18", "Q31", "Q32"];
+
+/**
  * The empty conversation.
  *
  * A question in the display weight, then six questions somebody can click.
@@ -550,24 +591,25 @@ function Welcome({
   onAsk: (question: string) => void;
   catalogueError: string | null;
 }) {
-  // Two of each tier, interleaved, so the grid opens with a lookup and still
-  // reaches a ranked recommendation without anybody being told what a tier is.
-  const picks = [1, 2, 3].flatMap((tier) =>
-    questions.filter((question) => question.tier === tier).slice(0, 2),
+  // Named rather than sliced by tier, because the short prompts are written
+  // per question: a card picked by position would fall back to the thirty word
+  // original the moment the dataset's order changed.
+  const byId = new Map(questions.map((question) => [question.id, question]));
+  const picks = LANDING_QUESTIONS.map((id) => byId.get(id)).filter(
+    (question): question is SampleQuestion => question !== undefined,
   );
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-6 pt-24 pb-44">
+    <div className="hero-wash mx-auto w-full max-w-3xl px-6 pt-24 pb-44">
       <h2 className="macro anim-fade-up text-center text-3xl text-ink">
         What do you need to decide?
       </h2>
       <p
-        className="anim-stagger mx-auto mt-3 max-w-[52ch] text-center text-md text-ink-2"
+        className="anim-stagger mx-auto mt-3 max-w-[44ch] text-center text-md text-ink-2"
         style={{ "--i": 1 } as React.CSSProperties}
       >
-        Ask about crew, flights, legality or cover. Deterministic tools do every
-        calculation, and a guard checks each figure in the answer against what
-        those tools returned. Where it cannot answer reliably, it says so.
+        Crew, flights, legality, cover. Every figure is checked before you see
+        it, and an unanswerable question is refused rather than guessed.
       </p>
 
       <div className="mt-10 grid gap-3 sm:grid-cols-2">
@@ -576,17 +618,18 @@ function Welcome({
             key={question.id}
             type="button"
             onClick={() => onAsk(question.question)}
+            title={question.question}
             style={{ "--i": index } as React.CSSProperties}
-            className="anim-stagger flex items-start gap-2.5 rounded-md bg-inset px-4 py-3.5 text-left transition-[background-color,box-shadow,transform] duration-200 ease-out-quint hover:-translate-y-px hover:bg-surface hover:shadow-panel"
+            className="anim-stagger flex cursor-pointer items-center gap-2.5 rounded-md bg-inset px-4 py-3 text-left transition-[background-color,box-shadow,transform] duration-200 ease-out-quint hover:-translate-y-px hover:bg-surface hover:shadow-panel"
           >
             <ChatCircleDotsIcon
               size={14}
               weight="bold"
               aria-hidden
-              className="mt-0.5 shrink-0 text-ink-3"
+              className="shrink-0 text-ink-3"
             />
-            <span className="text-base leading-snug text-ink">
-              {question.question}
+            <span className="min-w-0 flex-1 truncate text-base text-ink">
+              {SHORT_PROMPT[question.id] ?? question.question}
             </span>
           </button>
         ))}

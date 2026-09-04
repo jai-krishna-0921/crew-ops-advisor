@@ -18,7 +18,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 import type { SampleQuestion, ThreadSummary } from "@/lib/contracts";
-import { Kbd } from "@/components/ui/primitives";
+import { Kbd, ModifierKey } from "@/components/ui/primitives";
 import { cx, TIER_CHIP } from "@/components/ui/tone";
 
 type Entry =
@@ -231,6 +231,9 @@ function PaletteBody({
           </span>
           <span className="flex items-center gap-1">
             <Kbd>Enter</Kbd> run
+          </span>
+          <span className="flex items-center gap-1">
+            <ModifierKey /> reopens
           </span>
           <span className="ml-auto">
             {entries.length} of {questions.length + threads.length + SECTIONS.length}

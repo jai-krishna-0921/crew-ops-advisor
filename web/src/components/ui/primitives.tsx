@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr";
 
 import type { Tone } from "@/lib/format";
@@ -278,6 +278,30 @@ export function Kbd({ children }: { children: ReactNode }) {
       {children}
     </kbd>
   );
+}
+
+/**
+ * The platform's modifier key, as a word somebody can act on.
+ *
+ * The binding has always accepted both `metaKey` and `ctrlKey`. The hint said
+ * "⌘K", which on a Linux or Windows keyboard names a key that is not there, so
+ * a shortcut that worked everywhere read as Mac-only to everybody who was not
+ * on a Mac.
+ *
+ * Resolved after mount, because the server has no `navigator` and a guess
+ * baked into the HTML would disagree with the client on half of all loads.
+ * The initial value is the non-Mac one, which is the majority case and the
+ * safer thing to render for a moment.
+ */
+export function ModifierKey() {
+  const [mac, setMac] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads navigator, which exists only after mount
+    setMac(/Mac|iPhone|iPad/.test(navigator.userAgent));
+  }, []);
+
+  return <Kbd>{mac ? "\u2318 K" : "Ctrl K"}</Kbd>;
 }
 
 export function IconButton({

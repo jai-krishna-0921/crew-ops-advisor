@@ -120,3 +120,23 @@ async def test_deleting_a_thread_takes_its_turns_and_its_name(memory: Memory) ->
 
 async def test_deleting_a_thread_that_does_not_exist_is_refused(memory: Memory) -> None:
     assert await memory.delete("nope") is False
+
+
+async def test_deleting_everything_empties_the_log(memory: Memory) -> None:
+    """The bulk delete, which is the one action with no partial outcome."""
+    await memory.record(_reply("t1", "u1", "first", "First answer"))
+    await memory.record(_reply("t2", "u2", "other", "Other answer"))
+    await memory.rename("t1", "Monday disruption")
+
+    assert await memory.delete_all() == 2
+    assert await memory.threads() == []
+    assert await memory.turns("t1") == []
+
+    # And the names go too, so a recycled id cannot inherit one.
+    await memory.record(_reply("t1", "u3", "reused", "Reused answer"))
+    rows = await memory.threads()
+    assert rows[0].title == "Reused answer"
+
+
+async def test_deleting_everything_when_there_is_nothing(memory: Memory) -> None:
+    assert await memory.delete_all() == 0

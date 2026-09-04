@@ -6,8 +6,8 @@ import "./globals.css";
 import { AppShell } from "@/components/shell/app-shell";
 
 /**
- * Cabinet Grotesk for display, Satoshi for text, IBM Plex Mono for machine
- * strings.
+ * Clash Grotesk for display, Cabinet Grotesk for text, IBM Plex Mono for
+ * machine strings.
  *
  * THE PREVIOUS FOUR ATTEMPTS, AND WHY THIS ONE IS DIFFERENT. It began as two
  * grotesques of near identical width and skeleton (Bricolage over Plus
@@ -19,12 +19,18 @@ import { AppShell } from "@/components/shell/app-shell";
  * Fonts default, and that is the actual failure: the shortlist was "what is
  * one import away", not "what should this look like".
  *
- * Cabinet Grotesk is a display grotesque with real character in the
- * terminals and a tight, confident set at 800. Satoshi is its sibling in
- * spirit and unrelated in shape: a neo-grotesque with a tall x-height and
- * genuinely open counters, so it survives 13px in a dense table and still
- * reads warm in a paragraph. Together they are a pairing, because they differ
- * in the way two faces have to differ to look chosen.
+ * Clash Grotesk is a display face and behaves like one: flat terminals, a
+ * narrow set, and real presence at 700 where a headline has to land in one
+ * glance. Cabinet Grotesk carries the text, and it is the right partner
+ * because it is a different problem solved by the same hand: a tall x-height
+ * and open counters that survive 13px in a dense table, with enough warmth in
+ * the round shapes that a page of it does not read as a form. They differ the
+ * way two faces have to differ to look chosen rather than defaulted to.
+ *
+ * BOTH ARE VARIABLE, ONE FILE EACH. A variable face carries its whole weight
+ * range in a single request, so the three static cuts this used to load are
+ * now one, and the weights in between are available for free if a heading
+ * ever wants 620.
  *
  * THEY ARE SERVED FROM THIS REPOSITORY, not from a CDN. `next/font/local`
  * self-hosts, inlines the face declarations and reserves metrics, so there is
@@ -44,21 +50,15 @@ import { AppShell } from "@/components/shell/app-shell";
 const display = localFont({
   variable: "--font-app-display",
   display: "swap",
-  src: [
-    { path: "./fonts/CabinetGrotesk-500.woff2", weight: "500", style: "normal" },
-    { path: "./fonts/CabinetGrotesk-700.woff2", weight: "700", style: "normal" },
-    { path: "./fonts/CabinetGrotesk-800.woff2", weight: "800", style: "normal" },
-  ],
+  src: "./fonts/ClashGrotesk-Variable.woff2",
+  weight: "200 700",
 });
 
 const sans = localFont({
   variable: "--font-app-sans",
   display: "swap",
-  src: [
-    { path: "./fonts/Satoshi-400.woff2", weight: "400", style: "normal" },
-    { path: "./fonts/Satoshi-500.woff2", weight: "500", style: "normal" },
-    { path: "./fonts/Satoshi-700.woff2", weight: "700", style: "normal" },
-  ],
+  src: "./fonts/CabinetGrotesk-Variable.woff2",
+  weight: "100 900",
 });
 
 const mono = IBM_Plex_Mono({

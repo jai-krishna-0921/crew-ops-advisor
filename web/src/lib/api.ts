@@ -282,6 +282,8 @@ export const api = {
       { title },
     ),
 
+  deleteAllThreads: () => send<{ deleted: number }>("/api/threads", "DELETE"),
+
   deleteThread: (id: string) =>
     send<{ thread_id: string; deleted: boolean }>(
       `/api/threads/${encodeURIComponent(id)}`,

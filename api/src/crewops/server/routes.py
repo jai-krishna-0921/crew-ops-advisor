@@ -343,6 +343,22 @@ async def rename_thread(
     return {"thread_id": thread_id, "title": body.title.strip(), "titled_by": "user"}
 
 
+@router.delete("/threads")
+async def delete_all_threads(request: Request) -> dict[str, Any]:
+    """Remove every conversation.
+
+    The most destructive route on this API. It exists because a demo machine
+    accumulates dozens of throwaway runs and clearing them one at a time is
+    worse than clearing them at once, but it reports the count rather than a
+    bare success so the caller can say what actually went.
+    """
+    state = _state(request)
+    if state.memory is None:
+        raise HTTPException(status_code=404, detail="Thread memory is not enabled")
+    removed = await state.memory.delete_all()
+    return {"deleted": removed}
+
+
 @router.delete("/threads/{thread_id}")
 async def delete_thread(request: Request, thread_id: str) -> dict[str, Any]:
     """Remove a conversation and everything recorded on it.

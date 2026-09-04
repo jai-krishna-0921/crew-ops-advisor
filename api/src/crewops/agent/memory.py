@@ -232,6 +232,28 @@ class Memory:
         await self._log_conn.commit()
         return removed > 0
 
+    async def delete_all(self) -> int:
+        """Remove every conversation. Returns how many there were.
+
+        Separate from `delete` rather than a loop over it, because this is one
+        statement and a loop is N round trips that can stop halfway. The count
+        is returned so the caller can say what it removed rather than claiming
+        success over an empty log.
+        """
+        if self._log_conn is None:
+            return 0
+        cursor = await self._log_conn.execute(
+            "SELECT COUNT(DISTINCT thread_id) FROM turns"
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+        count = int(row[0]) if row else 0
+
+        await self._log_conn.execute("DELETE FROM turns")
+        await self._log_conn.execute("DELETE FROM thread_meta")
+        await self._log_conn.commit()
+        return count
+
     async def threads(self, limit: int = 50) -> list[ThreadSummary]:
         if self._log_conn is None:
             return []
