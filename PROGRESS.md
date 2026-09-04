@@ -66,13 +66,25 @@ fails.
 
 ### Tier 2, agent path
 
-| Stage | correct | abstained | wrong | grounded | avg / p95 |
-|---|---|---|---|---|---|
-| deterministic (no model) | 6 | 6 | 1 | 8/14 | 7ms / 11ms |
-| agent, first measurement | 5 | 8 | **1** | 6/14 | 23.5s / 32.5s |
-| agent, after the correctness fixes | 10 | 4 | **0** | 10/14 | 18.0s / 30.6s |
-| agent, after cutting round trips | 12 | 2 | **0** | 11/14 | 19.5s / 32.9s |
-| **agent, after the stopping rule** | **13** | 1 | **0** | 13/14 | 15.3s / 27.2s |
+| Stage | correct | wrong | avg / p95 |
+|---|---|---|---|
+| deterministic (no model) | 6 | 1 | 7ms / 11ms |
+| agent, first measurement | 5 | **1** | 23.5s / 32.5s |
+| agent, after the correctness fixes | 10 | 0 | 18.0s / 30.6s |
+| agent, after cutting round trips | 12 | 0 | 19.5s / 32.9s |
+| agent, after the stopping rule | 13 | 0 | 15.3s / 27.2s |
+| agent, after the planner fixes | 9, 11, 12 | 0 | 15.9 to 18.4s |
+
+**Read that last row before the ones above it.** Every row except the last is a
+single run. The last is three runs of identical code, and it spans 9 to 12.
+
+That range is wider than the difference between most of the rows, which means
+**the improvements in this table cannot all be distinguished from noise**. The
+13 was one run and was probably a good one. The honest summary of Tier 2 on the
+agent path is *around 11 of 14, plus or minus 2, with nothing wrong*, and the
+only figures here that are safely real are the ones with a mechanism behind
+them: the verdict inversion is closed because a specific defect was fixed and
+has a test, not because a number moved.
 
 Correctness more than doubled and the verdict inversion is gone. The agent path
 now beats the deterministic path on Tier 2, 12 against 6.
@@ -136,6 +148,44 @@ Three causes, none of them a slow computation:
   `scan_duty_headroom` answers it in one call. Now derived from `TOOL_NAMES`.
 
 That took Tier 2 from 10 of 14 to **12 of 14**, still with nothing wrong.
+
+### The planner, and a lesson about measurement
+
+Asked why the agent took extra turns, the answer was the planner, in two ways.
+
+It often produced **no plan at all**. `with_structured_output` does not raise
+when the model declines to emit the forced tool call: it returns `None`, and
+the graph accepted a `TurnPlan` or a `dict` and let anything else fall through
+to a fallback with no steps and **no note**. Measured on `deepseek-v4-flash`
+the planner returns `None` on four calls in six. So roughly half of all turns
+ran with no plan, and the `plan` event a controller reads said "Answer the
+question using the tier 1 tools", which is fallback text rather than an intent.
+With no steps, the agent explores.
+
+When it did work, it planned badly, because it was given tool **names with no
+descriptions**. Asked which crew have 45 or more duty hours it planned
+`get_duty_clocks` (per crew, so a loop), a `find_crew` "cross-check", and a
+final step to confirm the count it would already have. It never mentioned
+`scan_duty_headroom`, which answers the question in one call. It was guessing
+from names.
+
+Both are now fixed: one retry then a visible note, and a one-line description
+per tool.
+
+**And the Tier 2 score did not improve.** Three runs after the fix: 9, 11, 12,
+against a single 13 before it. On this evidence the change cannot be shown to
+help, and may cost a little latency for the retry.
+
+It is kept anyway, for a reason the scorecard does not measure: a controller
+now sees a real plan instead of boilerplate about half the time, and the plan
+is a product feature rather than debug output. A defect that makes the system
+lie about what it is doing is worth fixing whether or not it moves a number.
+
+The wider lesson is the one worth carrying into the presentation. Run to run
+noise on this tier is 9 to 13. Most of the individual improvements recorded
+above were read from single runs, and single runs cannot resolve a difference
+that small. What is genuinely established is the work with a mechanism and a
+test behind it, not the deltas.
 
 ### Stopping once the answer is in hand
 
@@ -203,7 +253,7 @@ returns 401. Every agent-mode number here is a statement about
 
 ## Test suite
 
-`make test`: **587 passed, 7 failed, 15 xfailed, 2 deselected.**
+`make test`: **595 passed, 7 failed, 15 xfailed, 2 deselected.**
 
 The 7 failures are all pre-existing golden parity failures and were failing
 before this session's work:
