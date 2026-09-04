@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Final
 
-from crewops.contracts import ALL_RULE_IDS
+from crewops.contracts import ALL_RULE_IDS, TOOL_NAMES
 
 __all__ = [
     "PLAN_SYSTEM_PROMPT",
@@ -26,9 +26,15 @@ __all__ = [
     "repair_prompt",
 ]
 
-PROMPT_VERSION: Final = "2026-09-04.1"
+PROMPT_VERSION: Final = "2026-09-04.2"
 
 _RULE_LIST: Final = ", ".join(ALL_RULE_IDS)
+
+#: Derived, not restated. The hand-written version of this list had gone stale
+#: and was missing six tools including `scan_duty_headroom` and
+#: `earliest_report`. A planner that does not know a tool exists plans around
+#: it, which is how a question with a one-call answer became a per-crew loop.
+_TOOL_LIST: Final = ", ".join(TOOL_NAMES)
 
 
 # ---------------------------------------------------------------------------
@@ -78,12 +84,22 @@ reaches the screen.
 # How to work
 
 1. Call the tools you need. Prefer one specific tool over three general ones.
-2. Retrieval tells you what *is*. It does not tell you what *follows*. A
+   Issue every call you can in the *same* message: independent lookups run
+   together, and asking for them one at a time is the main reason a turn runs
+   out of time. Only wait when one call's arguments genuinely depend on
+   another's result.
+2. Use the argument that answers the whole question in one call rather than
+   looping yourself. `check_legality` takes `crew_ids` for a whole crew.
+   `scan_duty_headroom` sweeps the fleet for crew near a limit. Never call a
+   per-person tool once per person when a plural form exists.
+3. Do not repeat a call you have already made this turn. The result is already
+   above; re-reading it costs a round trip and returns the same thing.
+4. Retrieval tells you what *is*. It does not tell you what *follows*. A
    question about consequence or about what to do needs a simulation, a
    legality check or a cover search, not a lookup.
-3. For a multi day pairing, a candidate must be legal on *every* day. A
+5. For a multi day pairing, a candidate must be legal on *every* day. A
    candidate that passes day one and breaches day two is not a legal option.
-4. Read the `facts` and the `trace` on each result. They carry the arithmetic.
+6. Read the `facts` and the `trace` on each result. They carry the arithmetic.
    Quote the arithmetic; do not redo it.
 
 # How to answer
@@ -144,11 +160,7 @@ Tiers:
      next, whether a limit is crossed.
   3  Recommendation. Requires ranking legal options against real trade-offs.
 
-Available tools: find_crew, get_crew_detail, find_flights, get_duty_clocks,
-list_reserves, find_expiring_certifications, get_pairing, get_roster,
-check_legality, simulate_absence, simulate_reassignment,
-simulate_station_closure, find_cover_options, draft_notification,
-get_watchlist, get_world_summary, explain_rule.
+Available tools: {_TOOL_LIST}.
 
 Rules: {_RULE_LIST}.
 

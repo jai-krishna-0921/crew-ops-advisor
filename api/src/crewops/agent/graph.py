@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, Final, Literal, cast
 
@@ -212,6 +213,23 @@ def _tool_message_content(envelope: ToolEnvelope) -> tuple[str, bool]:
         ),
         truncated,
     )
+
+
+def repeat_key(tool: str, args: Mapping[str, Any] | None) -> str:
+    """Identity of a tool call, for spotting one asked twice in a turn.
+
+    Key order is not a difference, and neither is an argument present as None
+    against one left out: `exclude_none` on one call and not the other is a
+    serialisation detail, not a different question.
+
+    Never raises. Suppression is an optimisation, so an argument that will not
+    serialise degrades to "not a repeat" rather than losing the turn.
+    """
+    cleaned = {k: v for k, v in (args or {}).items() if v is not None}
+    try:
+        return f"{tool}:{json.dumps(cleaned, sort_keys=True, default=str)}"
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return f"{tool}:{sorted(map(str, cleaned.items()))}"
 
 
 def build_graph(
@@ -383,10 +401,36 @@ def build_graph(
         envelopes: list[ToolEnvelope] = []
         replies: list[AnyMessage] = []
 
+        # Every lookup already computed this turn, including earlier calls in
+        # this same batch. A model that asks the same question twice gets the
+        # first answer back rather than paying for it again.
+        seen: dict[str, ToolEnvelope] = {}
+        for prior in state.get("envelopes") or []:
+            if prior.ok:
+                seen.setdefault(repeat_key(prior.tool, prior.args), prior)
+
         for call in last.tool_calls:
             name = str(call.get("name", ""))
             args = dict(call.get("args") or {})
             call_id = str(call.get("id") or name)
+
+            cached = seen.get(repeat_key(name, args))
+            if cached is not None:
+                # Reuse the result, but still emit an envelope and a reply. A
+                # tool_call with no matching tool result breaks the message
+                # sequence, and the provider rejects the next request rather
+                # than the turn merely being slower.
+                envelope = cached.model_copy(update={"latency_ms": 0})
+                envelopes.append(envelope)
+                cached_content, _ = _tool_message_content(envelope)
+                replies.append(
+                    ToolMessage(
+                        content=cached_content,
+                        tool_call_id=call_id,
+                        name=name,
+                    )
+                )
+                continue
 
             if _over_budget(state, cfg):
                 envelope = ToolEnvelope(
@@ -419,6 +463,10 @@ def build_graph(
                 envelope = envelope.model_copy(update={"truncated": True})
 
             envelopes.append(envelope)
+            if envelope.ok:
+                # Within this batch too: a model that emits the same call twice
+                # in one message must not run it twice either.
+                seen.setdefault(repeat_key(name, args), envelope)
             emit(
                 "tool_result",
                 {
