@@ -28,7 +28,7 @@ from datetime import datetime as DateTime  # noqa: N812
 from datetime import timedelta
 from typing import Any, Literal, cast
 
-from crewops.contracts.evidence import Fact, FactUnit, ToolEnvelope
+from crewops.contracts.evidence import Citation, Fact, FactUnit, ToolEnvelope, TraceStep
 from crewops.contracts.ops import CostBreakdown, CostLine
 from crewops.contracts.ops import JointPlan as ContractJointPlan
 from crewops.contracts.rules import (
@@ -1363,10 +1363,99 @@ class Tools:
 
     # ============================================================== tier 2
 
+    def _check_legality_batch(
+        self,
+        *,
+        crew_ids: list[str],
+        pairing_id: str | None,
+        flight_numbers: list[str] | None,
+        on_date: DateType | None,
+        as_replacement_for: str | None,
+        added_duty_hours: float | None,
+        added_flight_hours: float | None,
+    ) -> ToolEnvelope:
+        """Several crew against the same assignment, in one call.
+
+        Delegates to the single-crew path once per person rather than
+        reimplementing anything, so the batch cannot drift from the individual
+        answer: there is one legality engine and this is not a second one. The
+        saving is not arithmetic, it is the model round trip that used to sit
+        between each call.
+
+        A crew member who cannot be resolved is reported in `unresolved` rather
+        than dropped, and never fails the whole batch. Silence would leave the
+        caller unable to tell "checked and legal" from "never checked", which
+        is the same distinction the rule traces exist to preserve.
+        """
+        timer = ToolTimer()
+        args: dict[str, Any] = {
+            "crew_ids": list(crew_ids),
+            "pairing_id": pairing_id,
+            "flight_numbers": flight_numbers,
+            "on_date": on_date,
+            "as_replacement_for": as_replacement_for,
+            "added_duty_hours": added_duty_hours,
+            "added_flight_hours": added_flight_hours,
+        }
+
+        reports: list[Any] = []
+        unresolved: list[dict[str, str]] = []
+        facts: list[Fact] = []
+        trace: list[TraceStep] = []
+        citations: list[Citation] = []
+
+        for one_crew in crew_ids:
+            envelope = self.check_legality(
+                crew_id=one_crew,
+                pairing_id=pairing_id,
+                flight_numbers=flight_numbers,
+                on_date=on_date,
+                as_replacement_for=as_replacement_for,
+                added_duty_hours=added_duty_hours,
+                added_flight_hours=added_flight_hours,
+            )
+            if not envelope.ok:
+                unresolved.append(
+                    {"crew_id": one_crew, "error": envelope.error or "not evaluated"}
+                )
+                continue
+            reports.append(envelope.payload)
+            facts.extend(envelope.facts)
+            trace.extend(envelope.trace)
+            citations.extend(envelope.citations)
+
+        if not reports:
+            detail = "; ".join(f"{u['crew_id']}: {u['error']}" for u in unresolved)
+            return error_envelope(
+                "check_legality",
+                args,
+                f"None of the {len(crew_ids)} crew could be evaluated. {detail}",
+                timer=timer,
+            )
+
+        return ok_envelope(
+            "check_legality",
+            args,
+            {"reports": reports, "unresolved": unresolved},
+            facts=facts,
+            trace=[
+                step(
+                    f"Check {len(reports)} crew against the same assignment",
+                    f"Evaluated {', '.join(str(r.crew_id) for r in reports)}"
+                    + (f". Not evaluated: {len(unresolved)}." if unresolved else "."),
+                    [f.key for f in facts[:4]],
+                ),
+                *trace,
+            ],
+            citations=citations,
+            timer=timer,
+        )
+
     def check_legality(
         self,
         *,
-        crew_id: str,
+        crew_id: str | None = None,
+        crew_ids: list[str] | None = None,
         pairing_id: str | None = None,
         flight_numbers: list[str] | None = None,
         on_date: DateType | None = None,
@@ -1374,6 +1463,25 @@ class Tools:
         added_duty_hours: float | None = None,
         added_flight_hours: float | None = None,
     ) -> ToolEnvelope:
+        if crew_ids:
+            return self._check_legality_batch(
+                crew_ids=crew_ids,
+                pairing_id=pairing_id,
+                flight_numbers=flight_numbers,
+                on_date=on_date,
+                as_replacement_for=as_replacement_for,
+                added_duty_hours=added_duty_hours,
+                added_flight_hours=added_flight_hours,
+            )
+        if crew_id is None:
+            return error_envelope(
+                "check_legality",
+                {"crew_id": None, "crew_ids": None, "pairing_id": pairing_id},
+                "Name a crew_id, or crew_ids to check several against the same "
+                "assignment in one call.",
+                timer=ToolTimer(),
+            )
+
         timer = ToolTimer()
         args: dict[str, Any] = {
             "crew_id": crew_id,

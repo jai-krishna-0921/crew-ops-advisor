@@ -26,7 +26,19 @@ DEFAULT_MODEL: Final = providers.spec(providers.ANTHROPIC).default_model
 #: aid. These are the budgets that keep the promise, enforced in the graph
 #: rather than hoped for in a prompt.
 DEFAULT_TOOL_ITERATIONS: Final = 8
-DEFAULT_TURN_BUDGET_MS: Final = 25_000
+
+#: 30 seconds, raised from 25 once Tier 2 was measured.
+#:
+#: Six of fourteen Tier 2 questions were abstaining on the budget alone, and
+#: the computations were never the slow part: the agent was asking the same
+#: question once per crew member, paying a model round trip each time. Batching
+#: `check_legality` removed most of that, and this covers the rest.
+#:
+#: It does not go higher. The problem statement says a 45 second response is
+#: not a decision aid, and a budget set just under the line it is trying to
+#: respect is not a budget. An answer that needs more than 30 seconds is one
+#: the controller should be told about rather than made to wait for.
+DEFAULT_TURN_BUDGET_MS: Final = 30_000
 
 
 def _env_int(name: str, default: int) -> int:

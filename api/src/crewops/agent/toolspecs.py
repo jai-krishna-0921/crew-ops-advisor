@@ -177,7 +177,15 @@ class CheckLegalityArgs(BaseModel):
         "more duty could this crew member take.",
     )
     added_flight_hours: float | None = Field(default=None)
-    crew_id: str
+    crew_id: str | None = Field(
+        default=None, description="One crew member. Use crew_ids for several."
+    )
+    crew_ids: list[str] | None = Field(
+        default=None,
+        description="Several crew against the same assignment, in one call. "
+        "Prefer this over repeating check_legality per person: it returns the "
+        "same verdicts and costs one call instead of one per crew member.",
+    )
     pairing_id: str | None = Field(
         default=None, description="Check the whole pairing, every duty day"
     )
@@ -332,6 +340,15 @@ def _fmt(args: dict[str, Any], *keys: str) -> str:
     return ", ".join(parts)
 
 
+def _count(crew_ids: Any) -> str:
+    """How a batched legality check narrates itself in the live trace."""
+    if not isinstance(crew_ids, list) or not crew_ids:
+        return "the rostered crew"
+    if len(crew_ids) == 1:
+        return str(crew_ids[0])
+    return f"{len(crew_ids)} crew"
+
+
 TOOL_SPECS: Final[tuple[ToolSpec, ...]] = (
     ToolSpec(
         "find_crew",
@@ -446,14 +463,17 @@ TOOL_SPECS: Final[tuple[ToolSpec, ...]] = (
     ),
     ToolSpec(
         "check_legality",
-        "Evaluate all seven rules for one crew member taking one assignment. This "
-        "is the only tool that produces a legality verdict. For a multi day "
-        "pairing it returns one verdict per day and the overall is the worst day: "
-        "legal on day one and breaching on day two is not a legal option.",
+        "Evaluate all seven rules for crew taking one assignment. This is the "
+        "only tool that produces a legality verdict. For a multi day pairing it "
+        "returns one verdict per day and the overall is the worst day: legal on "
+        "day one and breaching on day two is not a legal option. To check "
+        "several crew against the same assignment, pass them all as crew_ids in "
+        "one call rather than calling this once per person.",
         CheckLegalityArgs,
         lambda tools, a: tools.check_legality(**a.model_dump(exclude_none=True)),
         lambda a: (
-            f"Checking {a.get('crew_id')} against all seven rules for "
+            f"Checking {a.get('crew_id') or _count(a.get('crew_ids'))} against all "
+            f"seven rules for "
             f"{a.get('pairing_id') or a.get('flight_numbers') or a.get('on_date')}"
         ),
     ),

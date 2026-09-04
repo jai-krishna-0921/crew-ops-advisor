@@ -223,7 +223,8 @@ class ToolSurface(Protocol):
     def check_legality(
         self,
         *,
-        crew_id: str,
+        crew_id: str | None = None,
+        crew_ids: list[str] | None = None,
         pairing_id: str | None = None,
         flight_numbers: list[str] | None = None,
         on_date: date | None = None,
@@ -232,6 +233,12 @@ class ToolSurface(Protocol):
         added_flight_hours: float | None = None,
     ) -> ToolEnvelope:
         """Evaluate all seven rules for a crew member taking an assignment.
+
+        Pass `crew_ids` to check several people against the same assignment in
+        one call. It returns exactly what the individual calls return, and
+        exists because asking once per crew member is a model round trip each
+        time: the six-crew version of this question used to spend most of the
+        turn budget on the asking rather than the computing.
 
         Returns a `LegalityReport`. For a multi-day pairing that is one
         `DayLegality` per day, and the overall verdict is the worst day. Never
