@@ -186,11 +186,15 @@
      decoration, and decoration on a page of verdicts competes with the only
      colour that means anything here. */
 
-  /* The primary action. Lighter at the top, as though lit from above. */
+  /* The primary action. Lighter at the top, as though lit from above, and it
+     travels 30 degrees of hue on the way: blue into violet. It used to run
+     264 to 258, which is one colour with a shadow on it, and at the size the
+     send button is drawn nobody could tell it was a gradient at all. Thirty
+     degrees is still two neighbouring hues rather than a spectrum. */
   --grad-accent: linear-gradient(
-    170deg,
-    oklch(54% 0.138 264),
-    oklch(41% 0.124 258)
+    158deg,
+    oklch(56% 0.16 268),
+    oklch(45% 0.152 298)
   );
 
   /* The question bubble. */
@@ -202,14 +206,31 @@
     oklch(50% 0.142 268) 45%,
     oklch(44% 0.126 278)
   );
-  /* A single soft light behind the empty conversation, so the greeting sits
-     on something rather than floating on flat paper. Very low contrast on
-     purpose: at 4 percent it is felt and not seen. */
-  --grad-hero: radial-gradient(
-    110% 72% at 50% 0%,
-    oklch(45% 0.128 262 / 0.05),
-    transparent 62%
-  );
+  /* THE LIGHT BEHIND THE EMPTY CONVERSATION. Three layers now, where there
+     was one at 5 percent that nobody could see: an indigo light off the top
+     right, a warm rose off the top left, and the original wash under the
+     greeting to seat it on the page.
+
+     Painted on a full bleed layer rather than on the 3xl column, so the
+     lights run off both edges of the window the way the reference does. A
+     radial gradient clipped to a 768px box reads as a grey smudge with two
+     visible ends. */
+  --grad-hero:
+    radial-gradient(
+      42% 44% at 79% 34%,
+      oklch(62% 0.14 282 / 0.28),
+      transparent 70%
+    ),
+    radial-gradient(
+      38% 40% at 16% 26%,
+      oklch(76% 0.11 32 / 0.26),
+      transparent 72%
+    ),
+    radial-gradient(
+      64% 40% at 50% 30%,
+      oklch(45% 0.128 262 / 0.06),
+      transparent 66%
+    );
 
   /* HALF THE GREETING, NOT ALL OF IT. A gradient across a whole headline is
      a gradient you read as an effect. Across the clause that names the thing
@@ -217,38 +238,49 @@
      the part of it worth taking. Two neighbouring hues, never a spectrum. */
   --grad-title: linear-gradient(
     96deg,
-    oklch(48% 0.15 262),
-    oklch(46% 0.148 292)
+    oklch(52% 0.168 258),
+    oklch(48% 0.168 300)
   );
 
-  /* CARD TINTS. Six, one per suggestion, at a chroma that survives being
-     next to a verdict without arguing with it: the reference sits around
-     0.06 and reads as a toy, these sit at 0.022 and read as paper that
-     happens to be tinted. `tile` is the icon's ground, one step up, and
-     `ink` is the icon itself, dark enough to clear AA on both. */
-  --tint-1: oklch(97% 0.022 250);
-  --tint-1-tile: oklch(93% 0.045 250);
-  --tint-1-ink: oklch(46% 0.13 254);
+  /* CARD TINTS. Six, one per suggestion.
 
-  --tint-2: oklch(97% 0.024 158);
-  --tint-2-tile: oklch(93% 0.05 158);
-  --tint-2-ink: oklch(44% 0.11 160);
+     These were set at 0.022 on the reasoning that a tint has to survive being
+     next to a verdict without arguing with it. That reasoning is right and
+     the number was wrong: on a warm bone canvas at 97 percent lightness,
+     0.022 of chroma is not a colour, it is a rounding error, and the six
+     cards read as six sheets of the same paper. They sit at 0.038 now, which
+     is still under the reference and is the point at which "the green one"
+     becomes a thing somebody can say out loud.
 
-  --tint-3: oklch(97.4% 0.028 70);
-  --tint-3-tile: oklch(93.5% 0.058 70);
-  --tint-3-ink: oklch(48% 0.115 62);
+     What keeps them from competing with a verdict is not their chroma, it is
+     where they are allowed to appear: the empty conversation and the
+     suggestion rows, never on a card that carries a pass or a breach.
 
-  --tint-4: oklch(97% 0.022 300);
-  --tint-4-tile: oklch(93.5% 0.045 300);
-  --tint-4-ink: oklch(46% 0.125 300);
+     `tile` is the icon's ground, `ink` is the icon and the arrow button's
+     fill, dark enough to clear AA against both the tint and white. */
+  --tint-1: oklch(96.4% 0.038 250);
+  --tint-1-tile: oklch(91.5% 0.082 250);
+  --tint-1-ink: oklch(50% 0.15 254);
 
-  --tint-5: oklch(97.2% 0.022 18);
-  --tint-5-tile: oklch(93.5% 0.045 18);
-  --tint-5-ink: oklch(48% 0.135 20);
+  --tint-2: oklch(96.4% 0.04 158);
+  --tint-2-tile: oklch(91.5% 0.088 158);
+  --tint-2-ink: oklch(47% 0.125 160);
 
-  --tint-6: oklch(97% 0.024 205);
-  --tint-6-tile: oklch(93% 0.048 205);
-  --tint-6-ink: oklch(45% 0.105 210);
+  --tint-3: oklch(96.8% 0.044 70);
+  --tint-3-tile: oklch(92% 0.098 70);
+  --tint-3-ink: oklch(52% 0.135 62);
+
+  --tint-4: oklch(96.4% 0.038 300);
+  --tint-4-tile: oklch(92% 0.082 300);
+  --tint-4-ink: oklch(50% 0.15 300);
+
+  --tint-5: oklch(96.6% 0.038 18);
+  --tint-5-tile: oklch(92% 0.08 18);
+  --tint-5-ink: oklch(52% 0.155 20);
+
+  --tint-6: oklch(96.4% 0.04 205);
+  --tint-6-tile: oklch(91.5% 0.085 205);
+  --tint-6-ink: oklch(49% 0.12 210);
   /* The rail's edge, instead of a border down it. */
   --grad-edge: linear-gradient(
     to bottom,
@@ -609,9 +641,30 @@
   color: transparent;
 }
 
-/* One soft light behind the empty conversation. */
+/* The lights behind the empty conversation.
+ *
+ * MASKED AT BOTH ENDS, and that is the whole reason this is a utility rather
+ * than a background on the column. The layer is clipped by the scroll
+ * container it lives in, and a radial gradient cut off by a clip boundary
+ * leaves a hard horizontal line across the page at the exact pixel it stops.
+ * The first attempt drew one straight under the header. The mask makes the
+ * layer transparent where it is cut, so there is nothing to see an edge of. */
 @utility hero-wash {
   background-image: var(--grad-hero);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 26%,
+    #000 64%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 26%,
+    #000 64%,
+    transparent 100%
+  );
 }
 
 /* The rail's edge, drawn as a fading gradient rather than a border, so it

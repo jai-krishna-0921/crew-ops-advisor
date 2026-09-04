@@ -87,13 +87,17 @@ export function SectionRail({ onOpenPalette }: { onOpenPalette?: () => void }) {
             className={cx(
               "relative flex w-full flex-col items-center gap-1 py-2 text-2xs font-medium",
               "transition-colors duration-200 ease-out-quint",
-              active ? "text-ink" : "text-ink-3 hover:text-ink-2",
+              // The active section is in the accent, not in plain ink. The
+              // bar on the edge stays: it is what says WHERE, and the colour
+              // is what makes it findable without reading four labels. Still
+              // no filled tile, for the reason in the docstring.
+              active ? "text-accent" : "text-ink-3 hover:text-ink-2",
             )}
           >
             {active ? (
               <span
                 aria-hidden
-                className="anim-fade-up absolute inset-y-1.5 right-0 w-[2px] rounded-full bg-accent"
+                className="anim-fade-up absolute inset-y-1.5 right-0 w-[2px] rounded-full bg-[image:var(--grad-accent)]"
               />
             ) : null}
             <Icon size={17} weight={active ? "fill" : "bold"} />

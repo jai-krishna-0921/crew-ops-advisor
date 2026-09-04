@@ -53,6 +53,39 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
       bubble in its own warm colour. Calmer than the reference: no
       photograph, no six-hue spectrum, chroma about a third of it.
 
+## Landed: colour, second pass
+
+The first pass read the reference at about a third of its chroma and the
+result was too quiet to see. This pass takes the reference at its word on the
+chrome and leaves the answers alone, because colour on an answer already means
+something and a decorative hue next to a verdict is worse than no colour.
+
+- [x] Card tints up from 0.022 to 0.038, tiles from 0.045 to 0.085. Six cards
+      now read as six colours rather than as six sheets of paper.
+- [x] Each card carries a filled arrow button in its own hue, always visible,
+      which is the reference's most distinctive element and the thing that
+      makes a card read as a button rather than as a panel.
+- [x] New conversation is a gradient button, the one strongest colour in the
+      rail, instead of a text row that looked like a list item.
+- [x] The primary gradient runs blue to violet rather than blue to blue. Two
+      neighbouring hues still, not a spectrum.
+- [x] The hero light is full bleed and three layers: an indigo top right, a
+      warm rose top left, and the original wash under the greeting.
+- [x] The greeting is bigger, and the gradient still covers one clause only.
+- [x] The active conversation and the active section both carry the accent
+      rather than a grey fill.
+- [x] A gradient mark in the composer. It is decoration, and the composer's
+      rule was against putting plumbing and unverifiable claims in front of a
+      controller, not against the product having a face.
+
+Deliberately not taken from the reference: the "All systems operational" pill
+(the engine and the snapshot are on the section rail already, and a mode
+indicator on the chat surface is the thing that was removed once), the "Try
+asking" chips under the composer (the six cards are that, and they would
+follow the composer into every conversation), and the handwritten script
+accent (no script face is loaded and adding one for two words is a network
+request for decoration).
+
 ## Landed: one sentence once, and a name that fits
 
 - [x] Fix: an answer printed its opening sentence twice, once as the heading

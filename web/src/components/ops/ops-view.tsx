@@ -175,15 +175,29 @@ function WorldStrip({ world }: { world: WorldSummary | null }) {
   const entries = Object.entries(world.counts ?? {}).slice(0, 6);
   return (
     <div className="mt-4">
+      {/* One tint per count, the same six used on the empty conversation.
+          These are sizes of the world, not verdicts: nothing here can pass or
+          breach, so colour is free to be grouping. Six identical grey tiles
+          made the reader parse the labels to tell flights from crew. */}
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-        {entries.map(([key, value]) => (
-          <div key={key} className="rounded-md bg-surface px-2.5 py-2 hairline">
-            <p className="label-micro">{key}</p>
-            <p className="num mt-0.5 text-lg font-semibold text-ink">
-              {grouped(value)}
-            </p>
-          </div>
-        ))}
+        {entries.map(([key, value], index) => {
+          const tint = (index % 6) + 1;
+          return (
+            <div
+              key={key}
+              className="rounded-md px-2.5 py-2"
+              style={{ background: `var(--tint-${tint})` }}
+            >
+              <p className="label-micro">{key}</p>
+              <p
+                className="num mt-0.5 text-lg font-semibold"
+                style={{ color: `var(--tint-${tint}-ink)` }}
+              >
+                {grouped(value)}
+              </p>
+            </div>
+          );
+        })}
       </div>
       <p className="num mt-2 text-xs text-ink-3">
         {world.operator ?? "Operator"} · hub {world.base} ·{" "}

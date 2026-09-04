@@ -40,7 +40,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, StopIcon } from "@phosphor-icons/react/dist/ssr";
+import { ArrowUpIcon, SparkleIcon, StopIcon } from "@phosphor-icons/react/dist/ssr";
 
 import { cx } from "@/components/ui/tone";
 
@@ -83,6 +83,20 @@ export function Composer({
   return (
     <div className="px-4 pb-5 sm:px-6">
       <div className="relative rounded-xl bg-surface shadow-float transition-shadow duration-200 ease-out-quint focus-within:shadow-pop">
+        {/* A mark, in the product's own gradient. The rule this composer was
+            built on was that plumbing and unverifiable claims do not go in
+            front of a controller: a mode switch is a decision they should not
+            have to make, and "every figure is checked" printed under an empty
+            field is a claim with nothing to check it against. Neither argument
+            reaches a decorative glyph. It says nothing, asks nothing, and is
+            aria-hidden. */}
+        <SparkleIcon
+          size={17}
+          weight="fill"
+          aria-hidden
+          className="pointer-events-none absolute top-4 left-4 text-accent"
+        />
+
         <textarea
           ref={ref}
           rows={1}
@@ -96,7 +110,7 @@ export function Composer({
           }}
           placeholder={placeholder}
           aria-label="Ask the advisor"
-          className="block max-h-42 w-full resize-none bg-transparent py-3.5 pr-14 pl-4 text-md leading-relaxed text-ink placeholder:text-ink-3 focus:outline-none"
+          className="block max-h-42 w-full resize-none bg-transparent py-3.5 pr-14 pl-11 text-md leading-relaxed text-ink placeholder:text-ink-3 focus:outline-none"
         />
 
         <button

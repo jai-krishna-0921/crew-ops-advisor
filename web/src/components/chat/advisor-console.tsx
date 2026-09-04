@@ -381,7 +381,14 @@ export function AdvisorConsole() {
             </button>
           </header>
 
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+        {/* `overflow-x-clip` rather than nothing. `overflow-y: auto` on its
+            own computes overflow-x to `auto` as well, so the hero light, which
+            deliberately bleeds 34vw past both edges, made this region
+            scrollable sideways: the whole conversation could be dragged left
+            to reveal a strip of empty page. `clip` keeps the vertical scroll
+            and takes the horizontal one away, which `hidden` would not do
+            without also making this a scroll container on both axes. */}
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-x-clip overflow-y-auto">
           <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
             {loadError || actionError ? (
               <div className="flex items-start gap-2 rounded-md bg-breach-wash px-3.5 py-2.5">
@@ -690,22 +697,42 @@ function Welcome({
   );
 
   return (
-    <div className="hero-wash mx-auto w-full max-w-3xl px-6 pt-24 pb-44">
-      {/* The gradient runs over the clause that names the thing being asked
-          and stops. Across the whole line it reads as an effect. */}
-      <h2 className="macro anim-fade-up text-center text-3xl text-ink">
-        What do you need to{" "}
-        <span className="ink-gradient">decide today?</span>
-      </h2>
-      <p
-        className="anim-stagger mx-auto mt-3 max-w-[44ch] text-center text-md text-ink-2"
-        style={{ "--i": 1 } as React.CSSProperties}
-      >
-        Crew, flights, legality, cover. Every figure is checked before you see
-        it, and an unanswerable question is refused rather than guessed.
-      </p>
+    <div className="relative mx-auto w-full max-w-3xl px-6 pt-24 pb-44">
+      {/* THE LIGHT IS FULL BLEED, THE CONTENT IS NOT. `hero-wash` used to sit
+          on this column, which is 768px wide, so three radial gradients were
+          clipped to a box narrower than any of them and read as a smudge with
+          two visible vertical edges. Bleeding it 34vw past both sides puts the
+          ends of the lights off screen, which is the only way a radial light
+          reads as light rather than as a shape. */}
+      <div
+        aria-hidden
+        className="hero-wash pointer-events-none absolute inset-x-[-34vw] top-0 h-[44rem]"
+      />
 
-      <div className="mt-10 grid gap-3 sm:grid-cols-2">
+      <div className="relative">
+        {/* The gradient runs over the clause that names the thing being asked
+            and stops. Across the whole line it reads as an effect. */}
+        <h2 className="macro anim-fade-up text-center text-3xl text-ink">
+          What do you need to{" "}
+          <span className="ink-gradient">decide today?</span>
+        </h2>
+        <p
+          className="anim-stagger mx-auto mt-3 max-w-[44ch] text-center text-md text-ink-2"
+          style={{ "--i": 1 } as React.CSSProperties}
+        >
+          Crew, flights, legality, cover. Every figure is checked before you see
+          it, and an unanswerable question is refused rather than guessed.
+        </p>
+      </div>
+
+      {/* THE ARROW IS A FILLED BUTTON IN THE CARD'S OWN HUE, and it is always
+          there. It was a 13px chevron that faded in on hover, which is two
+          mistakes at once: on a touch screen there is no hover so it never
+          appeared at all, and on a pointer it meant the card looked like a
+          panel until you were already on top of it. A solid disc is what makes
+          six cards read as six buttons from across the room, and it is the one
+          element of the reference doing the most work. */}
+      <div className="relative mt-10 grid gap-3 sm:grid-cols-2">
         {picks.map((question, index) => {
           const tint = (index % 6) + 1;
           const Icon = PROMPT_ICON[question.id] ?? ChatCircleDotsIcon;
@@ -718,38 +745,36 @@ function Welcome({
               style={
                 {
                   "--i": index,
-                  background: `var(--tint-${tint})`,
+                  "--tint": `var(--tint-${tint})`,
+                  "--tile": `var(--tint-${tint}-tile)`,
+                  "--mark": `var(--tint-${tint}-ink)`,
                 } as React.CSSProperties
               }
-              className="anim-stagger group flex cursor-pointer items-start gap-3 rounded-md px-4 py-3.5 text-left transition-[box-shadow,transform] duration-200 ease-out-quint hover:-translate-y-px hover:shadow-panel"
+              className="anim-stagger group flex cursor-pointer flex-col gap-2.5 rounded-md bg-[var(--tint)] px-4 py-3.5 text-left transition-[box-shadow,transform] duration-200 ease-out-quint hover:-translate-y-0.5 hover:shadow-panel"
             >
-              <span
-                aria-hidden
-                className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-sm"
-                style={{
-                  background: `var(--tint-${tint}-tile)`,
-                  color: `var(--tint-${tint}-ink)`,
-                }}
-              >
-                <Icon size={16} weight="bold" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-base leading-snug font-semibold text-ink">
+              <span className="flex items-start gap-3">
+                <span
+                  aria-hidden
+                  className="flex size-9 shrink-0 items-center justify-center rounded-md bg-[var(--tile)] text-[var(--mark)]"
+                >
+                  <Icon size={17} weight="bold" />
+                </span>
+                <span className="min-w-0 flex-1 pt-0.5 text-base leading-snug font-semibold text-ink">
                   {SHORT_PROMPT[question.id] ?? question.question}
                 </span>
-                {PROMPT_NOTE[question.id] ? (
-                  <span className="mt-0.5 block text-xs leading-snug text-ink-2">
-                    {PROMPT_NOTE[question.id]}
-                  </span>
-                ) : null}
               </span>
-              <ArrowRightIcon
-                size={13}
-                weight="bold"
-                aria-hidden
-                className="mt-2 shrink-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-                style={{ color: `var(--tint-${tint}-ink)` }}
-              />
+
+              <span className="flex items-end gap-3">
+                <span className="min-w-0 flex-1 text-xs leading-snug text-ink-2">
+                  {PROMPT_NOTE[question.id] ?? ""}
+                </span>
+                <span
+                  aria-hidden
+                  className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--mark)] text-page transition-transform duration-200 ease-out-quint group-hover:translate-x-0.5"
+                >
+                  <ArrowRightIcon size={13} weight="bold" />
+                </span>
+              </span>
             </button>
           );
         })}

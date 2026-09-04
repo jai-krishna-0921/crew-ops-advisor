@@ -138,12 +138,17 @@ export function SideRail({
         ) : null}
       </div>
 
+      {/* THE ONE STRONG COLOUR IN THE RAIL. This was a text row with a grey
+          plus on it, sitting directly above a list of text rows, which made
+          the only action on the panel look like the first item in the list it
+          was supposed to sit apart from. It is the primary action on this
+          surface and now it is painted like one. */}
       <button
         type="button"
         onClick={onNewThread}
-        className="mx-2 flex cursor-pointer items-center gap-2 rounded-sm px-2 py-2 text-base font-medium text-ink hover:bg-hover"
+        className="mx-2 flex cursor-pointer items-center justify-center gap-2 rounded-md bg-[image:var(--grad-accent)] px-3 py-2.5 text-base font-semibold text-page shadow-panel transition-[transform,box-shadow] duration-200 ease-out-quint hover:-translate-y-px hover:shadow-pop active:translate-y-0"
       >
-        <PlusIcon size={14} weight="bold" aria-hidden className="text-ink-3" />
+        <PlusIcon size={15} weight="bold" aria-hidden />
         New conversation
       </button>
 
@@ -267,7 +272,11 @@ function Row({
     <div
       className={cx(
         "group relative flex items-center rounded-sm transition-colors duration-150",
-        active ? "bg-hover-2" : "hover:bg-hover",
+        // The open conversation is marked in the accent rather than in a
+        // darker grey. Grey on grey says "hovered"; this list has a hover
+        // state already, and two greys one step apart is not a distinction
+        // anybody makes at a glance.
+        active ? "bg-accent-tint" : "hover:bg-hover",
       )}
     >
       <button
@@ -277,7 +286,7 @@ function Row({
         title={`${plural(thread.turn_count, "turn")}, ${ago(thread.updated_at)}, ${shortDate(thread.updated_at)}`}
         className={cx(
           "min-w-0 flex-1 cursor-pointer truncate px-2 py-1.5 text-left text-base",
-          active ? "font-medium text-ink" : "text-ink-2 group-hover:text-ink",
+          active ? "font-semibold text-accent" : "text-ink-2 group-hover:text-ink",
         )}
       >
         {thread.title}
