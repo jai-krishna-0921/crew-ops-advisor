@@ -9,8 +9,12 @@ memory.
 
 The architecture is built and the boundary it claims is real and enforced. The
 deterministic path answers Tier 1 at 100% accuracy in single digit
-milliseconds. What is not done is Tier 2 and Tier 3 parity, and the agent path
-is currently **worse than no agent at all** on the one tier that is mandatory.
+milliseconds, and the agent path on `deepseek-v4-flash` now answers **16 of 16**
+with nothing wrong, which is the first configuration to beat the offline path.
+
+What is not done is Tier 2 and Tier 3. Six of eight Tier 3 questions and the
+flagship demo scenario still fail, all traced to intent matching in `resolve/`.
+That is the work that remains, and it is not a model problem.
 
 ## Where each tier actually stands
 
@@ -30,11 +34,28 @@ to answer that it got right, which is the number the rubric's scoring principle
 actually rewards. Coverage is the weak column, not correctness: 13 of 38
 questions are declined.
 
-### Agent mode (LangGraph, Ollama `gpt-oss:120b-cloud`), Tier 1 only
+### Agent mode (LangGraph via Ollama), Tier 1 only
 
-| Tier | n | correct | partial | abstained | wrong | accuracy | grounded | avg/p95 |
-|---|---|---|---|---|---|---|---|---|
-| 1 | 16 | 13 | 1 | 1 | 1 | 87% | 15/16 | 7.2s / 10.0s |
+Four models, same 16 questions, same answer keys.
+
+| Model | correct | partial | abstained | wrong | grounded | avg | p95 |
+|---|---|---|---|---|---|---|---|
+| **deepseek-v4-flash** | **16** | 0 | 0 | **0** | **16/16** | 6.5s | 12.1s |
+| gpt-oss:120b | 13 | 1 | 1 | 1 | 15/16 | 7.2s | 10.0s |
+| glm-5.1 | 13 | 0 | 3 | 0 | 13/16 | 16.9s | 27.4s |
+| qwen2.5:7b | unusable | | | | | | |
+
+`deepseek-v4-flash:cloud` is now the Ollama default. It is the only
+configuration measured so far that **beats the deterministic path on Tier 1**,
+16 against 15, and across three full runs (16, 15, 16 correct) it has never
+produced a wrong answer in 48 graded questions. The one abstention in the
+middle run is the reproducibility caveat below, not a defect.
+
+`glm-5.1` is accurate on what it answers but abstains more and its p95 of 27.4s
+is close enough to the problem statement's "a 45 second response is not a
+decision aid" to disqualify it. `qwen2.5:7b` returns an empty `tool_calls` list
+for a bound schema, so the agent loop has nothing to execute and every question
+fails.
 
 ### The verifier was rejecting correct answers
 
@@ -61,9 +82,10 @@ responsible, so it is easy to mistake for the model being stupid. The
 package's own `CLAUDE.md` names this failure mode; it still took a skeptical
 question to go and look.
 
-What remains is a genuine model shortcoming, and only one: Q06 asks for a
-reserve's on-call window and `gpt-oss` answers "the window is recorded in the
-system" instead of stating 06:00 to 18:00. It grades wrong at 33% recall.
+What remained after that fix was one genuine model shortcoming, and it turned
+out to be specific to `gpt-oss`: Q06 asks for a reserve's on-call window and it
+answers "the window is recorded in the system" instead of stating 06:00 to
+18:00. `deepseek-v4-flash` states the times and grades correct.
 
 Agent mode has **never been run against Claude or GPT**. An
 `ANTHROPIC_API_KEY` has since appeared in `.env.local` but it is invalid and
@@ -169,12 +191,11 @@ Provider precedence is `anthropic -> openai -> ollama`. Dropping in
   priority. All 7 golden failures are traced to intent matching in `resolve/`,
   not to the tools or the ops engine, so this is likely one fix rather than
   seven. The six Tier 3 abstentions look like the same cause.
-- **Agent mode still trails offline on Tier 1**, 13/16 against 15/16, with one
-  wrong answer (Q06) and one partial. Grounding is now level at 15/16.
-- **Agent results are not reproducible run to run.** Q12 has graded `wrong`,
-  `abstained` and `correct` on the identical prompt across three runs. The
-  hosted model does not honour temperature 0 strictly, so no single agent-mode
-  number should be quoted as if it were stable.
+- **Agent results are not reproducible run to run.** deepseek scored 16, 15
+  and 16 on three identical passes, and under `gpt-oss` Q12 graded `wrong`,
+  `abstained` and `correct` on the identical prompt. These models do not honour
+  temperature 0 strictly, so no single agent-mode number should be quoted as if
+  it were stable. Quote a range, or run three times and say so.
 - **An invalid `ANTHROPIC_API_KEY` is in `.env.local`** and returns 401.
   Because provider precedence puts Anthropic first, its mere presence takes
   agent mode down. Either fix it or remove it; `CREWOPS_LLM_PROVIDER=ollama`
@@ -206,6 +227,7 @@ non-breaking hyphen is a real finding about this class of system, and the
 process that caught it (measure, disbelieve the flattering explanation, go and
 look) is the thing that is actually being demonstrated.
 
-"Functionality" is the exposed criterion. Tier 1 is solid offline and shaky
-through the agent, Tier 2 is half, Tier 3 is a quarter, and the flagship
-scenario does not currently hold.
+"Functionality" is the exposed criterion. Tier 1 is now solid on both paths,
+but Tier 2 is half, Tier 3 is a quarter, and the flagship scenario does not
+hold. All of that is one suspected cause in `resolve/`, which makes it the
+highest-value thing left to do.

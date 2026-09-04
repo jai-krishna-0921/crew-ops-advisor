@@ -106,11 +106,23 @@ _SPECS: Final[tuple[ProviderSpec, ...]] = (
     ProviderSpec(
         name=OLLAMA,
         # Routed through the local daemon to Ollama's cloud. Chosen by
-        # measurement, not preference: of the tool-capable models available
-        # here it is the only one that reliably emits tool calls. qwen2.5:7b
-        # returns an empty `tool_calls` list for the same prompt and bound
-        # schema, which strands the agent loop with nothing to execute.
-        default_model="gpt-oss:120b-cloud",
+        # measurement over four candidates, scored on Tier 1 against the
+        # shipped answer keys:
+        #
+        #   deepseek-v4-flash  16/16, 15/16, 16/16 correct over three runs,
+        #                      zero wrong, 16/16 grounded, p95 12.1s
+        #   gpt-oss:120b       13/16, one wrong answer, p95 10.0s
+        #   glm-5.1            13/16, three abstentions, p95 27.4s, which is
+        #                      close enough to the "45s is not a decision aid"
+        #                      line in the problem statement to matter
+        #   qwen2.5:7b         unusable: returns an empty `tool_calls` list for
+        #                      a bound schema, so the agent loop has nothing to
+        #                      execute
+        #
+        # deepseek is the only configuration measured so far that beats the
+        # deterministic path on Tier 1 (16 against 15) and it has never
+        # produced a wrong answer in 48 graded questions.
+        default_model="deepseek-v4-flash:cloud",
         selects_on=("OLLAMA_API_KEY", "OLLAMA_HOST"),
         structured_method="function_calling",
     ),

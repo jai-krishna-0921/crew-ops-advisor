@@ -40,6 +40,19 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
 - [x] Session persistence across a reload
 - [x] Contextual memory stubs, wired per thread
 
+## In flight
+
+- [ ] Fonts: use the Cabinet Grotesk and Clash Grotesk files in `fonts/`
+- [ ] Landing cards: short prompts, not the full dataset question
+- [ ] Landing subtitle: one line, not three
+- [ ] Delete asks in a real dialog, not an inline row
+- [ ] Delete every conversation at once
+- [ ] Group conversations by day, starting with Today
+- [ ] Ctrl-K opens search, and the hint says so
+- [ ] Adopt shadcn primitives for dialog, menu, command, tooltip
+- [ ] A pointer cursor on everything that is pressable
+- [ ] Gradients
+
 ## Landed: this pass
 
 - [x] Fonts: Cabinet Grotesk for display, Satoshi for text, both self hosted
@@ -85,13 +98,16 @@ Measured numbers and the full write-up are in `PROGRESS.md`.
 - [ ] The `ANTHROPIC_API_KEY` in `.env.local` is invalid and returns 401.
       Anthropic sorts first, so its presence alone takes agent mode down. Fix
       it or remove it. `CREWOPS_LLM_PROVIDER=ollama` overrides meanwhile.
-- [ ] With a valid key, re-run `scorecard --mode both`, then decide whether the
-      agent path earns its latency: offline is 15/16 at 4ms, the agent is 13/16
-      at 7.2s.
-- [ ] Q06: `gpt-oss` answers "the window is recorded in the system" instead of
-      stating 06:00 to 18:00. The one remaining genuine model shortcoming.
-- [ ] Agent results are not reproducible: Q12 has graded wrong, abstained and
-      correct on the identical prompt. Do not quote a single run.
+- [x] Model bake-off on Tier 1. `deepseek-v4-flash:cloud` is now the default:
+      16/16 correct, zero wrong, 16/16 grounded, p95 12.1s. It is the first
+      configuration to beat the deterministic path (16 against 15). gpt-oss
+      13/16 with one wrong; glm-5.1 13/16 and a 27.4s p95, too close to the
+      "45s is not a decision aid" line; qwen2.5:7b emits no tool calls at all.
+- [ ] Agent results are not reproducible: deepseek scored 16, 15, 16 on three
+      identical passes and under gpt-oss Q12 graded wrong, abstained and
+      correct. Quote a range or run three times, never a single number.
+- [ ] With a valid hosted key, re-run `scorecard --mode both` and compare
+      against deepseek before deciding what the demo runs on.
 
 ## Thread memory, written but unproven
 
