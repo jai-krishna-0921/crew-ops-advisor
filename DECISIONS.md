@@ -43,9 +43,10 @@ counted as failures.
 "I cannot answer that reliably" on the eleventh scores higher than answering all
 eleven with three wrong.
 
-**Cost.** Coverage. 13 of 38 questions are declined on the deterministic path.
+**Cost.** Coverage. 11 of 38 questions are declined on the deterministic path.
 That is the single weakest column in the scorecard and it is a deliberate
-trade, not an accident.
+trade, not an accident. See decision 15 for the one time it was tested by
+raising coverage and measuring what it cost.
 
 **The trap this creates.** Accuracy alone becomes meaningless. `kimi-k2.6`
 scored **100% accuracy** on Tier 1 by declining 11 of 16 questions and getting
@@ -60,9 +61,9 @@ engine, the simulations and the ranked options all still work and are still
 explainable.
 
 **Why.** Offline-first is a hedge against the demo failing, but it is also the
-proof of decision 1. If the system answers Tier 1 at 100% accuracy in 4ms with
-no model in the loop, then the model demonstrably is not the thing computing
-the answer.
+proof of decision 1. If the system answers 27 of 38 questions with nothing
+wrong in about 12ms with no model in the loop, then the model demonstrably is
+not the thing computing the answer.
 
 **Cost.** Two answer paths to maintain, and they can diverge. They did: the
 offline resolver matches fixed question shapes, so a typo ("reserv**er**") that
@@ -285,6 +286,90 @@ and undemonstrated. This is written down here rather than left to be discovered
 on stage.
 
 ---
+
+---
+
+## 14. The plan is where the bugs were, not the rules or the tools
+
+**Decision.** Fix routing and rendering before reaching for the model.
+
+**Why.** Every failure investigated in depth turned out the same way: the rules
+engine and the tools already computed the right answer, and something between
+them and the screen lost it.
+
+- `simulate_station_closure` put the affected flights in
+  `payload["affected_flights"]` and the renderer printed "2 flights touch HYD
+  inside the window". The count was right and the answer unusable.
+- A sick call ran `simulate_absence` and stopped. The keys for S1, S2 and S6
+  want cover options too. Adding one call took S1 from wrong at 15% to correct
+  at 100%.
+- S4 matched no intent at all, for a question `simulate_delay` answers
+  outright. S5 matched a **tier 1 rule lookup** because the question named
+  RULE-CERT-06, and answered with the text of the rule.
+
+**Cost.** Intent matching is regex, so it only covers shapes someone wrote a
+pattern for. That is a real ceiling, and the eleven remaining abstentions sit
+against it.
+
+**What this ruled out.** A model-driven "resolve node" was designed and scoped
+twice and never built, because each time the specific defect turned out to be
+cheaper to fix and the measurement said the node would not have helped. Three
+of the four scenarios it was meant to rescue were fixed deterministically in
+milliseconds instead.
+
+---
+
+## 15. Coverage is never worth a wrong answer
+
+**Decision.** Reverted a change that raised coverage, after measuring it.
+
+**The case.** Four Tier 3 abstentions name an aircraft by tail: "cover the
+VT-DXF First Officer on 20 Sep". Nothing bridged a tail to a pairing, so
+`find_cover_options` had nothing to work with. Adding a `registration` argument
+and routing the offline path on it turned two clean abstentions into two wrong
+answers, one of them a **verdict inversion on Q37**: the key says legal, the
+answer said illegal.
+
+A tail flies several pairings across the week, so picking the one on the first
+date named is a guess, and a guess that produces a legality verdict is the
+worst output this system can make.
+
+**Resolution.** The capability stays on the tool, where the agent can use it
+once it has actually established which duty is meant. The offline path abstains
+rather than guessing. Net effect: one question gained, from a pattern fix
+unrelated to tails, and no safety lost.
+
+**Why this is the rule and not a judgement call.** The rubric says correctness
+outweighs coverage in as many words. A system that declines eleven questions
+and is never wrong is worth more at 6 a.m. than one that answers thirteen and
+lies about two.
+
+---
+
+## 16. Predictions are worth less than measurements
+
+**Decision.** Stop predicting whether a change will help. Measure it.
+
+**The record from one session, stated plainly:**
+
+| Prediction | Outcome |
+|---|---|
+| "the model is too weak for Tier 1" | Wrong. It was our verifier rejecting correct answers over a non-breaking hyphen. |
+| "39.07 hours looks wrong" | Wrong. 39.07 was the expected answer. |
+| "fixing the planner will improve Tier 2" | Wrong. 9, 11, 12 against a single 13 before. |
+| "routing to the fast path will gain accuracy" | Wrong, and dangerous: it would have introduced a wrong answer. |
+| "the recommendation renderer is the blocker" | Wrong. The grader reads the structured options. |
+| "bridging tails will fix four Tier 3 questions" | Wrong. It fixed one and broke two. |
+
+**What worked instead, every time:** print the actual output. Tool arguments,
+fact keys, rendered text, the payload dict. The closure bug was found by
+dumping `payload["affected_flights"]` and seeing the right answer sitting there
+unrendered. The planner bug was found by printing what
+`with_structured_output` returns: `None`, four times in six.
+
+**Cost.** Slower. Every change needs a run before and after, and on the agent
+path a single run is not evidence, because Tier 2 has scored 9, 10, 10, 12 and
+13 on near-identical code.
 
 ## What was deliberately not done
 

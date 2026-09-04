@@ -213,6 +213,26 @@ request for decoration).
 
 ## Open
 
+Everything below is coverage. The deterministic path currently answers 27 of 38
+with no wrong answers, no partials and no verdict inversions; the 11 it
+declines it declines honestly. Every one investigated so far has been a routing
+gap, never a rules, tool or arithmetic gap.
+
+- [ ] S4 partial at 70%: the delay answer does not name the delayed flight in
+      prose. Fourth instance of the renderer summarising a collection the key
+      wants the members of.
+- [ ] S6 partial at 79%: the double sick call needs richer per-gap enumeration
+      alongside the joint allocation.
+- [ ] Five Tier 3 questions still abstain. Four of them name an aircraft by
+      tail; the tool can now bridge a tail to a pairing but the offline path
+      deliberately will not route on it (see DECISIONS 15), so this needs the
+      agent, or a date-disambiguated intent.
+- [ ] Q38 is a design question ("which three data points should a morning
+      briefing surface and why"). It may not be answerable by this system at
+      all, and saying so is a legitimate outcome.
+- [ ] Agent-mode Tier 2 is 11 of 14 plus or minus 2. Quote a median of five
+      runs, never a single run.
+
 - [ ] 7 golden failures (Q19, Q29, S1, S2, S3, S6, flagship), all traced to
       intent matching in `resolve/`, not to the tools or the ops engine
 - [ ] Six of the eight Tier 3 questions abstain on one shared cause:

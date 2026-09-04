@@ -7,14 +7,19 @@ memory.
 
 ## The short version
 
-The architecture is built and the boundary it claims is real and enforced. The
-deterministic path answers Tier 1 at 100% accuracy in single digit
-milliseconds, and the agent path on `deepseek-v4-flash` now answers **16 of 16**
-with nothing wrong, which is the first configuration to beat the offline path.
+The architecture is built and the boundary it claims is real and enforced.
 
-What is not done is Tier 2 and Tier 3. Six of eight Tier 3 questions and the
-flagship demo scenario still fail, all traced to intent matching in `resolve/`.
-That is the work that remains, and it is not a model problem.
+**The deterministic path answers 27 of 38 questions with no wrong answers, no
+partials and no verdict inversions, in about 12 milliseconds, with no API key
+at all.** Four of the six worked scenarios are correct, including the flagship,
+and the other two are partial rather than wrong. The agent path on
+`deepseek-v4-flash` answers Tier 1 at 16 of 16.
+
+What is not done is coverage. Eleven of 38 questions are declined, and the
+decline is honest: five on Tier 2, five on Tier 3, one on Tier 1. Every one of
+those is a routing gap, not a rules, tool or arithmetic gap. The engines
+already compute the right answer in every case investigated so far; what fails
+is the layer that decides which computation to run.
 
 ## Where each tier actually stands
 
@@ -24,10 +29,28 @@ Scored against the shipped answer keys, all 38 questions.
 
 | Tier | n | correct | partial | abstained | wrong | accuracy | grounded | avg/p95 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 16 | 15 | 0 | 1 | 0 | 100% | 15/16 | 4ms / 5ms |
-| 2 | 14 | 6 | 1 | 6 | 1 | 75% | 8/14 | 8ms / 14ms |
-| 3 | 8 | 2 | 0 | 6 | 0 | 100% | 2/8 | 32ms / 91ms |
-| **All** | **38** | **23** | **1** | **13** | **1** | **92%** | **25/38** | 9ms / 23ms |
+| 1 | 16 | 15 | 0 | 1 | 0 | 100% | 15/16 | 3ms / 3ms |
+| 2 | 14 | 9 | 0 | 5 | 0 | 100% | 9/14 | 15ms / 83ms |
+| 3 | 8 | 3 | 0 | 5 | 0 | 100% | 3/8 | 36ms / 79ms |
+| **All** | **38** | **27** | **0** | **11** | **0** | **100%** | **27/38** | 12ms / 79ms |
+
+Started this session at 23 correct with one wrong answer and one partial. The
+wrong answer and the partial are both gone, and four questions moved from
+declined to correct.
+
+### The six worked scenarios, deterministic
+
+| Scenario | Result | Exercises |
+|---|---|---|
+| S1 | correct, 100% | Sick call, cover options, exclusions |
+| S2 | **correct, 100%** | Two-day pairing sick call. **The flagship.** |
+| S3 | correct, 100% | Station closure, 13 flights, 6 pairings |
+| S4 | partial, 70% | Technical delay, FDP breach |
+| S5 | correct, 100% | Expired certificate, illegal duty, recovery |
+| S6 | partial, 79% | Two simultaneous sick calls, joint allocation |
+
+Four correct, two partial, nothing wrong, all six grounded. They started this
+session at zero correct with three wrong.
 
 "Accuracy" excludes abstentions. It is the share of questions the system chose
 to answer that it got right, which is the number the rubric's scoring principle
@@ -253,18 +276,12 @@ returns 401. Every agent-mode number here is a statement about
 
 ## Test suite
 
-`make test`: **595 passed, 7 failed, 15 xfailed, 2 deselected.**
+`make test`: **617 passed, 7 failed, 15 xfailed, 2 deselected.**
 
-The 7 failures are all pre-existing golden parity failures and were failing
-before this session's work:
-
-- `test_questions.py::test_parity[Q19-T2]`, `[Q29-T2]`
-- `test_scenarios.py::test_scenario_parity[S1]`, `[S2]`, `[S3]`, `[S6]`
-- `test_scenarios.py::test_flagship_scenario_holds`
-
-The last one matters most. **S2 is the demo scenario** and it currently grades
-`wrong` at 14% recall. If the presentation is built around "Captain C-1042 is
-out, what do I do", that path does not hold up right now.
+Two failures remain, both scenario parity and both **partial rather than
+wrong**: `S4` at 70% and `S6` at 79%. S4 does not name the delayed flight in
+prose; S6 needs richer per-gap enumeration. The session started with seven
+failures including the flagship.
 
 The 2 deselected are the new live-provider tests, excluded by default.
 
