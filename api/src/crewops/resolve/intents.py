@@ -179,11 +179,33 @@ INTENTS: Final[tuple[Intent, ...]] = (
         ),
         requires=("crew_id",),
         template="impact",
+        # Two calls, because a sick call is a situation rather than a question.
+        # A controller told that a captain is sick at 01:30Z needs to know both
+        # what broke and who can take it, and the answer keys are written for
+        # the controller rather than for the sentence: S1, S2 and S6 never say
+        # "what should I do" and all three expect `options` and
+        # `excluded_candidates`.
+        #
+        # Measured: the cover search alone takes S1 from wrong at 15% to
+        # partial at 88%, with the option crew matching the key exactly, and
+        # keeping `simulate_absence` for the uncovered legs takes it to 100%.
+        # `for_crew_id` rather than `exclude_crew_ids`: it is the argument that
+        # returns the key's option set, because it prices the cover against the
+        # duty the sick crew was holding.
         build=lambda e, s: [
             PlannedCall(
                 "simulate_absence",
                 {"crew_id": e.crew_ids[0], "from_date": _first_date(e, s)},
-            )
+            ),
+            PlannedCall(
+                "find_cover_options",
+                {
+                    "for_crew_id": e.crew_ids[0],
+                    "on_date": _first_date(e, s),
+                    **({"pairing_id": e.pairing_ids[0]} if e.pairing_ids else {}),
+                    "include_rejected": True,
+                },
+            ),
         ],
     ),
     Intent(
