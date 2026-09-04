@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --extra dev
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Types
+        run: uv run mypy
+
+      - name: The boundary between the model and the deterministic core
+        run: uv run pytest tests/test_boundary.py -v
+
+      - name: Tests
+        # No ANTHROPIC_API_KEY is set. Everything must pass offline: the
+        # deterministic core, the rules engine, the verifier and the
+        # answer-key parity checks do not need a model.
+        run: uv run pytest
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Types
+        run: pnpm exec tsc --noEmit
+
+      - name: Build
+        run: pnpm build
+
+  dataset:
+    name: Dataset is unmodified
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: The provided dataset must never change
+        # The answer keys every golden test asserts against live in these
+        # files. A diff here means a result somewhere is no longer checkable.
+        run: |
+          if git diff --name-only origin/main...HEAD -- data/ | grep -q .; then
+            echo "The dataset under data/ was modified. It is read only."
+            git diff --stat origin/main...HEAD -- data/
+            exit 1
+          fi
+          echo "data/ unchanged."
+
+      - name: The dataset's own validator
+        run: python3 data/crew-ops-advisor-dataset/validate.py

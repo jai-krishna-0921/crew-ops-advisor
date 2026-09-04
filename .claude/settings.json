@@ -1,17 +1,19 @@
 {
-  "//": "Project-scoped Claude Code settings. Committed so every contributor gets the same guardrails.",
+  "//": "Project-scoped Claude Code settings. Committed so every contributor and every agent gets the same guardrails.",
   "permissions": {
     "allow": [
-      "Bash(uv run pytest:*)",
-      "Bash(uv run python evals/run_eval.py:*)",
-      "Bash(uv run python evals/make_samples.py:*)",
-      "Bash(uv run crewops:*)",
-      "Bash(uv sync:*)",
-      "Bash(uv pip install:*)",
+      "Bash(cd api && uv run pytest:*)",
+      "Bash(cd api && uv run ruff:*)",
+      "Bash(cd api && uv run mypy:*)",
+      "Bash(cd api && uv run crewops:*)",
+      "Bash(cd api && uv run python:*)",
+      "Bash(cd api && uv sync:*)",
+      "Bash(cd web && pnpm:*)",
       "Bash(make:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
+      "Bash(git add:*)",
       "Bash(python3 data/crew-ops-advisor-dataset/validate.py)",
       "Read(//home/jk/Documents/Bessemer-Dcortex/agentic-crew-ops-dvisor/**)",
       "Grep",
@@ -20,8 +22,9 @@
     "deny": [
       "Write(//home/jk/Documents/Bessemer-Dcortex/agentic-crew-ops-dvisor/data/**)",
       "Edit(//home/jk/Documents/Bessemer-Dcortex/agentic-crew-ops-dvisor/data/**)",
-      "Bash(python3 data/crew-ops-advisor-dataset/generate.py)"
+      "Bash(python3 data/crew-ops-advisor-dataset/generate.py)",
+      "Bash(rm -rf data/**)"
     ]
   },
-  "//deny-note": "The dataset is read only. Regenerating it would silently change the answer keys the golden tests assert against, and every result in the README is quoted from the shipped pack."
+  "//deny-note": "The provided dataset is read only. Regenerating it would silently move the answer keys that every golden test asserts against, and every figure quoted in the README and the deck comes from the shipped pack. The held-out scenarios under data/**/internal/ are judging material: gitignored, never a training or tuning target."
 }
