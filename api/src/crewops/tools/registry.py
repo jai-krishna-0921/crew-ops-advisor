@@ -31,7 +31,13 @@ from typing import Any, Literal, cast
 from crewops.contracts.evidence import Fact, FactUnit, ToolEnvelope
 from crewops.contracts.ops import CostBreakdown, CostLine
 from crewops.contracts.ops import JointPlan as ContractJointPlan
-from crewops.contracts.rules import ALL_RULE_IDS
+from crewops.contracts.rules import (
+    ALL_RULE_IDS,
+    DayLegality,
+    LegalityReport,
+    RuleTrace,
+    Verdict,
+)
 from crewops.contracts.tools import DelayMode, JointObjective, TimeOfDay
 from crewops.domain import (
     Crew,
@@ -39,6 +45,7 @@ from crewops.domain import (
     WorldState,
     at_clock,
     format_duration,
+    format_margin,
     load_world,
 )
 from crewops.ops import CoverSearch, OpsEngine, allocate, option_to_cover_option
@@ -205,7 +212,8 @@ class Tools:
         available_on: DateType | None = None,
         name_contains: str | None = None,
         crew_ids: list[str] | None = None,
-        limit: int = 50,
+        status: str | None = None,
+        limit: int = 200,
     ) -> ToolEnvelope:
         timer = ToolTimer()
         args = {
@@ -216,6 +224,7 @@ class Tools:
             "available_on": available_on,
             "name_contains": name_contains,
             "crew_ids": crew_ids,
+            "status": status,
             "limit": limit,
         }
         if crew_ids:
@@ -238,6 +247,15 @@ class Tools:
             name_contains=name_contains,
             crew_ids=crew_ids,
         )
+        if status:
+            # Not indexed in the SQLite projection, so this filters the
+            # already narrowed id list. Candidate enumeration for a cover
+            # search drops non-active crew silently and never reports them as
+            # exclusions, so a caller diagnosing an eligibility gap should not
+            # lean on this filter to explain one; it is a plain lookup filter.
+            matched = [
+                cid for cid in matched if self.world.require_crew(cid).status == status
+            ]
         shown = matched[:limit]
         payload = P.CrewList(
             crew=tuple(self._crew_summary(c) for c in shown),
@@ -1338,18 +1356,39 @@ class Tools:
         flight_numbers: list[str] | None = None,
         on_date: DateType | None = None,
         as_replacement_for: str | None = None,
+        added_duty_hours: float | None = None,
+        added_flight_hours: float | None = None,
     ) -> ToolEnvelope:
         timer = ToolTimer()
-        args = {
+        args: dict[str, Any] = {
             "crew_id": crew_id,
             "pairing_id": pairing_id,
             "flight_numbers": flight_numbers,
             "on_date": on_date,
             "as_replacement_for": as_replacement_for,
+            "added_duty_hours": added_duty_hours,
+            "added_flight_hours": added_flight_hours,
         }
         if self.world.crew_member(crew_id) is None:
             return error_envelope(
                 "check_legality", args, self._unknown_crew(crew_id), timer=timer
+            )
+        if pairing_id is None and not flight_numbers:
+            if added_duty_hours is None and added_flight_hours is None:
+                return error_envelope(
+                    "check_legality",
+                    args,
+                    "Name a pairing_id or flight_numbers, or ask a hypothetical "
+                    "with added_duty_hours or added_flight_hours.",
+                    timer=timer,
+                )
+            return self._check_legality_hypothetical(
+                args,
+                timer,
+                crew_id=crew_id,
+                on_date=on_date,
+                added_duty_hours=added_duty_hours,
+                added_flight_hours=added_flight_hours,
             )
         try:
             duties, ref = self._resolve_assignment(pairing_id, flight_numbers, on_date)
@@ -1404,6 +1443,154 @@ class Tools:
                 cite("duty_clocks.json", crew_id),
                 cite("certifications.json", crew_id),
                 cite("rosters.json", ref),
+            ],
+            timer=timer,
+        )
+
+    def _check_legality_hypothetical(
+        self,
+        args: dict[str, Any],
+        timer: ToolTimer,
+        *,
+        crew_id: str,
+        on_date: DateType | None,
+        added_duty_hours: float | None,
+        added_flight_hours: float | None,
+    ) -> ToolEnvelope:
+        """How much more could this crew member fly, without naming an assignment.
+
+        Only RULE-DUTY-02 and RULE-FLT-03 have a window that a bare hour count
+        can test; the other five need a concrete duty day (a rating, a
+        certificate, a report time) that a hypothetical does not supply. Those
+        five come back `NOT_APPLICABLE`, stated as such, never silently PASS.
+        """
+        moment_date = on_date or self.world.snapshot.date()
+        clocks = self._clock_summary(crew_id, moment_date)
+        facts = list(self._clock_facts(crew_id, clocks))
+        traces: list[RuleTrace] = []
+
+        if added_duty_hours is not None:
+            total = round(clocks.duty_hours_7d + added_duty_hours, 2)
+            margin = round(clocks.duty_limit_7d - total, 2)
+            breach = total > clocks.duty_limit_7d
+            traces.append(
+                RuleTrace(
+                    rule_id="RULE-DUTY-02",
+                    title=RULE_TITLES["RULE-DUTY-02"],
+                    verdict=Verdict.BREACH if breach else Verdict.PASS,
+                    duty_date=moment_date,
+                    limit=clocks.duty_limit_7d,
+                    observed=total,
+                    unit="hours",
+                    margin=margin,
+                    margin_human=format_margin(margin),
+                    arithmetic=(
+                        f"{clocks.duty_hours_7d}h existing 7 day total + "
+                        f"{added_duty_hours}h hypothetical = {total}h against a "
+                        f"{clocks.duty_limit_7d:.0f}h limit, {format_margin(margin)}"
+                    ),
+                )
+            )
+            facts.append(
+                computed_fact(
+                    f"{crew_id}.{moment_date}.duty_7d.hypothetical_total",
+                    "7 day duty total with the hypothetical hours added",
+                    total,
+                    "hours",
+                    f"{clocks.duty_hours_7d}h + {added_duty_hours}h = {total}h",
+                    _SOURCE,
+                )
+            )
+        if added_flight_hours is not None:
+            total = round(clocks.flight_hours_28d + added_flight_hours, 2)
+            margin = round(clocks.flight_limit_28d - total, 2)
+            breach = total > clocks.flight_limit_28d
+            traces.append(
+                RuleTrace(
+                    rule_id="RULE-FLT-03",
+                    title=RULE_TITLES["RULE-FLT-03"],
+                    verdict=Verdict.BREACH if breach else Verdict.PASS,
+                    duty_date=moment_date,
+                    limit=clocks.flight_limit_28d,
+                    observed=total,
+                    unit="hours",
+                    margin=margin,
+                    margin_human=format_margin(margin),
+                    arithmetic=(
+                        f"{clocks.flight_hours_28d}h existing 28 day total + "
+                        f"{added_flight_hours}h hypothetical = {total}h against a "
+                        f"{clocks.flight_limit_28d:.0f}h limit, {format_margin(margin)}"
+                    ),
+                )
+            )
+            facts.append(
+                computed_fact(
+                    f"{crew_id}.{moment_date}.flight_28d.hypothetical_total",
+                    "28 day flight total with the hypothetical hours added",
+                    total,
+                    "hours",
+                    f"{clocks.flight_hours_28d}h + {added_flight_hours}h = {total}h",
+                    _SOURCE,
+                )
+            )
+        for rule_id in ALL_RULE_IDS:
+            if rule_id in ("RULE-DUTY-02", "RULE-FLT-03"):
+                continue
+            traces.append(
+                RuleTrace(
+                    rule_id=rule_id,
+                    title=RULE_TITLES[rule_id],
+                    verdict=Verdict.NOT_APPLICABLE,
+                    duty_date=moment_date,
+                    note="Hypothetical hour count only, no concrete duty day named, "
+                    "so this rule cannot be evaluated.",
+                    arithmetic="not evaluated: no concrete assignment named",
+                )
+            )
+
+        any_breach = any(t.verdict is Verdict.BREACH for t in traces)
+        overall = Verdict.BREACH if any_breach else Verdict.PASS
+        day = DayLegality(
+            duty_date=moment_date,
+            verdict=overall,
+            traces=traces,
+            feasibility=[],
+        )
+        added = ", ".join(
+            part
+            for part in (
+                f"{added_duty_hours}h duty" if added_duty_hours is not None else "",
+                f"{added_flight_hours}h flight" if added_flight_hours is not None else "",
+            )
+            if part
+        )
+        report = LegalityReport(
+            crew_id=crew_id,
+            assignment_ref=f"hypothetical {added} on {moment_date}",
+            assignment_kind="duty_day",
+            overall=overall,
+            per_day=[day],
+            rules_checked=list(ALL_RULE_IDS),
+        )
+        checked = [t for t in traces if t.verdict is not Verdict.NOT_APPLICABLE]
+        detail = "; ".join(t.arithmetic for t in checked) or "no hypothetical hours named"
+        return ok_envelope(
+            "check_legality",
+            args,
+            report,
+            facts=facts,
+            trace=[
+                step(
+                    f"Test the hypothetical for {crew_id}",
+                    f"Overall {overall.value}. {detail}. Only RULE-DUTY-02 and "
+                    "RULE-FLT-03 have a window a bare hour count can test; the "
+                    "other five need a concrete duty day and come back not applicable.",
+                    [f.key for f in facts[:4]],
+                )
+            ],
+            citations=[
+                cite("duty_clocks.json", crew_id),
+                cite("rules.json", "RULE-DUTY-02, RULE-FLT-03"),
             ],
             timer=timer,
         )
