@@ -160,6 +160,13 @@ class AbstentionReason(str, Enum):
     """Why the system declined. Every value is a specific, actionable gap."""
 
     OUT_OF_SCOPE = "out_of_scope"
+
+    #: Not a question at all: "hey", "thanks". Distinct from OUT_OF_SCOPE
+    #: because the right response is a capability statement, not a refusal.
+    #: Declining to answer "what is the capital of France" is the system
+    #: working; declining to answer "hello" reads as it being broken.
+    GREETING = "greeting"
+
     NOT_IN_DATASET = "not_in_dataset"
     AMBIGUOUS_REFERENT = "ambiguous_referent"
     UNDERSPECIFIED = "underspecified"

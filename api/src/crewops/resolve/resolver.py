@@ -80,6 +80,10 @@ class DeterministicResolver:
         triage = triage_question(question)
 
         if not triage.in_scope:
+            # A greeting is answered, not refused. It carries no "I cannot" and
+            # nothing under "what was missing", because nothing is missing: the
+            # controller has not asked for anything yet.
+            greeting = triage.abstention_reason is AbstentionReason.GREETING
             return self._abstain(
                 question,
                 thread_id=thread_id,
@@ -88,8 +92,12 @@ class DeterministicResolver:
                 started=started,
                 abstention=Abstention(
                     reason=triage.abstention_reason or AbstentionReason.OUT_OF_SCOPE,
-                    message="I cannot answer that reliably. " + triage.reason,
-                    missing=[triage.reason],
+                    message=(
+                        triage.reason
+                        if greeting
+                        else "I cannot answer that reliably. " + triage.reason
+                    ),
+                    missing=[] if greeting else [triage.reason],
                     suggestions=list(SUPPORTED_SHAPES[:3]),
                 ),
                 tier=triage.tier,

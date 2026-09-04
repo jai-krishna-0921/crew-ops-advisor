@@ -238,6 +238,36 @@ def rank_in(question: str) -> str | None:
     return None
 
 
+#: Openers and pleasantries. Matched as whole tokens, never as substrings, so
+#: the `hi` in `which` and the `yo` in `beyond` do not count.
+_GREETING_TOKENS: Final[frozenset[str]] = frozenset(
+    {
+        "hey", "hi", "hiya", "hello", "yo", "howdy", "greetings",
+        "good", "morning", "afternoon", "evening", "day",
+        "thanks", "thank", "you", "thx", "ta", "cheers", "ok", "okay",
+        "please", "there", "team", "again", "much", "so", "very",
+    }
+)
+
+#: A greeting is short. Anything longer is a sentence that happens to open
+#: politely, and the length cap is a cheap second guard behind the token check.
+_GREETING_MAX_TOKENS: Final = 4
+
+
+def _is_greeting(question: str) -> bool:
+    """True when the whole question is an opener or a thank you.
+
+    Deliberately strict: **every** token must be a pleasantry. That is what
+    keeps "hey, who is on reserve at BLR" a real question, which is how a
+    controller under pressure actually types. A greeting in front of a question
+    is a question.
+    """
+    tokens = re.findall(r"[a-z]+", question.lower())
+    if not tokens or len(tokens) > _GREETING_MAX_TOKENS:
+        return False
+    return all(token in _GREETING_TOKENS for token in tokens)
+
+
 def triage_question(question: str) -> Triage:
     """Classify a question without spending anything.
 
@@ -254,6 +284,19 @@ def triage_question(question: str) -> Triage:
             reason="Empty question.",
             entities=entities,
             abstention_reason=AbstentionReason.UNDERSPECIFIED,
+        )
+
+    if _is_greeting(question):
+        return Triage(
+            in_scope=False,
+            tier=1,
+            reason=(
+                "This is a crew operations desk assistant. Ask about crew, "
+                "flights, pairings, rosters, duty and flight hour limits, "
+                "certifications, reserve cover or the impact of a disruption."
+            ),
+            entities=entities,
+            abstention_reason=AbstentionReason.GREETING,
         )
 
     out_of_scope_hits = sorted(words & _OUT_OF_SCOPE_TERMS)

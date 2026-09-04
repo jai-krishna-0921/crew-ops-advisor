@@ -39,6 +39,7 @@ from crewops.agent.factory import CoreUnavailableError, build_model, load_tools
 from crewops.agent.memory import Memory
 from crewops.agent.toolspecs import call_tool
 from crewops.contracts import (
+    AbstentionReason,
     Recommendation,
     Reply,
     ReplyKind,
@@ -184,14 +185,17 @@ def _render_abstention(reply: Reply) -> None:
     if abstention.missing:
         body.append(Text("\nWhat was missing:", style="bold"))
         body.extend(Text(f"  {line}") for line in abstention.missing)
+    greeting = abstention.reason is AbstentionReason.GREETING
     if abstention.suggestions:
-        body.append(Text("\nTry instead:", style="bold"))
+        # A greeting has not asked for anything, so these are an opening menu
+        # rather than a correction.
+        body.append(Text("\nTry asking:" if greeting else "\nTry instead:", style="bold"))
         body.extend(Text(f"  {line}", style="cyan") for line in abstention.suggestions)
     console.print(
         Panel(
             Group(*body),
-            title=f"Declined: {abstention.reason.value}",
-            border_style="red",
+            title="Crew Ops Advisor" if greeting else f"Declined: {abstention.reason.value}",
+            border_style="cyan" if greeting else "red",
         )
     )
 

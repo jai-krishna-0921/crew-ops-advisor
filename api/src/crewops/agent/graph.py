@@ -245,12 +245,18 @@ def build_graph(
             "triage_reason": verdict.reason,
         }
         if not verdict.in_scope:
+            # A greeting is answered, not refused. Nothing is missing: the
+            # controller has not asked for anything yet. Same treatment as the
+            # offline resolver, so both paths greet identically.
+            greeting = verdict.abstention_reason is AbstentionReason.GREETING
             update["abstention"] = Abstention(
                 reason=verdict.abstention_reason or AbstentionReason.OUT_OF_SCOPE,
                 message=(
-                    "I cannot answer that reliably. " + verdict.reason
+                    verdict.reason
+                    if greeting
+                    else "I cannot answer that reliably. " + verdict.reason
                 ),
-                missing=[verdict.reason],
+                missing=[] if greeting else [verdict.reason],
                 did_establish=[],
                 suggestions=_scope_suggestions(),
             )
