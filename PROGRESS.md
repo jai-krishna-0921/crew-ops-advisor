@@ -71,7 +71,8 @@ fails.
 | deterministic (no model) | 6 | 6 | 1 | 8/14 | 7ms / 11ms |
 | agent, first measurement | 5 | 8 | **1** | 6/14 | 23.5s / 32.5s |
 | agent, after the correctness fixes | 10 | 4 | **0** | 10/14 | 18.0s / 30.6s |
-| **agent, after cutting round trips** | **12** | 2 | **0** | 11/14 | 19.5s / 32.9s |
+| agent, after cutting round trips | 12 | 2 | **0** | 11/14 | 19.5s / 32.9s |
+| **agent, after the stopping rule** | **13** | 1 | **0** | 13/14 | 15.3s / 27.2s |
 
 Correctness more than doubled and the verdict inversion is gone. The agent path
 now beats the deterministic path on Tier 2, 12 against 6.
@@ -136,26 +137,34 @@ Three causes, none of them a slow computation:
 
 That took Tier 2 from 10 of 14 to **12 of 14**, still with nothing wrong.
 
+### Stopping once the answer is in hand
+
+The last two were not missing a capability. Q26 got the right answer from
+`scan_duty_headroom` on its third call and then made four more confirming it.
+Q21 had its verdict by the fifth and made three more after. Both ran out of
+clock holding a correct answer.
+
+The prompt now says to stop and write once the tools have established the
+answer, and that an unnecessary call is not caution, it is the most likely way
+to lose the answer you already had. **12 of 14 to 13**, average latency 19.5s
+to 15.3s, p95 32.9s to 27.2s, which is inside the budget rather than over it.
+
 ### Why it is not 14 of 14
 
-Both remaining abstentions score **100% recall**. The system finds the right
-facts and then declines on the 30 second budget. The capability is complete;
-what is missing is seconds.
+One question is left, Q27, and it times out at 35.6s holding 88% of the
+expected facts. It is the densest question in the tier: a sick captain, the
+reserve captains whose on-call windows cover the callout time, and whether each
+is rated for the aircraft.
 
-Runs vary: 9, 10, 10, 12 across four measurements on identical code and
-prompts. These models do not honour temperature 0, so a single 14 would be
-luck rather than a result.
+Runs have scored 9, 10, 10, 12 and 13 across five measurements as the fixes
+landed. The last number is the current code, but these models do not honour
+temperature 0, so treat 13 as the middle of a range and not a guarantee.
 
-What is left would cost something. Raising the budget to 45s would probably
-clear both, and would abandon the one latency commitment the problem statement
-actually states. The alternative is per-question batching with no general form
-left to find.
-
-The recommendation is to stop here. The rubric's own principle is that
-correctness beats coverage, and Tier 2 now has **zero wrong answers and zero
-verdict inversions** across every run since the fixes. A 14 of 14 bought by
-relaxing the latency discipline would be a worse submission than a 12 of 14
-that never lies and never stalls.
+Getting the fourteenth would mean raising the budget past 30s, which abandons
+the one latency commitment the problem statement actually states. That is the
+wrong trade. Tier 2 has **zero wrong answers and zero verdict inversions**
+across every run since the fixes, and the rubric's own principle is that
+correctness beats coverage.
 
 ### The verifier was rejecting correct answers
 
@@ -194,7 +203,7 @@ returns 401. Every agent-mode number here is a statement about
 
 ## Test suite
 
-`make test`: **534 passed, 7 failed, 15 xfailed, 2 deselected.**
+`make test`: **587 passed, 7 failed, 15 xfailed, 2 deselected.**
 
 The 7 failures are all pre-existing golden parity failures and were failing
 before this session's work:
