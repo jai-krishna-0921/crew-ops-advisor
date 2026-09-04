@@ -238,6 +238,19 @@ class SimulateDelayArgs(BaseModel):
     )
 
 
+class EarliestReportArgs(BaseModel):
+    released_at: str | None = Field(
+        default=None,
+        description="When the crew was released from duty, ISO, e.g. "
+        "2026-09-16T15:30:00Z",
+    )
+    crew_id: str | None = Field(
+        default=None,
+        description="Resolve the release from this crew member's last recorded "
+        "release instead of naming a time",
+    )
+
+
 class ScanDutyHeadroomArgs(BaseModel):
     on_date: date = Field(description="The duty date to measure headroom against")
     threshold_hours: float | None = Field(
@@ -527,6 +540,18 @@ TOOL_SPECS: Final[tuple[ToolSpec, ...]] = (
         ScanDutyHeadroomArgs,
         lambda tools, a: tools.scan_duty_headroom(**a.model_dump(exclude_none=True)),
         lambda a: f"Sweeping duty headroom for {a.get('on_date')}",
+    ),
+    ToolSpec(
+        "earliest_report",
+        "RULE-REST-04 read forwards: the earliest a crew may next report after a "
+        "release. Use this for any 'when can they fly again' or 'earliest they "
+        "may report' question. Never add the rest hours to a timestamp yourself: "
+        "this tool computes it and returns the arithmetic.",
+        EarliestReportArgs,
+        lambda tools, a: tools.earliest_report(**a.model_dump(exclude_none=True)),
+        lambda a: (
+            f"Applying RULE-REST-04 to {a.get('released_at') or a.get('crew_id')}"
+        ),
     ),
     ToolSpec(
         "find_cover_options",

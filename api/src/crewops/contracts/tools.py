@@ -350,6 +350,25 @@ class ToolSurface(Protocol):
         """
         ...
 
+    def earliest_report(
+        self,
+        *,
+        released_at: str | None = None,
+        crew_id: str | None = None,
+    ) -> ToolEnvelope:
+        """RULE-REST-04 read forwards: when may this crew next report?
+
+        Give a release time, or a crew member whose last release is on record.
+        Returns the earliest legal report time with the arithmetic behind it.
+
+        This exists so the answer to "a crew is released at 15:30Z, when can
+        they report next" is computed rather than added up by the model. Adding
+        twelve hours to a timestamp is exactly the arithmetic the boundary
+        keeps out of a language model, and without a tool for it the question
+        is one the system must decline.
+        """
+        ...
+
     # ---------------------------------------------------------------- tier 3
     # Recommendation. Ranking legal options against real trade-offs.
 
@@ -467,6 +486,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "simulate_station_closure",
     "simulate_delay",
     "scan_duty_headroom",
+    "earliest_report",
     # tier 3, recommendation
     "find_cover_options",
     "plan_joint_cover",
@@ -501,7 +521,13 @@ RETRIEVAL_ONLY: frozenset[str] = frozenset(
 #: Tools whose result is required before the system may assert a legality
 #: verdict, a consequence, or a ranked recommendation. Enforced in the graph.
 REQUIRED_FOR: dict[str, frozenset[str]] = {
-    "legality_claim": frozenset({"check_legality", "find_cover_options", "plan_joint_cover"}),
+    # `earliest_report` belongs here: it evaluates RULE-REST-04 and returns a
+    # rule trace, so "they may report at 03:30Z" is a computed verdict on the
+    # same footing as any other. Leaving it out made the guard refuse an answer
+    # the rules engine had genuinely produced.
+    "legality_claim": frozenset(
+        {"check_legality", "find_cover_options", "plan_joint_cover", "earliest_report"}
+    ),
     "consequence_claim": frozenset(
         {
             "simulate_absence",
@@ -509,6 +535,7 @@ REQUIRED_FOR: dict[str, frozenset[str]] = {
             "simulate_station_closure",
             "simulate_delay",
             "scan_duty_headroom",
+            "earliest_report",
         }
     ),
     "recommendation_claim": frozenset({"find_cover_options", "plan_joint_cover"}),

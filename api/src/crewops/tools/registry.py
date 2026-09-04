@@ -46,7 +46,9 @@ from crewops.domain import (
     at_clock,
     format_duration,
     format_margin,
+    format_utc,
     load_world,
+    parse_utc,
 )
 from crewops.ops import CoverSearch, OpsEngine, allocate, option_to_cover_option
 from crewops.rules import (
@@ -149,6 +151,26 @@ RuleComparison: dict[str, str] = {
         "positioning flight exists"
     ),
 }
+
+
+def _parse_release(value: str) -> DateTime | None:
+    """A release timestamp, however a controller happens to type it.
+
+    The dataset is entirely UTC and stores a trailing Z, but nobody types the Z
+    under pressure and `fromisoformat` will not take it on older forms. Both are
+    accepted and both mean the same instant; anything else returns None so the
+    caller can fail loudly rather than guess at an hour.
+    """
+    text = value.strip()
+    try:
+        return parse_utc(text)
+    except ValueError:
+        pass
+    try:
+        parsed = DateTime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=None)
 
 
 def _apply_metric(
@@ -2005,6 +2027,115 @@ class Tools:
                 cite("rosters.json", result.pairing_id),
                 cite("rules.json", "RULE-FDP-01"),
             ],
+            timer=timer,
+        )
+
+    def earliest_report(
+        self,
+        *,
+        released_at: str | None = None,
+        crew_id: str | None = None,
+    ) -> ToolEnvelope:
+        timer = ToolTimer()
+        args: dict[str, Any] = {"released_at": released_at, "crew_id": crew_id}
+
+        release: DateTime | None = None
+        resolved_from = ""
+        if released_at:
+            release = _parse_release(released_at)
+            if release is None:
+                return error_envelope(
+                    "earliest_report",
+                    args,
+                    f"Could not read {released_at!r} as a release time. Use an ISO "
+                    "timestamp, for example 2026-09-16T15:30:00Z.",
+                    timer=timer,
+                )
+            resolved_from = f"the release time given, {format_utc(release)}"
+        elif crew_id:
+            if self.world.crew_member(crew_id) is None:
+                return error_envelope(
+                    "earliest_report", args, self._unknown_crew(crew_id), timer=timer
+                )
+            clocks = self.world.duty_clock(crew_id)
+            release = getattr(clocks, "last_rest_ended", None) if clocks else None
+            if release is None:
+                return error_envelope(
+                    "earliest_report",
+                    args,
+                    f"{crew_id} has no recorded release time, so the rest window "
+                    "has no start. Give released_at explicitly.",
+                    timer=timer,
+                )
+            resolved_from = f"{crew_id}'s last recorded release, {format_utc(release)}"
+        else:
+            return error_envelope(
+                "earliest_report",
+                args,
+                "Name a released_at timestamp, or a crew_id whose last release is "
+                "on record.",
+                timer=timer,
+            )
+
+        rest_hours = self.rules.min_rest
+        earliest = self.rules.earliest_next_report(release)
+        arithmetic = (
+            f"{format_utc(release)} release + {rest_hours}h minimum rest = "
+            f"{format_utc(earliest)}"
+        )
+
+        trace_row = RuleTrace(
+            rule_id="RULE-REST-04",
+            title=RULE_TITLES["RULE-REST-04"],
+            verdict=Verdict.PASS,
+            duty_date=earliest.date(),
+            limit=rest_hours,
+            observed=rest_hours,
+            unit="hours",
+            margin=0.0,
+            margin_human="exactly at the minimum",
+            arithmetic=arithmetic,
+            note="The earliest legal report. Reporting before this breaches RULE-REST-04.",
+        )
+
+        facts = [
+            computed_fact(
+                "rest.earliest_report",
+                "Earliest legal report time",
+                format_utc(earliest),
+                "datetime",
+                arithmetic,
+                _SOURCE,
+            ),
+            computed_fact(
+                "rest.min_rest_hours",
+                "Minimum rest before duty",
+                rest_hours,
+                "hours",
+                f"RULE-REST-04 requires {rest_hours}h between release and report",
+                _SOURCE,
+            ),
+        ]
+
+        return ok_envelope(
+            "earliest_report",
+            args,
+            {
+                "released_at": release,
+                "earliest_report": earliest,
+                "rest_hours": rest_hours,
+                "rule_id": "RULE-REST-04",
+                "rule_traces": [trace_row],
+            },
+            facts=facts,
+            trace=[
+                step(
+                    "Apply RULE-REST-04 forwards",
+                    f"Resolved from {resolved_from}. {arithmetic}.",
+                    [f.key for f in facts],
+                )
+            ],
+            citations=[cite("rules.json", "RULE-REST-04")],
             timer=timer,
         )
 
