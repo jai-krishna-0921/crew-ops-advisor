@@ -48,8 +48,24 @@ export function useCommandPalette() {
   return { open, setOpen };
 }
 
-export function CommandPalette({
-  open,
+/**
+ * The palette unmounts when closed rather than hiding. That is what keeps the
+ * query and the cursor fresh on each open without an effect resetting them,
+ * and it keeps the dialog out of the accessibility tree while it is shut.
+ */
+export function CommandPalette(props: {
+  open: boolean;
+  onClose: () => void;
+  questions: SampleQuestion[];
+  threads: ThreadSummary[];
+  onAsk: (question: string) => void;
+  onOpenThread: (threadId: string) => void;
+}) {
+  if (!props.open) return null;
+  return <PaletteBody {...props} />;
+}
+
+function PaletteBody({
   onClose,
   questions,
   threads,
@@ -65,7 +81,7 @@ export function CommandPalette({
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [cursor, setCursor] = useState(0);
+  const [rawCursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -95,24 +111,20 @@ export function CommandPalette({
     );
   }, [questions, threads, query]);
 
-  useEffect(() => {
-    if (open) {
-      setQuery("");
-      setCursor(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [open]);
+  // Clamped rather than reset in an effect: a shrinking list must never leave
+  // the highlight pointing past the end.
+  const cursor = Math.min(rawCursor, Math.max(entries.length - 1, 0));
 
+  // Focus and scroll are external systems, so they belong in effects. State
+  // resets do not: the cursor is clamped at render and moved from handlers.
   useEffect(() => {
-    setCursor(0);
-  }, [query]);
+    inputRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     const node = listRef.current?.children[cursor] as HTMLElement | undefined;
     node?.scrollIntoView({ block: "nearest" });
   }, [cursor]);
-
-  if (!open) return null;
 
   const choose = (entry: Entry) => {
     onClose();
@@ -137,7 +149,10 @@ export function CommandPalette({
           <input
             ref={inputRef}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setCursor(0);
+            }}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
                 event.preventDefault();
