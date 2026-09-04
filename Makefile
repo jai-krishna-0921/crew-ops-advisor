@@ -28,13 +28,13 @@ dev: ## API on :8000 and web on :3000 together
 	@echo "API  http://localhost:8000"
 	@echo "Web  http://localhost:3000"
 	@trap 'kill 0' EXIT INT TERM; \
-	( cd $(API) && uv run uvicorn crewops.server.app:app --reload --port 8000 ) & \
+	( cd $(API) && uv run uvicorn --factory crewops.server.app:create_app --reload --port 8000 ) & \
 	( cd $(WEB) && pnpm dev ) & \
 	wait
 
 .PHONY: serve
 serve: ## API only
-	cd $(API) && uv run uvicorn crewops.server.app:app --reload --port 8000
+	cd $(API) && uv run uvicorn --factory crewops.server.app:create_app --reload --port 8000
 
 .PHONY: web
 web: ## Web only

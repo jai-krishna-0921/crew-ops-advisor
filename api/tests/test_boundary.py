@@ -239,3 +239,102 @@ def test_the_dataset_on_disk_is_unmodified() -> None:
     for name in sorted(expected):
         raw = (data_dir / name).read_text(encoding="utf-8")
         json.loads(raw)  # a truncated or rewritten file fails here
+
+
+# ---------------------------------------------------------------------------
+# Contract conformance.
+#
+# `contracts/tools.py` is the seam three workstreams build against. When the
+# protocol widened and the registry did not follow, the flagship scenario
+# silently started abstaining: a question names a person, the tool wanted a
+# pairing, and nothing bridged the two. Nothing failed, it just stopped
+# answering. These tests turn that class of drift into a build failure.
+
+
+def _tool_surface() -> Any:
+    from crewops.contracts.tools import ToolSurface
+
+    return ToolSurface
+
+
+def _protocol_methods() -> dict[str, Any]:
+    import inspect
+
+    return {
+        name: fn
+        for name, fn in inspect.getmembers(_tool_surface(), inspect.isfunction)
+        if not name.startswith("_")
+    }
+
+
+def test_tool_names_match_the_protocol() -> None:
+    """`TOOL_NAMES` is what the agent binds. It must be the protocol, exactly."""
+    from crewops.contracts.tools import TOOL_NAMES
+
+    assert set(TOOL_NAMES) == set(_protocol_methods()), (
+        "TOOL_NAMES and the ToolSurface protocol have diverged.\n"
+        f"  only in TOOL_NAMES: {sorted(set(TOOL_NAMES) - set(_protocol_methods()))}\n"
+        f"  only in protocol:   {sorted(set(_protocol_methods()) - set(TOOL_NAMES))}"
+    )
+
+
+def test_retrieval_only_and_required_for_name_real_tools() -> None:
+    """The graph's guards reference tools by name. A typo would disable a guard."""
+    from crewops.contracts.tools import REQUIRED_FOR, RETRIEVAL_ONLY, TOOL_NAMES
+
+    names = set(TOOL_NAMES)
+    assert RETRIEVAL_ONLY <= names, f"unknown tools: {sorted(RETRIEVAL_ONLY - names)}"
+    for claim, required in REQUIRED_FOR.items():
+        assert required <= names, f"{claim} names unknown tools: {sorted(required - names)}"
+
+
+def test_the_registry_implements_the_whole_tool_surface() -> None:
+    """Every protocol method exists on the concrete registry."""
+    try:
+        from crewops.tools.registry import Tools
+    except ImportError:
+        pytest.skip("crewops.tools.registry not implemented yet")
+
+    missing = sorted(name for name in _protocol_methods() if not hasattr(Tools, name))
+    assert not missing, (
+        f"crewops.tools.registry.Tools is missing {missing}. The agent binds every "
+        "name in TOOL_NAMES, so a missing method is a question the system can never answer."
+    )
+
+
+def test_registry_signatures_have_not_fallen_behind_the_contract() -> None:
+    """Every keyword the contract promises must exist on the implementation.
+
+    The implementation may accept extra keywords. It may not drop one the
+    protocol declares, because the agent and the offline resolver both call
+    through the contract and a dropped keyword becomes a runtime abstention
+    rather than a build failure.
+    """
+    import inspect
+
+    try:
+        from crewops.tools.registry import Tools
+    except ImportError:
+        pytest.skip("crewops.tools.registry not implemented yet")
+
+    problems: list[str] = []
+    for name, spec in _protocol_methods().items():
+        impl = getattr(Tools, name, None)
+        if impl is None:
+            continue  # reported by the test above
+        promised = {
+            p
+            for p, param in inspect.signature(spec).parameters.items()
+            if param.kind is inspect.Parameter.KEYWORD_ONLY
+        }
+        actual = set(inspect.signature(impl).parameters)
+        dropped = sorted(promised - actual)
+        if dropped:
+            problems.append(f"{name} is missing {dropped}")
+
+    assert not problems, (
+        "These tools accept fewer arguments than contracts/tools.py promises:\n  "
+        + "\n  ".join(problems)
+        + "\n\nWiden the implementation to match the contract, or change the "
+        "contract deliberately and tell the other workstreams."
+    )
