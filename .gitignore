@@ -23,6 +23,9 @@ next-env.d.ts
 # Local state
 .env
 .env.local
+.env.*.local
+# The example carries no secrets and documents the flags, so it ships.
+!.env.example
 *.sqlite
 *.sqlite3
 *.db

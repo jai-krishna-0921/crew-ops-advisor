@@ -66,33 +66,67 @@ def render(template: str, envelopes: Sequence[ToolEnvelope], question: str) -> s
 
 
 def _render_legality(envelopes: Sequence[ToolEnvelope], _question: str) -> str:
+    """The verdict, then only what a controller has to act on.
+
+    Every interface that shows this text also renders a card per rule per day,
+    with the limit, the observed value, the margin and the arithmetic. Repeating
+    all of that in the prose produced a paragraph of seven rules times two days
+    that buried the one line that matters: whether this is legal, and if not,
+    by how much.
+
+    So the prose states the verdict, names the breaches with their margins, and
+    stops. The cards carry the rules that passed.
+    """
     report = _payload(envelopes, LegalityReport)
     if report is None:
         return _render_generic(envelopes, _question)
 
-    lines: list[str] = []
     verdict = _VERDICT_WORD.get(report.overall, str(report.overall.value))
-    lines.append(
-        f"{report.crew_id} on {report.assignment_ref}: {verdict} "
-        f"({report.overall.value})."
-    )
+    lines: list[str] = [f"{report.crew_id} on {report.assignment_ref}: {verdict}."]
 
-    for day in sorted(report.per_day, key=lambda item: item.duty_date):
-        word = _VERDICT_WORD.get(day.verdict, day.verdict.value)
-        lines.append(f"\n{day.duty_date}: {word}.")
-        for trace in day.traces:
-            if trace.verdict in (Verdict.PASS, Verdict.NOT_APPLICABLE) and not trace.arithmetic:
-                continue
-            lines.append(f"  {_trace_line(trace)}")
+    breaches = report.breaches
+    if breaches:
+        for trace in breaches:
+            when = f" on {trace.duty_date}" if trace.duty_date else ""
+            lines.append(f"{trace.rule_id}{when}: {trace.arithmetic}")
+    else:
+        tightest = _tightest_trace(report)
+        if tightest is not None and tightest.margin_human:
+            lines.append(
+                f"All {len(report.rules_checked) or 7} rules pass on every day. "
+                f"The tightest is {tightest.rule_id} with "
+                f"{tightest.margin_human}."
+            )
+
+    blocking = [issue for issue in report.feasibility_issues if issue.blocking]
+    for issue in blocking:
+        lines.append(f"Not assignable: {issue.detail}")
 
     if report.overall is Verdict.BREACH and len(report.per_day) > 1:
         lines.append(
-            "\nA candidate has to be legal on every day of the assignment. "
+            "A candidate has to be legal on every day of the assignment. "
             "Passing one day and breaching another is not a legal option."
         )
-    if report.rules_checked:
-        lines.append("\nRules checked: " + ", ".join(report.rules_checked) + ".")
-    return "\n".join(lines)
+    return "\n\n".join(lines)
+
+
+def _tightest_trace(report: LegalityReport) -> RuleTrace | None:
+    """The rule with the least headroom across every day of the assignment.
+
+    A legal assignment is not automatically a comfortable one, and this is the
+    number that tells a controller whether they still have room if the day
+    deteriorates.
+    """
+    tightest: RuleTrace | None = None
+    best = float("inf")
+    for day in report.per_day:
+        for trace in day.traces:
+            margin = trace.margin
+            if margin is None or margin < 0:
+                continue
+            if margin < best:
+                tightest, best = trace, margin
+    return tightest
 
 
 def _render_impact(envelopes: Sequence[ToolEnvelope], question: str) -> str:
