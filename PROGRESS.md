@@ -43,7 +43,14 @@ Four models, same 16 questions, same answer keys.
 | **deepseek-v4-flash** | **16** | 0 | 0 | **0** | **16/16** | 6.5s | 12.1s |
 | gpt-oss:120b | 13 | 1 | 1 | 1 | 15/16 | 7.2s | 10.0s |
 | glm-5.1 | 13 | 0 | 3 | 0 | 13/16 | 16.9s | 27.4s |
+| kimi-k2.6 | 5 | 0 | 11 | 0 | 5/16 | 37.3s | 63.2s |
 | qwen2.5:7b | unusable | | | | | | |
+
+`kimi-k2.6` is the clearest warning against reading the scorecard's `acc`
+column on its own. It reports **100% accuracy**, because it abstained on 11 of
+16 and got the remaining 5 right. Correct whenever it answers, and useless at a
+desk. Its p95 of 63.2s is also past the problem statement's stated limit
+outright.
 
 `deepseek-v4-flash:cloud` is now the Ollama default. It is the only
 configuration measured so far that **beats the deterministic path on Tier 1**,

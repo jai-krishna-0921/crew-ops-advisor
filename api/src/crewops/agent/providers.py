@@ -115,6 +115,8 @@ _SPECS: Final[tuple[ProviderSpec, ...]] = (
         #   glm-5.1            13/16, three abstentions, p95 27.4s, which is
         #                      close enough to the "45s is not a decision aid"
         #                      line in the problem statement to matter
+        #   kimi-k2.6          5/16, eleven abstentions, p95 63.2s, past that
+        #                      line outright
         #   qwen2.5:7b         unusable: returns an empty `tool_calls` list for
         #                      a bound schema, so the agent loop has nothing to
         #                      execute
