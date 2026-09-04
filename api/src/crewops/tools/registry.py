@@ -1856,6 +1856,21 @@ class Tools:
         for row in result.assessments:
             facts.extend(
                 (
+                    # The flight number as a *value*, not only as a key prefix.
+                    #
+                    # Every figure about this leg was already attestable and the
+                    # leg itself was not, because attestation reads fact values
+                    # and `DX461` appeared only inside `DX461-2026-09-19.
+                    # min_delay_hours`. So an answer naming the affected flights
+                    # was rejected as ungrounded, which is the verifier working
+                    # correctly against a tool that had not said the thing.
+                    dataset_fact(
+                        f"{row.flight_id}.affected",
+                        "Affected flight",
+                        str(row.flight_id).split("-")[0],
+                        "flight_no",
+                        _SOURCE,
+                    ),
                     computed_fact(
                         f"{row.flight_id}.min_delay_hours",
                         "Minimum delay",

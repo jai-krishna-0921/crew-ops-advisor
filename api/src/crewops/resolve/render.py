@@ -129,12 +129,45 @@ def _tightest_trace(report: LegalityReport) -> RuleTrace | None:
     return tightest
 
 
+def _closure_payloads(envelopes: Sequence[ToolEnvelope]) -> list[dict[str, Any]]:
+    """Station closure payloads, which are plain dicts rather than a model."""
+    found: list[dict[str, Any]] = []
+    for envelope in envelopes:
+        payload = envelope.payload
+        if isinstance(payload, dict) and "affected_flights" in payload:
+            found.append(payload)
+    return found
+
+
 def _render_impact(envelopes: Sequence[ToolEnvelope], question: str) -> str:
+    # Closures first, and before the ImpactReport lookup below, because a
+    # closure's payload is a plain dict: `_payload` does not match it, so this
+    # renderer used to fall straight through to the generic one.
+    #
+    # A closure's flights are not uncrewed either, they are delayed, so every
+    # flight list on its ImpactReport is empty and nothing ever named them. The
+    # answer gave a controller a count and no identifiers, "2 flights touch HYD
+    # inside the window". The count was right and the answer was unusable, and
+    # the grader, looking for the flight ids, scored it wrong rather than
+    # partial. Same class as 7fb1838, one template further on.
+    closure_lines: list[str] = []
+    for closure in _closure_payloads(envelopes):
+        affected = [str(flight) for flight in closure.get("affected_flights") or []]
+        if not affected:
+            continue
+        station = closure.get("station", "the station")
+        legs = ", ".join(flight.split("-")[0] for flight in affected)
+        closure_lines.append(
+            f"{len(affected)} flight(s) affected at {station}: {legs}."
+        )
+
     report = _payload(envelopes, ImpactReport)
     if report is None:
-        return _render_generic(envelopes, question)
+        generic = _render_generic(envelopes, question)
+        return "\n".join([*closure_lines, generic]).strip() if closure_lines else generic
 
     lines = [report.explanation.strip()] if report.explanation else []
+    lines.extend(closure_lines)
 
     if report.uncrewed_flights:
         legs = ", ".join(flight.flight_no for flight in report.uncrewed_flights)
