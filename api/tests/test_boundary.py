@@ -16,6 +16,7 @@ import ast
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -283,9 +284,13 @@ def test_retrieval_only_and_required_for_name_real_tools() -> None:
     from crewops.contracts.tools import REQUIRED_FOR, RETRIEVAL_ONLY, TOOL_NAMES
 
     names = set(TOOL_NAMES)
-    assert RETRIEVAL_ONLY <= names, f"unknown tools: {sorted(RETRIEVAL_ONLY - names)}"
+    assert names.issuperset(RETRIEVAL_ONLY), (
+        f"RETRIEVAL_ONLY names unknown tools: {sorted(RETRIEVAL_ONLY - names)}"
+    )
     for claim, required in REQUIRED_FOR.items():
-        assert required <= names, f"{claim} names unknown tools: {sorted(required - names)}"
+        assert names.issuperset(required), (
+            f"{claim} names unknown tools: {sorted(required - names)}"
+        )
 
 
 def test_the_registry_implements_the_whole_tool_surface() -> None:

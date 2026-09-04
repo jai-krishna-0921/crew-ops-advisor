@@ -117,6 +117,13 @@ class AttestedSet:
             return True
         if atom.kind == "identifier" and atom.canon in self.stations:
             return True
+        # Same overlap for aircraft types. The registrar and the prose scanner
+        # can classify the same string differently, and attestation should not
+        # depend on them agreeing.
+        if atom.kind == "aircraft" and atom.canon in self.identifiers:
+            return True
+        if atom.kind == "identifier" and atom.canon in self.aircraft:
+            return True
         if atom.kind == "date" and atom.canon.startswith("--"):
             # A partial date matches any attested date with that month and day.
             suffix = atom.canon[1:]
@@ -218,7 +225,13 @@ class AttestedSet:
             return
 
         ident = canonical_identifier(text)
-        if ident and _looks_like_identifier(ident):
+        # `canonical_identifier` strips internal whitespace, so a sentence
+        # collapses into something that passes an identifier shape check. Judge
+        # on the original: anything with a space is prose and belongs in the
+        # re-scan branch below, where the atoms inside it get registered
+        # individually. Without this, "short-rest pattern over last 14 days"
+        # registers as one opaque token and the 14 inside it is never attested.
+        if ident and not _has_whitespace(text) and _looks_like_identifier(ident):
             kind: AtomKind = (
                 "rule_id"
                 if ident.startswith("RULE-")
@@ -385,5 +398,20 @@ def _looks_like_identifier(text: str) -> bool:
     return any(character.isalnum() for character in text) and " " not in text
 
 
+def _has_whitespace(raw: object) -> bool:
+    return isinstance(raw, str) and any(character.isspace() for character in raw)
+
+
 def _looks_like_aircraft(text: str) -> bool:
-    return bool(text) and text[0] in "AB" and text[1:].isdigit()
+    """An aircraft type: one or more letters, then digits.
+
+    Covers A320 and B737, and also ATR72 and E190. The narrower "first letter
+    is A or B, rest are digits" test classified ATR72 as a plain identifier,
+    and since the prose scanner extracts it as an aircraft, the two buckets
+    disagreed and a genuinely attested type was rejected.
+    """
+    if not text:
+        return False
+    head = text.rstrip("0123456789")
+    tail = text[len(head) :]
+    return bool(head) and bool(tail) and head.isalpha() and len(head) <= 3
