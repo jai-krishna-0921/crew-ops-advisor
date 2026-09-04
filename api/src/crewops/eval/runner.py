@@ -18,11 +18,10 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from crewops.contracts.reply import Reply
-from crewops.eval.cases import REPO_ROOT
+from crewops.env import load_env as _load_env
 
 MODE_DETERMINISTIC = "deterministic"
 MODE_AGENT = "agent"
@@ -31,19 +30,12 @@ MODE_AGENT = "agent"
 def load_env() -> None:
     """Pick up `.env.local` and `.env` from the repository root if present.
 
-    Agent mode is selected by whichever provider key is present, in the
-    precedence order set out in `crewops.agent.providers`. Without any of them
-    everything still runs, on the deterministic path. That is the point of the
-    deterministic path.
+    Kept as a name here because several callers read well with it. The
+    behaviour moved to `crewops.env`, because living in the eval harness meant
+    the eval harness was the only thing that got it: the API and the CLI both
+    ignored a configured key and answered offline.
     """
-    try:
-        from dotenv import load_dotenv
-    except ImportError:  # pragma: no cover - dotenv is a declared dependency
-        return
-    for name in (".env.local", ".env"):
-        path: Path = REPO_ROOT / name
-        if path.is_file():
-            load_dotenv(path, override=False)
+    _load_env()
 
 
 def has_api_key() -> bool:

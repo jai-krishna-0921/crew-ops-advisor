@@ -48,6 +48,13 @@ from crewops.contracts import (
     VerificationStatus,
     Watchlist,
 )
+from crewops.env import REPO_ROOT, load_env
+
+# The CLI reads the repository's env file for the same reason the API does:
+# `uv run crewops ask` on a machine with a key configured was answering on the
+# deterministic path and saying so, which reads as a setting rather than as a
+# key nothing had loaded.
+load_env(REPO_ROOT)
 
 app = typer.Typer(
     name="crewops",

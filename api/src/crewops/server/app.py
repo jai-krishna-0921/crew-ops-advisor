@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from crewops.agent.config import AgentConfig
 from crewops.agent.memory import Memory
 from crewops.contracts import ToolSurface
+from crewops.env import REPO_ROOT, load_env
 from crewops.server.deps import AppState, build_state
 from crewops.server.routes import router
 
@@ -55,6 +56,11 @@ def create_app(
     enable_memory: bool = True,
 ) -> FastAPI:
     """Build the app. Every dependency can be injected, which is how it is tested."""
+    # BEFORE the config is read, because the config is what decides whether
+    # this process runs the agent or the deterministic resolver. Loading the
+    # file afterwards would set the key and change nothing, which is the
+    # subtler version of the bug this fixes.
+    load_env(REPO_ROOT)
     cfg = config or AgentConfig.from_env()
 
     @asynccontextmanager

@@ -40,6 +40,13 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
 - [x] Session persistence across a reload
 - [x] Contextual memory stubs, wired per thread
 
+## Landed: agent mode
+
+- [x] Fix: the API and the CLI never read `.env.local`, so a configured key
+      was ignored and every turn ran offline. `load_env` moved out of the eval
+      harness into `crewops.env` and is called by both.
+- [x] Agent mode verified end to end through the UI, 59/59 figures attested
+
 ## Landed: this pass
 
 - [x] Fonts: Clash Grotesk display, Cabinet Grotesk text, the variable files
