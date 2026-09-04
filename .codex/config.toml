@@ -1,0 +1,101 @@
+[mcp_servers.clearml]
+command = "uvx"
+args = ["clearml-mcp"]
+
+[mcp_servers.colab-proxy-mcp]
+command = "uvx"
+args = ["git+https://github.com/googlecolab/colab-mcp"]
+
+[mcp_servers.context7]
+command = "npx"
+args = [
+    "-y",
+    "@upstash/context7-mcp",
+]
+
+[mcp_servers.docs-langchain]
+url = "https://docs.langchain.com/mcp"
+
+[mcp_servers.excel]
+command = "uvx"
+args = [
+    "excel-mcp-server",
+    "stdio",
+]
+
+[mcp_servers.filesystem]
+command = "npx"
+args = [
+    "-y",
+    "@modelcontextprotocol/server-filesystem",
+    ".",
+]
+
+[mcp_servers.git]
+command = "uvx"
+args = ["mcp-server-git"]
+
+[mcp_servers.github]
+command = "npx"
+args = [
+    "-y",
+    "@modelcontextprotocol/server-github",
+]
+env_vars = ["GITHUB_PERSONAL_ACCESS_TOKEN"]
+
+[mcp_servers.memory]
+command = "npx"
+args = [
+    "-y",
+    "@modelcontextprotocol/server-memory",
+]
+
+[mcp_servers.mlflow-mcp]
+command = "uv"
+args = [
+    "run",
+    "--with",
+    "mlflow[mcp]>=3.5.1",
+    "mlflow",
+    "mcp",
+    "run",
+]
+
+[mcp_servers.mlflow-mcp.env]
+MLFLOW_TRACKING_URI = "http://localhost:5000"
+
+[mcp_servers.playwright]
+command = "npx"
+args = [
+    "-y",
+    "@playwright/mcp@latest",
+]
+
+[mcp_servers.reference-langchain]
+url = "https://reference.langchain.com/mcp"
+
+[mcp_servers.revenue-intelligence]
+command = "uv"
+args = [
+    "run",
+    "python",
+    "-m",
+    "comarketer.revenue_intel.mcp_server",
+    "--client",
+    "demo-atlas",
+]
+
+[mcp_servers.sequential-thinking]
+command = "npx"
+args = [
+    "-y",
+    "@modelcontextprotocol/server-sequential-thinking",
+]
+
+[mcp_servers.shadcn]
+command = "npx"
+args = [
+    "-y",
+    "shadcn@latest",
+    "mcp",
+]
