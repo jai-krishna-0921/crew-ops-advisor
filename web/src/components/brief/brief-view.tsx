@@ -11,7 +11,7 @@
  * launchpad rather than a wall of warnings.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRightIcon, CalendarBlankIcon } from "@phosphor-icons/react/dist/ssr";
@@ -31,6 +31,7 @@ import {
 import { InsightCard } from "@/components/ai/elements";
 import { GroundedText } from "@/components/answer/grounded-prose";
 import { FactProvider } from "@/components/evidence/fact-context";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import {
   EmptyState,
   Eyebrow,
@@ -133,6 +134,13 @@ export function BriefView() {
     [watchlist],
   );
 
+  /* A bad date raises fourteen alerts, each a card deep enough that four fill
+     the window. Eight to a page keeps the severity filter and the counts above
+     it on screen while the reader works down the list, which is the whole
+     point of a brief: it is read at six in the morning, in order, once. */
+  const top = useRef<HTMLDivElement>(null);
+  const paged = usePaged(alerts, 8, `${date}|${filter}`);
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="anim-fade-up mx-auto max-w-5xl px-6 pt-10 pb-14 sm:px-10">
@@ -234,7 +242,7 @@ export function BriefView() {
           </div>
         ) : null}
 
-        <div className="mt-4 space-y-2">
+        <div ref={top} className="mt-4 space-y-2">
           {loading ? (
             <>
               <Skeleton className="h-16 w-full" />
@@ -257,11 +265,18 @@ export function BriefView() {
               drawerOpen={false}
               setDrawerOpen={() => undefined}
             >
-              {alerts.map((alert, index) => (
+              {paged.slice.map((alert, index) => (
                 <AlertRow key={`${alert.title}-${index}`} alert={alert} />
               ))}
             </FactProvider>
           )}
+
+          <Pagination
+            paged={paged}
+            label="Brief alerts"
+            unit="alert"
+            scrollTo={top}
+          />
         </div>
 
         <p className="mt-6 max-w-[68ch] text-xs text-ink-3">

@@ -9,7 +9,7 @@
  * discovered later is worse than a limit stated up front.
  */
 
-import { ArrowRightIcon, WarningIcon } from "@phosphor-icons/react/dist/ssr";
+import { WarningIcon } from "@phosphor-icons/react/dist/ssr";
 
 import { useMemo } from "react";
 
@@ -21,6 +21,7 @@ import { DataTable } from "@/components/answer/data-table";
 import { Markdown } from "@/components/answer/markdown";
 import { ImpactReportView } from "@/components/answer/impact-report";
 import { RuleTraceCard } from "@/components/answer/rule-trace";
+import { SuggestionList } from "@/components/answer/suggestions";
 import { VerificationPanel } from "@/components/answer/verification";
 import { SourceChip } from "@/components/ai/elements";
 import { Disclosure, Eyebrow } from "@/components/ui/primitives";
@@ -78,13 +79,32 @@ export function AnswerBody({
   const sources = allSources.slice(0, SOURCE_CAP);
   const extraSources = allSources.length - sources.length;
 
+  // WHEN THE TURN ABSTAINS, THE CARD IS THE ANSWER. `headline_of` cuts the
+  // first sentence out of `abstention.message` and `Reply.text` carries the
+  // rest, so rendering the headline, the text and the card put the same words
+  // on the screen three times: a heading, a paragraph under it, and the card's
+  // own copy of both. The card is the one that names the reason and offers a
+  // way forward, so the card is the one that stays.
+  const declined = reply.abstention != null;
+
+  // `_follow_ups` sets `follow_ups` to the abstention's own suggestions, which
+  // the card has already rendered. Left alone that is the same three buttons
+  // twice, once inside the card and once under it.
+  const followUps = declined
+    ? reply.follow_ups.filter(
+        (question) => !reply.abstention?.suggestions.includes(question),
+      )
+    : reply.follow_ups;
+
   return (
     <div className="space-y-4">
-      {reply.headline ? (
+      {reply.headline && !declined ? (
         <h2 className="macro max-w-[52ch] text-xl text-ink">{reply.headline}</h2>
       ) : null}
 
-      {reply.text ? <Markdown text={reply.text} facts={facts} /> : null}
+      {reply.text && !declined ? (
+        <Markdown text={reply.text} facts={facts} />
+      ) : null}
 
       {reply.abstention ? (
         <AbstentionCard
@@ -175,25 +195,8 @@ export function AnswerBody({
         </section>
       ) : null}
 
-      {reply.follow_ups.length > 0 && onAsk ? (
-        <nav aria-label="Follow up questions" className="flex flex-wrap gap-1.5">
-          {reply.follow_ups.map((question) => (
-            <button
-              key={question}
-              type="button"
-              onClick={() => onAsk(question)}
-              className="group inline-flex items-center gap-1.5 rounded-sm bg-surface px-2 py-1 text-base text-ink-2 hairline transition-colors duration-100 hover:bg-hover hover:text-ink"
-            >
-              {question}
-              <ArrowRightIcon
-                size={11}
-                weight="bold"
-                aria-hidden
-                className="text-ink-3 transition-transform duration-150 group-hover:translate-x-0.5"
-              />
-            </button>
-          ))}
-        </nav>
+      {followUps.length > 0 && onAsk ? (
+        <SuggestionList label="Ask next" questions={followUps} onAsk={onAsk} />
       ) : null}
     </div>
   );

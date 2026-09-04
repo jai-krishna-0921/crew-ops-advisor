@@ -24,6 +24,7 @@ from typing import Any, Self
 import aiosqlite
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+from crewops.agent.titles import title_for
 from crewops.contracts import Reply
 
 __all__ = ["Memory", "ThreadSummary"]
@@ -163,23 +164,35 @@ class Memory:
         await self._log_conn.commit()
 
     async def _name_thread(self, reply: Reply) -> None:
-        """Name a conversation from its first answer, once.
+        """Name a conversation from the question that opened it, once.
 
-        `Reply.headline` is a short line written for a reader under time
-        pressure, by the model in agent mode and by the deterministic renderer
-        offline. It is already the sentence somebody would use to describe the
-        exchange, which makes it a better name than the ninety character
-        situation they typed to start it.
+        This used to name it from `Reply.headline`, on the reasoning that the
+        answer's own opening line is already the sentence somebody would use to
+        describe the exchange. It is, at the length an answer needs. In a rail
+        the reader has dragged down to 208 pixels it is not: typing "hey"
+        produced a conversation called "This is a crew operations desk
+        assistant", which describes the product rather than the exchange, and a
+        duty hours answer produced ninety characters truncated to "C-1042 (A.
+        Nair, Captain, BLR, A3…".
 
-        A title is language rather than a figure, which is why a model is
-        allowed to author one: nothing in the answer depends on it and the
-        verifier has nothing to attest. `INSERT OR IGNORE` is what keeps it to
-        the first turn and what stops it from ever overwriting a name somebody
-        typed, since a user rename holds the same primary key.
+        `title_for` is the replacement and lives next door. Five words,
+        identifier first, no model. See `agent/titles.py` for why each of those
+        three is the way it is.
+
+        `INSERT OR IGNORE` is what keeps naming to the first turn, and what
+        stops it from ever overwriting a name somebody typed, since a user
+        rename holds the same primary key.
         """
         if self._log_conn is None:
             return
-        title = _as_title(reply.headline or reply.question)
+        title = _as_title(
+            title_for(
+                reply.question,
+                abstention_reason=(
+                    reply.abstention.reason if reply.abstention is not None else None
+                ),
+            )
+        )
         if not title:
             return
         await self._log_conn.execute(

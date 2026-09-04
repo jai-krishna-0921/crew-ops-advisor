@@ -229,6 +229,7 @@ export const VERIFICATION_TONE: Record<VerificationStatus, Tone> = {
 
 export const ABSTENTION_LABEL: Record<AbstentionReason, string> = {
   out_of_scope: "Outside the dataset's scope",
+  greeting: "Not a question yet",
   not_in_dataset: "Not present in the dataset",
   ambiguous_referent: "Ambiguous referent",
   underspecified: "Question underspecified",

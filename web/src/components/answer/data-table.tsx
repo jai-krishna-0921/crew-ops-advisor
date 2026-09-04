@@ -8,14 +8,25 @@
  * invented would be a figure nobody checked.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { CaretDownIcon, CaretUpDownIcon, CaretUpIcon } from "@phosphor-icons/react/dist/ssr";
 
 import type { FactValue, Table } from "@/lib/contracts";
 import { plural } from "@/lib/format";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { cx } from "@/components/ui/tone";
 
 type Direction = "asc" | "desc";
+
+/**
+ * Rows to a page.
+ *
+ * "Which flights operate on 2026-09-16" returns 147 of them, and 147 rows
+ * inside a chat transcript pushes the next question, the sources and the
+ * evidence button so far down that a reader has to scroll past a table they
+ * have finished with to continue the conversation. Ten is a screenful.
+ */
+const ROWS_PER_PAGE = 10;
 
 export function DataTable({ table }: { table: Table }) {
   const [sort, setSort] = useState<{ column: number; direction: Direction } | null>(
@@ -30,6 +41,16 @@ export function DataTable({ table }: { table: Table }) {
     return [...indexed].sort((a, b) => factor * compare(a.row[column], b.row[column]));
   }, [table.rows, sort]);
 
+  // Sorting sends the reader back to page one. Re-sorting in place would keep
+  // them on page 5 of a list whose page 5 is now different rows, which reads
+  // as the sort having done nothing.
+  const top = useRef<HTMLElement>(null);
+  const paged = usePaged(
+    rows,
+    ROWS_PER_PAGE,
+    `${table.title}|${sort?.column ?? ""}|${sort?.direction ?? ""}`,
+  );
+
   const toggle = (column: number) => {
     setSort((current) => {
       if (!current || current.column !== column) {
@@ -41,7 +62,10 @@ export function DataTable({ table }: { table: Table }) {
   };
 
   return (
-    <figure className="anim-fade-up overflow-hidden rounded-md bg-surface hairline lg:-mx-14 xl:-mx-24">
+    <figure
+      ref={top}
+      className="anim-fade-up overflow-hidden rounded-md bg-surface hairline lg:-mx-14 xl:-mx-24"
+    >
       <figcaption className="flex flex-wrap items-baseline gap-x-2 px-4 pt-3 pb-1">
         <span className="text-base font-semibold text-ink">{table.title}</span>
         <span className="text-xs text-ink-3">{plural(table.rows.length, "row")}</span>
@@ -90,7 +114,7 @@ export function DataTable({ table }: { table: Table }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ row, index }) => (
+            {paged.slice.map(({ row, index }) => (
               <tr
                 key={table.row_ids[index] ?? index}
                 className="border-b border-line-soft last:border-0 hover:bg-hover"
@@ -111,6 +135,15 @@ export function DataTable({ table }: { table: Table }) {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="px-4 pb-2">
+        <Pagination
+          paged={paged}
+          label={`${table.title} rows`}
+          unit="row"
+          scrollTo={top}
+        />
       </div>
 
       {table.caption ? (

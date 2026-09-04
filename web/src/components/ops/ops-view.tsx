@@ -9,7 +9,7 @@
  * it in plain language.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CircleDashedIcon,
   GavelIcon,
@@ -33,6 +33,7 @@ import { RecommendationView } from "@/components/answer/cover-options";
 import { ImpactReportView } from "@/components/answer/impact-report";
 import { LegalityReportView } from "@/components/answer/rule-trace";
 import { FactProvider } from "@/components/evidence/fact-context";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import {
   EmptyState,
   Eyebrow,
@@ -198,6 +199,13 @@ function WorldStrip({ world }: { world: WorldSummary | null }) {
 function RulesPanel() {
   const [rules, setRules] = useState<RuleDefinition[] | null>(null);
 
+  /* Four to a page. Each rule carries its constraint and the decoded detail
+     behind it, so seven of them is roughly three screens of continuous prose
+     and a reader who wants RULE-QUAL-05 scrolls past four rules to reach it.
+     Four is the number that fits without the page number ever mattering. */
+  const top = useRef<HTMLElement>(null);
+  const paged = usePaged(rules ?? [], 4);
+
   useEffect(() => {
     let cancelled = false;
     api
@@ -222,13 +230,13 @@ function RulesPanel() {
   }
 
   return (
-    <section aria-label="The rulebook" className="space-y-2">
+    <section ref={top} aria-label="The rulebook" className="space-y-2">
       <p className="max-w-[72ch] text-base text-ink-2">
         Seven rules, as shipped in <span className="num">rules.json</span>.
         There is no eighth rule, and the system will say so rather than invent
         one.
       </p>
-      {rules.map((rule) => (
+      {paged.slice.map((rule) => (
         <article key={rule.rule_id} className="rounded-md bg-surface hairline">
           <header className="flex flex-wrap items-center gap-2 px-3 py-2">
             <Token>{rule.rule_id}</Token>
@@ -247,6 +255,8 @@ function RulesPanel() {
           ) : null}
         </article>
       ))}
+
+      <Pagination paged={paged} label="Rulebook" unit="rule" scrollTo={top} />
     </section>
   );
 }

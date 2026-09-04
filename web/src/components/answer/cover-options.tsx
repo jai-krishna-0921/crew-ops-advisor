@@ -32,8 +32,19 @@ import {
   VerdictPill,
 } from "@/components/answer/rule-trace";
 import { ConfidenceMeter } from "@/components/ai/elements";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { Disclosure, Eyebrow, Pill, Token } from "@/components/ui/primitives";
 import { cx } from "@/components/ui/tone";
+
+/**
+ * Rejected candidates to a page.
+ *
+ * Covering P-2291 evaluates every qualified captain in the fleet, so the
+ * excluded list runs to twenty cards each carrying the rule trace that
+ * excluded it. Showing the shape of the search is the point; making somebody
+ * scroll all of it to reach the notification draft underneath is not.
+ */
+const REJECTED_PER_PAGE = 6;
 
 const KIND_ICON: Record<CoverKind, typeof AirplaneTakeoffIcon> = {
   reserve: SealCheckIcon,
@@ -57,6 +68,7 @@ export function RecommendationView({
   recommendation: Recommendation;
 }) {
   const { options, rejected } = recommendation;
+  const pagedRejects = usePaged(rejected, REJECTED_PER_PAGE);
 
   return (
     <section className="space-y-3" aria-label="Cover options">
@@ -94,9 +106,16 @@ export function RecommendationView({
             excluded. The rule that excluded it is shown, not summarised.
           </p>
           <div className="space-y-2">
-            {rejected.map((option) => (
+            {pagedRejects.slice.map((option) => (
               <RejectedCard key={option.crew_id} option={option} />
             ))}
+          </div>
+          <div className="px-2">
+            <Pagination
+              paged={pagedRejects}
+              label="Candidates ruled out"
+              unit="candidate"
+            />
           </div>
         </Disclosure>
       ) : null}

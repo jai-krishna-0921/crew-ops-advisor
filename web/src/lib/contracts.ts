@@ -92,6 +92,9 @@ export type Confidence = "high" | "medium" | "low";
 
 export type AbstentionReason =
   | "out_of_scope"
+  // Not a question at all: "hey", "thanks". Separate from out_of_scope
+  // because the right response is a capability statement, not a refusal.
+  | "greeting"
   | "not_in_dataset"
   | "ambiguous_referent"
   | "underspecified"

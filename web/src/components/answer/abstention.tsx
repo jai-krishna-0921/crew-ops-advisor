@@ -8,13 +8,21 @@
  * right thing, and the card is designed to read that way: calm ground, the
  * reason named, what was missing, what was established anyway, and the
  * questions that would work instead.
+ *
+ * A GREETING IS NOT A REFUSAL and does not get the refusal's chrome. "Hey"
+ * came back under a heading reading "No answer given" next to an empty status
+ * pill, which is the product telling its first time user it has failed before
+ * they have asked it anything. Nothing is missing from a greeting: the
+ * controller has not asked for anything yet. It gets the product's name, a
+ * capability statement and three ways in.
  */
 
-import { ArrowRightIcon, ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr";
+import { ChatCircleDotsIcon, ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr";
 
 import type { Abstention, Fact } from "@/lib/contracts";
 import { ABSTENTION_LABEL } from "@/lib/format";
 import { GroundedText } from "@/components/answer/grounded-prose";
+import { SuggestionList } from "@/components/answer/suggestions";
 import { Eyebrow, Pill } from "@/components/ui/primitives";
 
 export function AbstentionCard({
@@ -26,15 +34,35 @@ export function AbstentionCard({
   facts: Fact[];
   onAsk?: (question: string) => void;
 }) {
+  const greeting = abstention.reason === "greeting";
+
   return (
     <section
-      aria-label="The advisor declined to answer"
+      aria-label={greeting ? "Welcome" : "The advisor declined to answer"}
       className="rounded-md bg-surface hairline"
     >
       <header className="flex flex-wrap items-center gap-2 px-3 py-2">
-        <ShieldCheckIcon size={15} weight="fill" aria-hidden className="text-unknown" />
-        <h3 className="text-base font-semibold text-ink">No answer given</h3>
-        <Pill tone="unknown">{ABSTENTION_LABEL[abstention.reason]}</Pill>
+        {greeting ? (
+          <ChatCircleDotsIcon
+            size={15}
+            weight="fill"
+            aria-hidden
+            className="text-accent"
+          />
+        ) : (
+          <ShieldCheckIcon
+            size={15}
+            weight="fill"
+            aria-hidden
+            className="text-unknown"
+          />
+        )}
+        <h3 className="text-base font-semibold text-ink">
+          {greeting ? "Crew Ops Advisor" : "No answer given"}
+        </h3>
+        {greeting ? null : (
+          <Pill tone="unknown">{ABSTENTION_LABEL[abstention.reason]}</Pill>
+        )}
       </header>
 
       <div className="px-3 py-3">
@@ -84,30 +112,12 @@ export function AbstentionCard({
       </div>
 
       {abstention.suggestions.length > 0 ? (
-        <div className="px-3 py-3">
-          <Eyebrow>Try instead</Eyebrow>
-          <ul className="mt-1.5 flex flex-wrap gap-1.5">
-            {abstention.suggestions.map((suggestion) => (
-              <li key={suggestion}>
-                <button
-                  type="button"
-                  onClick={() => onAsk?.(suggestion)}
-                  disabled={!onAsk}
-                  className="group inline-flex items-center gap-1.5 rounded-sm bg-inset px-2 py-1 text-base text-ink-2 transition-colors duration-100 hover:bg-hover hover:text-ink disabled:cursor-default disabled:opacity-70"
-                >
-                  {suggestion}
-                  {onAsk ? (
-                    <ArrowRightIcon
-                      size={11}
-                      weight="bold"
-                      aria-hidden
-                      className="text-ink-3 transition-transform duration-150 group-hover:translate-x-0.5"
-                    />
-                  ) : null}
-                </button>
-              </li>
-            ))}
-          </ul>
+        <div className="px-3 pt-1 pb-3">
+          <SuggestionList
+            label={greeting ? "Try asking" : "Try instead"}
+            questions={abstention.suggestions}
+            onAsk={onAsk}
+          />
         </div>
       ) : null}
     </section>

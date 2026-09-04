@@ -153,25 +153,50 @@ def headline_of(text: str, *, abstention: Abstention | None = None) -> str | Non
 def _body_after(text: str, headline: str | None) -> str:
     """The answer with its own headline removed.
 
-    `headline_of` takes the first line rather than inventing one, so leaving
-    that line in the body makes every interface print it twice, once large and
-    once again immediately underneath.
+    `headline_of` selects rather than invents, so leaving what it selected in
+    the body makes every interface print it twice, once large and once again
+    immediately underneath.
 
-    Two cases, and the difference matters. When the headline is the *whole*
-    answer, the body is empty and the interface renders one line. When the
-    headline is a *slice* of a longer paragraph, the body keeps everything,
-    because dropping it would take every figure after the first full stop with
-    it.
+    Three cases.
+
+    The headline is the *whole* answer: the body is empty and the interface
+    renders one line.
+
+    The headline is the first *sentence* of a longer paragraph: the body is
+    everything after it. This case used to fall through to "keep all of it" on
+    the grounds that trimming would cost the answer its figures, which is not
+    what happens: the figures in the trimmed sentence are still on the screen,
+    in the heading. What the old behaviour actually produced was the greeting
+    a controller sees below, a heading over a paragraph opening with the same
+    eight words.
+
+        This is a crew operations desk assistant
+        This is a crew operations desk assistant. Ask about crew, flights...
+
+    The headline is a *word boundary cut*, which is what `_first_sentence`
+    falls back to when there is no sentence end inside the budget. That cut is
+    a fragment rather than a sentence, so it stays: removing it would leave the
+    answer starting halfway through a clause. The remainder beginning with a
+    sentence terminator is exactly what tells the two apart.
     """
     if not headline:
         return text
     stripped = text.strip()
     first, sep, rest = stripped.partition("\n")
-    if not sep:
-        return "" if stripped.lstrip("#").strip() == headline else text
-    if first.strip().lstrip("#").strip() != headline:
+    if sep:
+        if first.strip().lstrip("#").strip() != headline:
+            return text
+        return rest.strip() or ""
+
+    lead = stripped.lstrip("#").strip()
+    if lead == headline:
+        return ""
+    if not lead.startswith(headline):
         return text
-    return rest.strip() or ""
+    remainder = lead[len(headline) :].lstrip()
+    if remainder[:1] not in (".", "!", "?"):
+        return text
+    return remainder[1:].strip()
 
 
 def collect_facts(envelopes: Sequence[ToolEnvelope]) -> list[Fact]:

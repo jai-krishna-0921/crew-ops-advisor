@@ -53,6 +53,41 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
       bubble in its own warm colour. Calmer than the reference: no
       photograph, no six-hue spectrum, chroma about a third of it.
 
+## Landed: one sentence once, and a name that fits
+
+- [x] Fix: an answer printed its opening sentence twice, once as the heading
+      and once at the top of the body. `_body_after` only removed the headline
+      when the answer had a line break in it, and most answers are one
+      paragraph. It now removes a leading *sentence* and leaves a word
+      boundary cut alone, because taking that out would open the body halfway
+      through a clause.
+- [x] Fix: a greeting rendered three times over. The heading, the paragraph
+      under it and the card all carried the same words, and the three
+      suggestions appeared once inside the card and again below it. When a
+      turn abstains the card is the answer, so the heading and the body above
+      it are gone and the follow ups are deduplicated against the card's own.
+- [x] Fix: a greeting is no longer dressed as a failure. It was headed "No
+      answer given" beside an empty status pill, because the web
+      `AbstentionReason` union never learned the `greeting` case the API had
+      started sending. It now reads "Crew Ops Advisor" and "Try asking",
+      matching what the CLI already did.
+- [x] Conversation names come from the question, not the answer's headline.
+      Five words, identifier first, no model: `agent/titles.py`, checked
+      against all 38 dataset questions. "hey" is "Greeting"; Q02 is "C-1042
+      duty hours"; Q31 is "C-1042 on P-2291 ranked options". The identifier
+      leads because the rail truncates from the right, and the id is the token
+      somebody is scanning thirty rows for.
+- [x] Suggested questions are rows at reading size in the tinted card family,
+      not 11px grey chips. On an abstention they are the only actionable
+      content on the card, and they were the smallest thing on it.
+- [x] Pagination, one primitive in `ui/pagination.tsx`, applied to the brief's
+      alerts (8), the rulebook (4), a Tier 1 table's rows (10), the evidence
+      panel's facts (12) and tool calls (8), and the candidates a cover search
+      ruled out (6). It renders nothing when the list fits on one page.
+- [x] Pinning a fact turns the evidence panel to its page. Paging broke the
+      link outright: clicking a figure in the prose opened the panel on page 1
+      showing twelve rows that had nothing to do with what was clicked.
+
 ## Landed: the font finally applies
 
 - [x] Fonts, verified by computed style rather than by network requests. The

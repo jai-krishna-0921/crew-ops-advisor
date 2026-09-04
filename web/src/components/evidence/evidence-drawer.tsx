@@ -30,6 +30,7 @@ import {
 } from "@/lib/format";
 import type { ToolRun } from "@/lib/turn";
 import { useFacts } from "@/components/evidence/fact-context";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import {
   Disclosure,
   EmptyState,
@@ -49,6 +50,12 @@ const PROV_ICON: Record<Provenance, typeof DatabaseIcon> = {
   computed: FunctionIcon,
   assumed: QuestionIcon,
 };
+
+/** A Tier 3 turn attests 59 facts. Twelve is what fits without a scroll. */
+const FACTS_PER_PAGE = 12;
+
+/** Tool rows are shorter, and reading them in order is the point of them. */
+const TOOLS_PER_PAGE = 8;
 
 const PROV_TEXT: Record<Provenance, string> = {
   dataset: "text-ink-2",
@@ -80,6 +87,27 @@ export function EvidenceDrawer({
     () => (filter === "all" ? facts : facts.filter((f) => f.provenance === filter)),
     [facts, filter],
   );
+
+  /* A Tier 3 turn attests 59 facts, each row carrying a label, a value, a
+     provenance line, a derivation and a source pointer. That is a panel a
+     controller scrolls rather than reads, in the one place the product asks
+     them to check its working. Twelve to a page, and the pinned fact still
+     scrolls itself into view because `pin` sets the page's own state. */
+  const pagedFacts = usePaged(visible, FACTS_PER_PAGE, filter);
+  const pagedTools = usePaged(tools, TOOLS_PER_PAGE);
+
+  /* PINNING A FACT MUST TURN TO ITS PAGE. Clicking a figure in the prose pins
+     the fact behind it and opens this panel, and paging broke that outright:
+     the row was on page 4, so the panel opened on page 1 showing twelve rows
+     that had nothing to do with what was clicked. The rest of the link, the
+     highlight and the scroll into view, only works once the row is rendered. */
+  const { pinned } = useFacts();
+  const { setPage: setFactPage } = pagedFacts;
+  useEffect(() => {
+    if (!pinned) return;
+    const index = visible.findIndex((fact) => fact.key === pinned);
+    if (index >= 0) setFactPage(Math.floor(index / FACTS_PER_PAGE) + 1);
+  }, [pinned, visible, setFactPage]);
 
   return (
     <aside
@@ -135,17 +163,27 @@ export function EvidenceDrawer({
                 />
               </div>
             ) : (
-              <ul className="rules mx-3 mb-3">
-                {visible.map((fact) => (
-                  <FactRow key={fact.key} fact={fact} />
-                ))}
-              </ul>
+              <>
+                <ul className="rules mx-3">
+                  {pagedFacts.slice.map((fact) => (
+                    <FactRow key={fact.key} fact={fact} />
+                  ))}
+                </ul>
+                <div className="mx-3 mb-3">
+                  <Pagination paged={pagedFacts} label="Facts" unit="fact" />
+                </div>
+              </>
             )}
           </>
         ) : null}
 
         {view === "tools" ? (
-          <ToolTimeline tools={tools} />
+          <>
+            <ToolTimeline tools={pagedTools.slice} offset={pagedTools.from - 1} />
+            <div className="mx-3 mb-3">
+              <Pagination paged={pagedTools} label="Tool calls" unit="tool call" />
+            </div>
+          </>
         ) : null}
 
         {view === "sources" ? (
@@ -242,7 +280,15 @@ function FactRow({ fact }: { fact: Fact }) {
 
 /* --------------------------------------------------------- tool timeline */
 
-export function ToolTimeline({ tools }: { tools: ToolRun[] }) {
+export function ToolTimeline({
+  tools,
+  offset = 0,
+}: {
+  tools: ToolRun[];
+  /** How many calls came before this slice, so the numbering keeps counting
+   *  across pages rather than restarting at 1 on every one. */
+  offset?: number;
+}) {
   if (tools.length === 0) {
     return (
       <div className="p-3">
@@ -263,7 +309,7 @@ export function ToolTimeline({ tools }: { tools: ToolRun[] }) {
           <li key={`${run.call.tool}-${index}`} className="px-3 py-2.5">
             <div className="flex items-center gap-2">
               <span className="num w-4 shrink-0 text-2xs text-ink-3">
-                {index + 1}
+                {offset + index + 1}
               </span>
               {ok === null ? (
                 <ClockIcon
