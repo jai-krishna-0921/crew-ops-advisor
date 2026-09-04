@@ -90,3 +90,53 @@ def test_a_large_closure_does_not_run_off_the_screen() -> None:
     text = render("impact", [envelope], "BLR is closed 08:00-14:00Z on 17 Sep.")
     missing = [f for f in expected if f.split("-")[0] not in text]
     assert not missing, f"{len(missing)} of 13 flights were not named: {missing}"
+
+
+PAIRINGS = ["P-2204", "P-2211", "P-2218", "P-2225", "P-2232", "P-2293"]
+
+
+def test_the_pairings_a_closure_touches_are_named() -> None:
+    """S3's remaining gap, and the same bug one collection further on.
+
+    The flights are named now. The six pairings they belong to are in
+    `per_flight_assessment` and were not, so S3 scored partial at 85% with the
+    pairing ids as the whole of the miss. A controller re-crewing a closure
+    works pairing by pairing, so this is the list they act on.
+    """
+    import datetime as dt
+
+    from crewops.agent.factory import load_tools
+    from crewops.resolve.render import render
+
+    tools = load_tools()
+    envelope = tools.simulate_station_closure(
+        station="BLR",
+        from_time=dt.datetime(2026, 9, 17, 8, 0),
+        to_time=dt.datetime(2026, 9, 17, 14, 0),
+    )
+    assert envelope.ok, envelope.error
+    text = render("impact", [envelope], "BLR is closed 08:00-14:00Z on 17 Sep.")
+    missing = [p for p in PAIRINGS if p not in text]
+    assert not missing, f"pairings not named: {missing}\n{text[:400]}"
+
+
+def test_the_tool_carries_each_pairing_as_a_fact_value() -> None:
+    """Naming them is only allowed if a tool said them.
+
+    The flight number needed the same treatment: attestation reads fact
+    *values*, and a pairing that appears only inside a key is not something the
+    tools returned.
+    """
+    import datetime as dt
+
+    from crewops.agent.factory import load_tools
+
+    tools = load_tools()
+    envelope = tools.simulate_station_closure(
+        station="BLR",
+        from_time=dt.datetime(2026, 9, 17, 8, 0),
+        to_time=dt.datetime(2026, 9, 17, 14, 0),
+    )
+    values = {str(f.value) for f in envelope.facts}
+    missing = [p for p in PAIRINGS if p not in values]
+    assert not missing, f"these pairings are in no fact value: {missing}"

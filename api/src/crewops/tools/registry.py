@@ -1871,6 +1871,16 @@ class Tools:
                         "flight_no",
                         _SOURCE,
                     ),
+                    # The pairing for the same reason. A controller re-crewing a
+                    # closure works pairing by pairing, so it is the list they
+                    # act on, and it was reachable only as a key fragment.
+                    dataset_fact(
+                        f"{row.flight_id}.pairing",
+                        "Pairing the affected leg belongs to",
+                        row.pairing_id,
+                        "pairing_id",
+                        _SOURCE,
+                    ),
                     computed_fact(
                         f"{row.flight_id}.min_delay_hours",
                         "Minimum delay",

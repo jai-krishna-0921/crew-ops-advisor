@@ -161,6 +161,22 @@ def _render_impact(envelopes: Sequence[ToolEnvelope], question: str) -> str:
             f"{len(affected)} flight(s) affected at {station}: {legs}."
         )
 
+        # The pairings those legs belong to. A controller re-crewing a closure
+        # works pairing by pairing, and the flight list alone does not tell
+        # them how many duties are actually in play.
+        rows = closure.get("per_flight_assessment") or []
+        pairings = sorted(
+            {
+                str(row["pairing_id"])
+                for row in rows
+                if isinstance(row, dict) and row.get("pairing_id")
+            }
+        )
+        if pairings:
+            closure_lines.append(
+                f"Pairings involved: {', '.join(pairings)}."
+            )
+
     report = _payload(envelopes, ImpactReport)
     if report is None:
         generic = _render_generic(envelopes, question)
