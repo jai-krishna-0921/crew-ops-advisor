@@ -18,7 +18,12 @@ from crewops.contracts.rules import LegalityReport, RuleId
 
 
 class FlightRef(BaseModel):
-    """A flight, with enough context to be actionable without a second lookup."""
+    """A flight, with enough context to be actionable without a second lookup.
+
+    `registration` is the aircraft tail. A question that names a tail has no
+    other route back to a pairing, so it is carried here rather than looked up
+    separately.
+    """
 
     flight_no: str
     origin: str
@@ -26,8 +31,32 @@ class FlightRef(BaseModel):
     departure: datetime
     arrival: datetime
     aircraft_type: str | None = None
+    registration: str | None = None
+    seats: int | None = None
     passengers: int | None = None
+    block_hours: float | None = None
     pairing_id: str | None = None
+
+
+class FlightDelay(BaseModel):
+    """One flight's delay, and what it did to the duty period around it.
+
+    Scenario answer keys report a per-flight delay table, not a single headline
+    number, so the impact model has to carry this at leg granularity.
+    """
+
+    flight_no: str
+    delay_minutes: int
+    original_departure: datetime
+    new_departure: datetime
+    original_arrival: datetime
+    new_arrival: datetime
+    cause: str
+    fdp_before: float | None = None
+    fdp_after: float | None = None
+    fdp_limit: float | None = None
+    sectors: int | None = None
+    breaches_fdp: bool = False
 
 
 class RiskSeverity(str, Enum):
@@ -67,6 +96,8 @@ class ImpactReport(BaseModel):
     as_of: datetime
 
     uncrewed_flights: list[FlightRef] = Field(default_factory=list)
+    delayed_flights: list[FlightDelay] = Field(default_factory=list)
+    cancelled_flights: list[FlightRef] = Field(default_factory=list)
     pairings_broken: list[str] = Field(default_factory=list)
     crew_affected: list[str] = Field(default_factory=list)
     stations_affected: list[str] = Field(default_factory=list)
@@ -167,8 +198,69 @@ class Recommendation(BaseModel):
         default="",
         description="The ordering rule applied, stated plainly so it can be argued with",
     )
+    covering_for: str | None = Field(
+        default=None, description="The crew id whose seat this fills, when known"
+    )
+    role: str | None = Field(
+        default=None, description="The role being covered. Rank must match it exactly."
+    )
+    joint_plan: JointPlan | None = Field(
+        default=None, description="Set when this recommendation resolves several gaps together"
+    )
     notification_draft: str | None = None
     facts: list[Fact] = Field(default_factory=list)
+
+
+class Gap(BaseModel):
+    """One seat that needs filling."""
+
+    pairing_id: str | None = None
+    flight_numbers: list[str] = Field(default_factory=list)
+    for_crew_id: str | None = None
+    role: str | None = None
+    label: str = ""
+
+
+class JointPlan(BaseModel):
+    """One allocation covering several simultaneous gaps at once.
+
+    Solving gaps independently is unsafe: two searches can both return the same
+    candidate at rank 1, and composing them puts one person on two aircraft.
+    `assignments` is checked for that: no crew id may appear twice.
+
+    When no feasible joint allocation exists, `feasible` is False and
+    `why_infeasible` says so. Returning the best independent pair instead would
+    be a confident, fluent, operationally wrong instruction, which is the worst
+    thing this system can do.
+    """
+
+    objective: Literal["min_cost", "max_coverage", "min_delay"]
+    feasible: bool
+    assignments: list[CoverOption] = Field(default_factory=list)
+    gaps_covered: list[str] = Field(default_factory=list)
+    gaps_uncovered: list[str] = Field(default_factory=list)
+    total_cost: CostBreakdown = Field(default_factory=CostBreakdown)
+    contention: list[str] = Field(
+        default_factory=list,
+        description="Candidates that were rank 1 for more than one gap, and how "
+        "the conflict was resolved. This is the reasoning a controller wants.",
+    )
+    why_infeasible: str | None = None
+    tradeoffs: list[str] = Field(default_factory=list)
+    facts: list[Fact] = Field(default_factory=list)
+
+    @property
+    def double_booked(self) -> list[str]:
+        """Any crew id allocated more than once. Must always be empty."""
+        seen: dict[str, int] = {}
+        for option in self.assignments:
+            seen[option.crew_id] = seen.get(option.crew_id, 0) + 1
+        return sorted(crew_id for crew_id, n in seen.items() if n > 1)
+
+
+# `Recommendation` is declared above `JointPlan` because it reads better in that
+# order, so its forward reference is resolved here once both exist.
+Recommendation.model_rebuild()
 
 
 class Alert(BaseModel):
@@ -208,8 +300,11 @@ __all__ = [
     "CoverKind",
     "CoverOption",
     "DownstreamRisk",
+    "FlightDelay",
     "FlightRef",
+    "Gap",
     "ImpactReport",
+    "JointPlan",
     "Recommendation",
     "RiskSeverity",
     "Watchlist",

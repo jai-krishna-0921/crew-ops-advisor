@@ -13,6 +13,7 @@ The fix is never to add a package to the allowlist.
 from __future__ import annotations
 
 import ast
+import json
 import sys
 from pathlib import Path
 
@@ -142,49 +143,99 @@ def test_the_agent_is_where_the_model_lives() -> None:
     )
 
 
+#: Path fragments that identify the provided, read-only dataset.
+DATASET_MARKERS: tuple[str, ...] = ("crew-ops-advisor-dataset", "DATASET_DIR", "DATA_DIR")
+
+#: Calls that put bytes on disk or take them off it.
+WRITE_CALLS: frozenset[str] = frozenset(
+    {"write_text", "write_bytes", "unlink", "rmtree", "mkdir", "touch", "rename", "replace"}
+)
+
+
+def _writes_to_dataset(node: ast.Call) -> bool:
+    """True when this specific call's target looks like the provided dataset.
+
+    Inspecting the call's own receiver and arguments matters: a module that
+    reads the dataset and separately writes a report elsewhere is fine, and an
+    earlier version of this test wrongly failed exactly that case.
+    """
+    func = node.func
+    name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+
+    if name == "open":
+        mode = next(
+            (
+                kw.value.value
+                for kw in node.keywords
+                if kw.arg == "mode"
+                and isinstance(kw.value, ast.Constant)
+                and isinstance(kw.value.value, str)
+            ),
+            None,
+        )
+        if mode is None and len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
+            mode = node.args[1].value
+        if not isinstance(mode, str) or not any(m in mode for m in ("w", "a", "x", "+")):
+            return False
+        targets = [ast.unparse(a) for a in node.args[:1]]
+    elif name in WRITE_CALLS:
+        receiver = ast.unparse(func.value) if isinstance(func, ast.Attribute) else ""
+        targets = [receiver, *(ast.unparse(a) for a in node.args)]
+    else:
+        return False
+
+    return any(marker in target for target in targets for marker in DATASET_MARKERS)
+
+
 def test_nothing_writes_to_the_dataset() -> None:
     """The provided dataset is read only, everywhere, always.
 
     Regenerating or mutating it would silently move the answer keys that every
-    golden test asserts against.
+    golden test asserts against, and every figure quoted in the README and the
+    deck comes from the shipped pack.
     """
-    suspicious: list[str] = []
+    offences: list[str] = []
     for path in sorted(SRC.rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
-        source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source, filename=str(path))
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            func = node.func
-            name = (
-                func.attr
-                if isinstance(func, ast.Attribute)
-                else func.id
-                if isinstance(func, ast.Name)
-                else ""
-            )
-            if name not in {"open", "write_text", "write_bytes", "unlink", "rmtree"}:
-                continue
-            # A write mode on any call inside a module that also mentions the
-            # dataset path is worth a human look.
-            if "crew-ops-advisor-dataset" in source and name != "open":
-                suspicious.append(f"{path.relative_to(SRC.parent.parent)}: {name}()")
-            elif name == "open":
-                for kw in node.keywords:
-                    if (
-                        kw.arg == "mode"
-                        and isinstance(kw.value, ast.Constant)
-                        and isinstance(kw.value.value, str)
-                        and any(m in kw.value.value for m in ("w", "a", "+"))
-                        and "crew-ops-advisor-dataset" in source
-                    ):
-                        suspicious.append(
-                            f"{path.relative_to(SRC.parent.parent)}: open(mode={kw.value.value!r})"
-                        )
+            if isinstance(node, ast.Call) and _writes_to_dataset(node):
+                offences.append(f"{path.relative_to(SRC.parent.parent)}: {ast.unparse(node)[:90]}")
 
-    assert not suspicious, (
-        "These modules reference the dataset path and perform a write. The "
-        "dataset is read only:\n  " + "\n  ".join(suspicious)
+    assert not offences, (
+        "These calls write to the provided dataset, which is read only:\n  " + "\n  ".join(offences)
     )
+
+
+def test_the_dataset_on_disk_is_unmodified() -> None:
+    """A live check, not a static one.
+
+    The static walk above can be defeated by a dynamically built path. This
+    asserts the actual files are still there and still parse, so a test run
+    that corrupted them fails loudly rather than silently rewriting the answer
+    keys the golden suite compares against.
+    """
+    data_dir = SRC.parents[2] / "data" / "crew-ops-advisor-dataset" / "data"
+    if not data_dir.exists():
+        pytest.skip("dataset not present")
+
+    expected = {
+        "certifications.json",
+        "costs.json",
+        "crew.json",
+        "duty_clocks.json",
+        "flights.json",
+        "questions.json",
+        "reserve_pool.json",
+        "risk_signals.json",
+        "rosters.json",
+        "rules.json",
+        "scenarios.json",
+    }
+    present = {p.name for p in data_dir.glob("*.json")}
+    assert expected <= present, f"Dataset files are missing: {sorted(expected - present)}"
+
+    for name in sorted(expected):
+        raw = (data_dir / name).read_text(encoding="utf-8")
+        json.loads(raw)  # a truncated or rewritten file fails here

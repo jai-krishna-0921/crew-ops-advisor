@@ -64,7 +64,13 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ANN", "TID"]
-ignore = ["ANN401"]
+# ANN401: `Any` is deliberate on the tool boundary, where payload shapes vary.
+# UP042: `class X(str, Enum)` is kept over `StrEnum` on purpose. Under StrEnum,
+#   f"{member}" renders the value rather than "Class.MEMBER", which would
+#   silently change strings that reach a controller and that the grounding
+#   verifier attests. The explicit `.value` style is what the codebase reads
+#   against, so the mechanical rewrite is not worth the behaviour change.
+ignore = ["ANN401", "UP042"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN"]

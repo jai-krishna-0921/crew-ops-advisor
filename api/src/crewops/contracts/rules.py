@@ -78,16 +78,56 @@ class RuleTrace(BaseModel):
     note: str | None = None
 
 
+class FeasibilityIssue(BaseModel):
+    """A reason a candidate cannot take an assignment that is not a regulation.
+
+    Seven rules is the full regulatory scope. Inventing an eighth `RULE-` id
+    would misrepresent the rulebook to a controller who has to defend the
+    decision. But the shipped answer keys do exclude candidates for reasons the
+    rulebook does not cover, most importantly being already rostered across the
+    cover window.
+
+    Those live here instead: real, blocking, and honestly labelled as
+    operational feasibility rather than regulation. `code` is lowercase and
+    never starts with `RULE-`.
+    """
+
+    code: Literal[
+        "double_booked",
+        "not_reachable",
+        "not_on_duty_roster",
+        "wrong_base_no_positioning",
+        "reserve_window_missed",
+        "crew_inactive",
+        "no_positioning_flight",
+    ]
+    detail: str = Field(
+        description=(
+            "For example 'Already rostered on P-2203, which overlaps the "
+            "cover on 2026-09-16'"
+        )
+    )
+    duty_date: date | None = None
+    blocking: bool = True
+    inputs: list[Fact] = Field(default_factory=list)
+
+
 class DayLegality(BaseModel):
-    """All seven rules evaluated for a single duty date."""
+    """All seven rules evaluated for a single duty date, plus feasibility."""
 
     duty_date: date
     verdict: Verdict
     traces: list[RuleTrace] = Field(default_factory=list)
+    feasibility: list[FeasibilityIssue] = Field(default_factory=list)
 
     @property
     def breaches(self) -> list[RuleTrace]:
         return [t for t in self.traces if t.verdict is Verdict.BREACH]
+
+    @property
+    def blocked(self) -> bool:
+        """True when a rule breaches or a blocking feasibility issue applies."""
+        return bool(self.breaches) or any(f.blocking for f in self.feasibility)
 
 
 class LegalityReport(BaseModel):
@@ -111,8 +151,21 @@ class LegalityReport(BaseModel):
         return [t for day in self.per_day for t in day.breaches]
 
     @property
+    def feasibility_issues(self) -> list[FeasibilityIssue]:
+        return [f for day in self.per_day for f in day.feasibility]
+
+    @property
     def is_legal(self) -> bool:
+        """Regulatory legality only. A legal candidate can still be infeasible."""
         return self.overall is Verdict.PASS
+
+    @property
+    def is_assignable(self) -> bool:
+        """Legal under the rulebook and operationally possible.
+
+        This, not `is_legal`, is the question a controller is actually asking.
+        """
+        return self.is_legal and not any(f.blocking for f in self.feasibility_issues)
 
     @property
     def first_breach_date(self) -> date | None:
@@ -125,6 +178,7 @@ class LegalityReport(BaseModel):
 __all__ = [
     "ALL_RULE_IDS",
     "DayLegality",
+    "FeasibilityIssue",
     "LegalityReport",
     "RuleId",
     "RuleTrace",
