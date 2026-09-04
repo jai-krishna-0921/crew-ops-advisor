@@ -1142,6 +1142,9 @@ class Tools:
         *,
         pairing_id: str | None = None,
         flight_numbers: list[str] | None = None,
+        for_crew_id: str | None = None,
+        role: str | None = None,
+        on_date: DateType | None = None,
         exclude_crew_ids: list[str] | None = None,
         max_options: int = 5,
         include_rejected: bool = True,
@@ -1150,25 +1153,57 @@ class Tools:
         args = {
             "pairing_id": pairing_id,
             "flight_numbers": flight_numbers,
+            "for_crew_id": for_crew_id,
+            "role": role,
+            "on_date": on_date,
             "exclude_crew_ids": exclude_crew_ids,
             "max_options": max_options,
             "include_rejected": include_rejected,
         }
-        if not pairing_id and not flight_numbers:
+        if not pairing_id and not flight_numbers and not for_crew_id:
             return error_envelope(
                 "find_cover_options",
                 args,
-                "Name a pairing_id or a set of flight_numbers to cover.",
+                "Name a pairing_id, a set of flight_numbers, or a for_crew_id to cover.",
                 timer=timer,
             )
         forbid = list(exclude_crew_ids or [])
-        role, sick = self._role_to_cover(pairing_id, flight_numbers, forbid)
-        if role is None:
+        resolved_role = role
+        sick: str | None = None
+
+        if for_crew_id:
+            member = self.world.crew_member(for_crew_id)
+            if member is None:
+                return error_envelope(
+                    "find_cover_options", args, self._unknown_crew(for_crew_id), timer=timer
+                )
+            # `for_crew_id` names the person vacating the seat, so their rank
+            # decides the role directly. Guessing from the pairing (the
+            # `_role_to_cover` fallback below) is only for when nobody is named.
+            sick = for_crew_id
+            if resolved_role is None:
+                resolved_role = member.rank
+            if pairing_id is None and not flight_numbers:
+                lookup_date = on_date or self.world.snapshot.date()
+                pairing_id = self._pairing_for_crew_on(for_crew_id, lookup_date)
+                if pairing_id is None:
+                    return error_envelope(
+                        "find_cover_options",
+                        args,
+                        f"{for_crew_id} holds no pairing on {lookup_date}.",
+                        timer=timer,
+                    )
+            if for_crew_id not in forbid:
+                forbid = [*forbid, for_crew_id]
+
+        if resolved_role is None:
+            resolved_role, sick = self._role_to_cover(pairing_id, flight_numbers, forbid)
+        if resolved_role is None:
             return error_envelope(
                 "find_cover_options",
                 args,
                 "Could not determine which role needs cover. Name the crew member "
-                "who is out in exclude_crew_ids, or ask about a pairing.",
+                "who is out with for_crew_id, or pass role explicitly.",
                 timer=timer,
             )
         try:
@@ -1176,12 +1211,12 @@ class Tools:
                 if self.world.pairing(pairing_id) is None:
                     raise LookupError(self._unknown_pairing(pairing_id))
                 search = self.ops.find_cover_for_pairing(
-                    pairing_id, role=role, sick_crew_id=sick, forbid_crew=forbid
+                    pairing_id, role=resolved_role, sick_crew_id=sick, forbid_crew=forbid
                 )
             else:
-                ids = self._resolve_flight_ids(flight_numbers or [], None)
+                ids = self._resolve_flight_ids(flight_numbers or [], on_date)
                 search = self.ops.find_cover_for_flights(
-                    ids, role=role, sick_crew_id=sick, forbid_crew=forbid
+                    ids, role=resolved_role, sick_crew_id=sick, forbid_crew=forbid
                 )
         except LookupError as exc:
             return error_envelope("find_cover_options", args, str(exc), timer=timer)
@@ -1220,7 +1255,7 @@ class Tools:
             facts=facts,
             trace=[step("Search, check, price and rank", detail, [f.key for f in facts[:3]])],
             citations=[
-                cite("crew.json", f"every active {role}"),
+                cite("crew.json", f"every active {resolved_role}"),
                 cite("rules.json", "all seven rules per candidate per day"),
                 cite("costs.json", "callout, positioning, delay and cancellation rates"),
             ],
@@ -1957,6 +1992,21 @@ class Tools:
             "Name a pairing_id, or flight_numbers with a date, so the assignment "
             "is unambiguous."
         )
+
+    def _pairing_for_crew_on(self, crew_id: str, on_date: DateType) -> str | None:
+        """The pairing this crew member holds on a given date, if any.
+
+        There is no reverse index from crew and date to pairing in the shipped
+        data, so this scans the crew member's held pairings (there are at most
+        a handful) and returns the one with a duty day on `on_date`. No crew
+        appears on two pairings on the same calendar date, so at most one match
+        exists.
+        """
+        for pairing_id in self.world.pairing_ids_for_crew(crew_id):
+            pairing = self.world.pairing(pairing_id)
+            if pairing is not None and any(day.date == on_date for day in pairing.days):
+                return pairing_id
+        return None
 
     def _role_to_cover(
         self,
