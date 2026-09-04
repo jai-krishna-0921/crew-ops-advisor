@@ -62,10 +62,18 @@
      and infrastructure colour, which is the register an airline operations
      desk sits in, and it stays a long way from the breach red on a page
      where red has exactly one meaning. */
-  --accent: oklch(40% 0.077 258);
-  --accent-ink: oklch(35% 0.082 258);
-  --accent-tint: oklch(40% 0.077 258 / 0.08);
-  --accent-line: oklch(40% 0.077 258 / 0.22);
+  --accent: oklch(45% 0.128 262);
+  --accent-ink: oklch(39% 0.132 262);
+  --accent-tint: oklch(45% 0.128 262 / 0.11);
+  --accent-line: oklch(45% 0.128 262 / 0.28);
+
+  /* The reader's own voice. Their question is the one thing on the page that
+     is not the system talking, so it gets a colour of its own rather than
+     another grey fill. Warm against the accent's cool, and low enough in
+     chroma that it never competes with a verdict. */
+  --voice: oklch(96% 0.028 62);
+  --voice-2: oklch(93.5% 0.042 58);
+  --voice-ink: oklch(34% 0.048 52);
 
   /* ---- verdict semantics ---------------------------------------------- */
   --pass: oklch(47% 0.108 154);
@@ -155,15 +163,20 @@
   /* The scale is set from the conversation outwards. Prose is the thing a
      controller actually reads, so it gets a comfortable 16px, and
      everything else is sized in relation to it. */
+  /* Every step moved up one notch. The scale was set against a Google
+     grotesque with a tall x-height; Cabinet Grotesk sits smaller and lighter
+     at the same nominal size, so the page that had been merely dense became
+     genuinely thin. Type is sized to how it renders, not to the number in
+     the token. */
   --t-2xs: 0.6875rem; /* 11px, micro labels */
-  --t-xs: 0.75rem; /* 12px, meta */
-  --t-sm: 0.8125rem; /* 13px, table cells, chips */
-  --t-base: 0.875rem; /* 14px, panel body */
-  --t-md: 1rem; /* 16px, conversation prose */
-  --t-lg: 1.125rem; /* 18px, answer headline */
-  --t-xl: 1.375rem; /* 22px, page title */
-  --t-2xl: 1.75rem; /* 28px, figures */
-  --t-3xl: 2.5rem; /* 40px, the greeting */
+  --t-xs: 0.8125rem; /* 13px, meta */
+  --t-sm: 0.875rem; /* 14px, table cells, chips */
+  --t-base: 0.9375rem; /* 15px, panel body */
+  --t-md: 1.0625rem; /* 17px, conversation prose */
+  --t-lg: 1.25rem; /* 20px, answer headline */
+  --t-xl: 1.5rem; /* 24px, page title */
+  --t-2xl: 1.875rem; /* 30px, figures */
+  --t-3xl: 2.75rem; /* 44px, the greeting */
 
   /* ---- gradients ------------------------------------------------------
      Four, and each has a job. Colour that changes across a shape reads as
@@ -176,24 +189,66 @@
   /* The primary action. Lighter at the top, as though lit from above. */
   --grad-accent: linear-gradient(
     170deg,
-    oklch(48% 0.082 258),
-    oklch(38% 0.075 258)
+    oklch(54% 0.138 264),
+    oklch(41% 0.124 258)
   );
+
+  /* The question bubble. */
+  --grad-voice: linear-gradient(158deg, var(--voice), var(--voice-2));
   /* The rank-1 marker, brightest where the eye lands first. */
   --grad-rank: linear-gradient(
     90deg,
-    var(--accent),
-    oklch(52% 0.09 250) 45%,
-    oklch(44% 0.07 262)
+    oklch(58% 0.152 258),
+    oklch(50% 0.142 268) 45%,
+    oklch(44% 0.126 278)
   );
   /* A single soft light behind the empty conversation, so the greeting sits
      on something rather than floating on flat paper. Very low contrast on
      purpose: at 4 percent it is felt and not seen. */
   --grad-hero: radial-gradient(
-    120% 80% at 50% 0%,
-    oklch(40% 0.077 258 / 0.055),
+    110% 72% at 50% 0%,
+    oklch(45% 0.128 262 / 0.05),
     transparent 62%
   );
+
+  /* HALF THE GREETING, NOT ALL OF IT. A gradient across a whole headline is
+     a gradient you read as an effect. Across the clause that names the thing
+     being asked, it is emphasis, which is what the reference was doing and
+     the part of it worth taking. Two neighbouring hues, never a spectrum. */
+  --grad-title: linear-gradient(
+    96deg,
+    oklch(48% 0.15 262),
+    oklch(46% 0.148 292)
+  );
+
+  /* CARD TINTS. Six, one per suggestion, at a chroma that survives being
+     next to a verdict without arguing with it: the reference sits around
+     0.06 and reads as a toy, these sit at 0.022 and read as paper that
+     happens to be tinted. `tile` is the icon's ground, one step up, and
+     `ink` is the icon itself, dark enough to clear AA on both. */
+  --tint-1: oklch(97% 0.022 250);
+  --tint-1-tile: oklch(93% 0.045 250);
+  --tint-1-ink: oklch(46% 0.13 254);
+
+  --tint-2: oklch(97% 0.024 158);
+  --tint-2-tile: oklch(93% 0.05 158);
+  --tint-2-ink: oklch(44% 0.11 160);
+
+  --tint-3: oklch(97.4% 0.028 70);
+  --tint-3-tile: oklch(93.5% 0.058 70);
+  --tint-3-ink: oklch(48% 0.115 62);
+
+  --tint-4: oklch(97% 0.022 300);
+  --tint-4-tile: oklch(93.5% 0.045 300);
+  --tint-4-ink: oklch(46% 0.125 300);
+
+  --tint-5: oklch(97.2% 0.022 18);
+  --tint-5-tile: oklch(93.5% 0.045 18);
+  --tint-5-ink: oklch(48% 0.135 20);
+
+  --tint-6: oklch(97% 0.024 205);
+  --tint-6-tile: oklch(93% 0.048 205);
+  --tint-6-ink: oklch(45% 0.105 210);
   /* The rail's edge, instead of a border down it. */
   --grad-edge: linear-gradient(
     to bottom,
@@ -227,6 +282,10 @@
    ========================================================================== */
 
 @theme inline {
+  --color-voice: var(--voice);
+  --color-voice-2: var(--voice-2);
+  --color-voice-ink: var(--voice-ink);
+
   --color-page: var(--page);
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
@@ -310,6 +369,11 @@
     color: var(--ink);
     font-family: var(--font-sans);
     font-size: var(--t-md);
+    /* 450, not 400. A variable font can be asked for the weight between the
+       named cuts, and Cabinet Grotesk at 400 is drawn light enough that a
+       screen of it reads as faint rather than as quiet. 500 was too much:
+       body text at medium competes with its own headings. */
+    font-weight: 450;
     line-height: 1.6;
     letter-spacing: -0.004em;
     -webkit-font-smoothing: antialiased;
@@ -534,6 +598,15 @@
   font-variant-numeric: tabular-nums;
   font-feature-settings: "zero";
   letter-spacing: -0.012em;
+}
+
+/* Ink that carries a gradient. Reserved for the greeting: exactly one line
+   per screen, because a second one stops being emphasis. */
+@utility ink-gradient {
+  background-image: var(--grad-title);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
 }
 
 /* One soft light behind the empty conversation. */

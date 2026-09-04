@@ -28,11 +28,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  AirplaneTiltIcon,
+  ArrowRightIcon,
   ChatCircleDotsIcon,
+  ClockCountdownIcon,
   ListIcon,
   PlusIcon,
+  ScalesIcon,
   SidebarSimpleIcon,
+  UsersThreeIcon,
   WarningCircleIcon,
+  WarningOctagonIcon,
 } from "@phosphor-icons/react/dist/ssr";
 
 import type {
@@ -50,6 +56,7 @@ import { Composer } from "@/components/chat/composer";
 import { EvidenceDrawer } from "@/components/evidence/evidence-drawer";
 import { FactProvider } from "@/components/evidence/fact-context";
 import { SideRail } from "@/components/shell/side-rail";
+import { ResizeHandle, useResizableWidth } from "@/components/ui/resizable";
 import { EmptyState } from "@/components/ui/primitives";
 import { cx } from "@/components/ui/tone";
 
@@ -66,6 +73,20 @@ export function AdvisorConsole() {
   // The sheet, for a window too narrow to hold a resident rail.
   const [sheetOpen, setSheetOpen] = useState(false);
   const [railOpen, setRailOpen] = useRailPreference();
+  const [draggingRail, setDraggingRail] = useState(false);
+  // 208 is the narrowest a thread title stays recognisable at. 460 is where
+  // the rail starts taking width the answer needs more than it does.
+  const rail = useResizableWidth("crewops.rail.width.v1", {
+    min: 208,
+    max: 460,
+    initial: 256,
+  });
+  const [draggingDrawer, setDraggingDrawer] = useState(false);
+  const drawer = useResizableWidth("crewops.evidence.width.v1", {
+    min: 300,
+    max: 620,
+    initial: 380,
+  });
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const [questions, setQuestions] = useState<SampleQuestion[]>([]);
@@ -279,10 +300,17 @@ export function AdvisorConsole() {
         <aside
           aria-label="Conversations"
           className={cx(
-            "edge-right hidden shrink-0 overflow-hidden transition-[width] duration-300 ease-out-quint md:block",
-            railOpen ? "w-64" : "w-0",
+            "hidden shrink-0 overflow-hidden md:block",
+            // The transition is dropped mid-drag. A width transition and a
+            // pointer drag fight each other: every frame animates towards a
+            // target the next frame has already moved, so the rail lags the
+            // cursor by the whole duration and the drag feels broken while
+            // working perfectly.
+            !draggingRail && "transition-[width] duration-300 ease-out-quint",
           )}
+          style={{ width: railOpen ? rail.width : 0 }}
         >
+          <div className="h-full" style={{ width: rail.width }}>
           <SideRail
             threads={threads}
             activeThreadId={threadId}
@@ -299,7 +327,22 @@ export function AdvisorConsole() {
               setActiveId(null);
             }}
           />
+          </div>
         </aside>
+
+        {railOpen ? (
+          <ResizeHandle
+            side="right"
+            label="Resize the conversations list"
+            width={rail.width}
+            min={rail.min}
+            max={rail.max}
+            onResize={rail.commit}
+            onReset={rail.reset}
+            onDragChange={setDraggingRail}
+            className="hidden md:block"
+          />
+        ) : null}
 
         <div className="relative flex min-w-0 flex-1 flex-col">
           <header className="flex h-12 shrink-0 items-center gap-1 px-3">
@@ -446,6 +489,20 @@ export function AdvisorConsole() {
           onClose={() => setDrawerOpen(false)}
           side="right"
           label="Evidence panel"
+          width={drawer.width}
+          dragging={draggingDrawer}
+          handle={
+            <ResizeHandle
+              side="left"
+              label="Resize the evidence panel"
+              width={drawer.width}
+              min={drawer.min}
+              max={drawer.max}
+              onResize={drawer.commit}
+              onReset={drawer.reset}
+              onDragChange={setDraggingDrawer}
+            />
+          }
         >
           <EvidenceDrawer
             facts={drawerFacts}
@@ -504,12 +561,19 @@ function Sheet({
   side,
   label,
   children,
+  width,
+  handle,
+  dragging,
 }: {
   open: boolean;
   onClose: () => void;
   side: "left" | "right";
   label: string;
   children: React.ReactNode;
+  /** Set only for a panel somebody can drag wider. */
+  width?: number;
+  handle?: React.ReactNode;
+  dragging?: boolean;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -533,11 +597,17 @@ function Sheet({
       <aside
         aria-label={label}
         className={cx(
-          "absolute inset-y-2 flex w-[min(23rem,88vw)] flex-col overflow-hidden rounded-lg bg-canvas shadow-pop",
+          "absolute inset-y-2 flex flex-row overflow-hidden rounded-lg bg-canvas shadow-pop",
           side === "left" ? "left-2 anim-slide-left" : "right-2 anim-slide-right",
+          // A panel that animates its own width lags the cursor by the
+          // transition duration while it is being dragged, so the transition
+          // is for arrivals only.
+          !dragging && "transition-[width] duration-200 ease-out-quint",
         )}
+        style={{ width: width ?? "min(23rem, 88vw)", maxWidth: "92vw" }}
       >
-        {children}
+        {handle}
+        <div className="flex min-w-0 flex-1 flex-col">{children}</div>
       </aside>
     </div>
   );
@@ -564,6 +634,26 @@ const SHORT_PROMPT: Record<string, string> = {
   Q18: "Can C-2087 cover P-2291 legally?",
   Q31: "Best way to cover P-2291?",
   Q32: "Two A320 captains sick at once",
+};
+
+/** What the question is FOR, which the question itself does not say. */
+const PROMPT_NOTE: Record<string, string> = {
+  Q01: "Crew availability and on-call windows",
+  Q02: "Duty clocks against the seven day limit",
+  Q17: "Which legs lose their crew, and who else it reaches",
+  Q18: "All seven rules, on every day of the cover",
+  Q31: "Ranked options, with costs and what each one breaks",
+  Q32: "Two absences at once, resolved together",
+};
+
+/** An icon per question, so the six read as six kinds of question. */
+const PROMPT_ICON: Record<string, typeof ChatCircleDotsIcon> = {
+  Q01: UsersThreeIcon,
+  Q02: ClockCountdownIcon,
+  Q17: AirplaneTiltIcon,
+  Q18: ScalesIcon,
+  Q31: ChatCircleDotsIcon,
+  Q32: WarningOctagonIcon,
 };
 
 /** Two from each tier, so one screen reaches from a lookup to a ranking. */
@@ -601,8 +691,11 @@ function Welcome({
 
   return (
     <div className="hero-wash mx-auto w-full max-w-3xl px-6 pt-24 pb-44">
+      {/* The gradient runs over the clause that names the thing being asked
+          and stops. Across the whole line it reads as an effect. */}
       <h2 className="macro anim-fade-up text-center text-3xl text-ink">
-        What do you need to decide?
+        What do you need to{" "}
+        <span className="ink-gradient">decide today?</span>
       </h2>
       <p
         className="anim-stagger mx-auto mt-3 max-w-[44ch] text-center text-md text-ink-2"
@@ -613,26 +706,53 @@ function Welcome({
       </p>
 
       <div className="mt-10 grid gap-3 sm:grid-cols-2">
-        {picks.map((question, index) => (
-          <button
-            key={question.id}
-            type="button"
-            onClick={() => onAsk(question.question)}
-            title={question.question}
-            style={{ "--i": index } as React.CSSProperties}
-            className="anim-stagger flex cursor-pointer items-center gap-2.5 rounded-md bg-inset px-4 py-3 text-left transition-[background-color,box-shadow,transform] duration-200 ease-out-quint hover:-translate-y-px hover:bg-surface hover:shadow-panel"
-          >
-            <ChatCircleDotsIcon
-              size={14}
-              weight="bold"
-              aria-hidden
-              className="shrink-0 text-ink-3"
-            />
-            <span className="min-w-0 flex-1 truncate text-base text-ink">
-              {SHORT_PROMPT[question.id] ?? question.question}
-            </span>
-          </button>
-        ))}
+        {picks.map((question, index) => {
+          const tint = (index % 6) + 1;
+          const Icon = PROMPT_ICON[question.id] ?? ChatCircleDotsIcon;
+          return (
+            <button
+              key={question.id}
+              type="button"
+              onClick={() => onAsk(question.question)}
+              title={question.question}
+              style={
+                {
+                  "--i": index,
+                  background: `var(--tint-${tint})`,
+                } as React.CSSProperties
+              }
+              className="anim-stagger group flex cursor-pointer items-start gap-3 rounded-md px-4 py-3.5 text-left transition-[box-shadow,transform] duration-200 ease-out-quint hover:-translate-y-px hover:shadow-panel"
+            >
+              <span
+                aria-hidden
+                className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-sm"
+                style={{
+                  background: `var(--tint-${tint}-tile)`,
+                  color: `var(--tint-${tint}-ink)`,
+                }}
+              >
+                <Icon size={16} weight="bold" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-base leading-snug font-semibold text-ink">
+                  {SHORT_PROMPT[question.id] ?? question.question}
+                </span>
+                {PROMPT_NOTE[question.id] ? (
+                  <span className="mt-0.5 block text-xs leading-snug text-ink-2">
+                    {PROMPT_NOTE[question.id]}
+                  </span>
+                ) : null}
+              </span>
+              <ArrowRightIcon
+                size={13}
+                weight="bold"
+                aria-hidden
+                className="mt-2 shrink-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                style={{ color: `var(--tint-${tint}-ink)` }}
+              />
+            </button>
+          );
+        })}
       </div>
 
       {catalogueError ? (

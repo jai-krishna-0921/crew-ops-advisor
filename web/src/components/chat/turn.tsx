@@ -59,7 +59,15 @@ export function TurnView({
       className="anim-fade-up pb-12"
     >
       <div className="flex justify-end">
-        <p className="max-w-[42ch] rounded-xl rounded-br-sm bg-inset px-4 py-2.5 text-md leading-snug text-ink">
+        {/* The question is the one thing on the page that is not the system
+            talking, so it gets a colour rather than another grey fill. */}
+        <p
+          className="max-w-[42ch] rounded-xl rounded-br-sm px-4 py-2.5 text-md leading-snug"
+          style={{
+            backgroundImage: "var(--grad-voice)",
+            color: "var(--voice-ink)",
+          }}
+        >
           {turn.question}
         </p>
       </div>

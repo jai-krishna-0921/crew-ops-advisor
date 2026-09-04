@@ -40,6 +40,19 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
 - [x] Session persistence across a reload
 - [x] Contextual memory stubs, wired per thread
 
+## Landed: weight, width and colour
+
+- [x] Type up one notch across the scale, and body weight at 450. Cabinet
+      Grotesk renders smaller and lighter than the face the scale was set
+      against, so a page that had been merely dense became thin.
+- [x] Resizable rails: a 9px drag handle with a 1px line, `col-resize`,
+      clamped, persisted, double-click to reset, arrow keys to nudge. Both
+      the conversations rail and the evidence panel.
+- [x] Colour: a soft tint and a matching icon tile per suggestion card, a
+      gradient over the second clause of the greeting only, and a question
+      bubble in its own warm colour. Calmer than the reference: no
+      photograph, no six-hue spectrum, chroma about a third of it.
+
 ## Landed: the font finally applies
 
 - [x] Fonts, verified by computed style rather than by network requests. The

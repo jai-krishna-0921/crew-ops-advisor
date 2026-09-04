@@ -111,7 +111,7 @@ export function SideRail({
   }, [threads]);
 
   return (
-    <div className="flex h-full min-h-0 w-64 flex-col">
+    <div className="flex h-full min-h-0 w-full flex-col">
       <div className="flex items-center gap-1 px-3 pt-3 pb-1">
         <p className="label-micro flex-1 pl-1">Conversations</p>
         {onDeleteAll && threads.length > 0 ? (
