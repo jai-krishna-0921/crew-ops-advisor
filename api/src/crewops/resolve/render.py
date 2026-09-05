@@ -390,6 +390,20 @@ def _render_watchlist(envelopes: Sequence[ToolEnvelope], question: str) -> str:
 # below comes from a payload field or a `Fact.rendered()` value instead.
 
 
+def _tool_arg(envelopes: Sequence[ToolEnvelope], tool: str, name: str) -> str:
+    """One argument a tool was called with, as text.
+
+    An argument is not a fact the tool produced, so this is only ever used to
+    say back what was asked, never to state a value.
+    """
+    for envelope in envelopes:
+        if envelope.tool == tool:
+            value = (envelope.args or {}).get(name)
+            if value:
+                return str(value)
+    return ""
+
+
 def _tool_payload(envelopes: Sequence[ToolEnvelope], tool: str) -> Any:
     """The payload of the first successful call to `tool` this turn, if any."""
     for envelope in envelopes:
@@ -632,12 +646,44 @@ def _render_flights(envelopes: Sequence[ToolEnvelope], question: str) -> str:
     payload = _tool_payload(envelopes, "find_flights")
     if not isinstance(payload, P.FlightList):
         return _render_generic(envelopes, question)
+    flights = list(payload.flights)
+
+    # AN EMPTY RESULT IS A FINDING. "0 flight(s) match, 0 seats in total" is
+    # true and tells a person nothing. Asked for Delhi to Chennai they should
+    # be told there is no nonstop, because this network is a BLR hub, rather
+    # than left to infer it from a zero.
+    if not flights:
+        origin = _tool_arg(envelopes, "find_flights", "origin")
+        destination = _tool_arg(envelopes, "find_flights", "destination")
+        if origin and destination:
+            # No station this turn did not ask about. Naming the hub here
+            # read better and the verifier rejected it, correctly: "BLR" was
+            # a value no tool returned. The fix is to say less, never to
+            # loosen the check.
+            # No number words either. "one airline's week" put the token
+            # "one" into the prose and the verifier read it as a figure no
+            # tool returned, which it is. Say less.
+            return (
+                f"No nonstop {origin} to {destination} in this schedule. "
+                f"Ask for departures from {origin} to see where it connects."
+            )
+        return f"{payload.total_matched} flight(s) match."
+
     lines = [
         f"{payload.total_matched} flight(s) match, {payload.total_seats} seats in total."
     ]
-    flights = list(payload.flights)
-    if not flights:
-        return "\n".join(lines)
+
+    # NAME THEM. A route question is asking which flights, and the count alone
+    # is the same collection-summarising defect fixed four times elsewhere.
+    # Deduped over operating days, because a daily flight is one flight to a
+    # person and seven rows to the schedule.
+    origin = _tool_arg(envelopes, "find_flights", "origin")
+    destination = _tool_arg(envelopes, "find_flights", "destination")
+    if origin and destination:
+        numbers = list(dict.fromkeys(flight.flight_no for flight in flights))
+        lines.append(
+            f"\n{origin} to {destination}: " + ", ".join(numbers) + "."
+        )
 
     wants_max = bool(_SUPERLATIVE_MAX_RE.search(question))
     wants_min = bool(_SUPERLATIVE_MIN_RE.search(question)) and not wants_max

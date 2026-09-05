@@ -369,6 +369,27 @@ _GREETING_TOKENS: Final[frozenset[str]] = frozenset(
 _GREETING_MAX_TOKENS: Final = 4
 
 
+#: Being asked what it does. Answered rather than refused: it is the first
+#: thing anyone types, and "the question names nothing in the crew operations
+#: dataset" is the least useful sentence available in reply to it.
+_CAPABILITY_RE: Final[re.Pattern[str]] = re.compile(
+    r"\bwhat\s+(?:can|could)\s+(?:you|i|we)\b"
+    r"|\bwhat\s+(?:do|are)\s+you\b"
+    r"|\bwhat\s+(?:are\s+)?your\s+capabilit"
+    r"|\bwhat\s+(?:kind|sort)\s+of\s+questions?\b"
+    r"|\bhow\s+(?:do|can)\s+i\s+use\b"
+    r"|\bwho\s+are\s+you\b"
+    r"|^\s*help\s*[?.!]?\s*$"
+    r"|\bwhat\s+(?:is|are)\s+this\b",
+    re.IGNORECASE,
+)
+
+
+def is_capability_question(question: str) -> bool:
+    """Is the user asking what this system is for?"""
+    return bool(_CAPABILITY_RE.search(question))
+
+
 def _is_greeting(question: str) -> bool:
     """True when the whole question is an opener or a thank you.
 
@@ -520,6 +541,28 @@ def triage_question(question: str) -> Triage:
     # does not model AND names nothing this system can compute over. "Is the
     # weather going to break C-1042's duty limit" stays in scope; "what is the
     # weather at BLR" does not.
+    if is_capability_question(question):
+        return Triage(
+            in_scope=False,
+            tier=1,
+            reason=(
+                "I am a decision aid for an airline Crew Control desk. I answer "
+                "from one week of dCortex Air's schedule out of BLR: 147 flights, "
+                "150 crew, 39 pairings, 16 reserves and seven duty rules. Ask me "
+                "who is on reserve, whether a crew member is legal for a duty, "
+                "what breaks when someone calls in sick or a station closes, and "
+                "what the ranked ways to cover a gap cost. Every figure comes "
+                "from the data with its arithmetic shown, and when I cannot "
+                "answer reliably I say so and say what was missing."
+            ),
+            entities=entities,
+            # GREETING, not OUT_OF_SCOPE. The reason decides the tone: a
+            # greeting is answered and carries no "I cannot", which is right
+            # here because nothing is missing. The user has not asked for
+            # anything yet, they have asked what there is to ask for.
+            abstention_reason=AbstentionReason.GREETING,
+        )
+
     # A STATED DISRUPTION IS NOT AN OUT OF SCOPE QUESTION.
     #
     # "BLR weather is not suitable" names weather, which is not modelled, and

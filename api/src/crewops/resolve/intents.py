@@ -621,6 +621,12 @@ INTENTS: Final[tuple[Intent, ...]] = (
         patterns=_rx(
             r"\bwhich flights\b",
             r"\bflights (?:depart|leave|arrive|operate|fly)\b",
+            # How people actually ask. "which flights" and "flights depart"
+            # were the shipped phrasings; "flights from Delhi to Chennai" is
+            # the first thing a teammate typed and it matched nothing.
+            r"\bflights?\s+(?:from|to|between)\b",
+            r"\b(?:any|are there)\b[^.?!]{0,20}\bflights?\b",
+            r"\broutes?\s+(?:from|to|between)\b",
             r"\bhow many flights\b",
             r"\bdeparting\b",
             r"\bschedule\b",
