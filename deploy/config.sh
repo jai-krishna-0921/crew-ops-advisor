@@ -7,6 +7,17 @@
 # does not spawn its own billing account and its own IAM to clean up later.
 export PROJECT_ID="${PROJECT_ID:-generative-ai-solutions}"
 export REGION="${REGION:-us-central1}"
+
+# The project number, which is half of one of the two hostnames Cloud Run
+# answers on and therefore half of the origin list voice has to allow.
+#
+# Written down rather than looked up. `gcloud projects describe` needs
+# cloudresourcemanager.googleapis.com enabled for the CALLER, which is true
+# for a human running these scripts and was not true for the deploy service
+# account: release.sh worked on a laptop and failed in CI with SERVICE_DISABLED.
+# It is not a secret; it is in the URL, and in the workload identity provider
+# name that is already a public identifier.
+export PROJECT_NUMBER="${PROJECT_NUMBER:-159433955312}"
 export REPO="${REPO:-extroc}"
 export SERVICE="${SERVICE:-extroc}"
 export REGISTRY="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}"

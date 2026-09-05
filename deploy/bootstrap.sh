@@ -28,6 +28,7 @@ say "enabling APIs"
 gcloud services enable \
   run.googleapis.com artifactregistry.googleapis.com \
   secretmanager.googleapis.com iam.googleapis.com iamcredentials.googleapis.com \
+  cloudresourcemanager.googleapis.com \
   --project "$PROJECT_ID" --quiet
 
 say "artifact registry ${REPO} in ${REGION}"

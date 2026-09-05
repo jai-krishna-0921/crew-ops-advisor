@@ -19,7 +19,9 @@ POOL="github"
 PROVIDER="github-oidc"
 DEPLOY_SA="${SERVICE}-deploy@${PROJECT_ID}.iam.gserviceaccount.com"
 RUN_SA="${SERVICE}-run@${PROJECT_ID}.iam.gserviceaccount.com"
-NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+# The configured value first: the lookup needs cloudresourcemanager enabled
+# for whoever is calling, which is not guaranteed on a fresh project.
+NUMBER="${PROJECT_NUMBER:-$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')}"
 
 say "deploy service account"
 gcloud iam service-accounts describe "$DEPLOY_SA" --project "$PROJECT_ID" >/dev/null 2>&1 \

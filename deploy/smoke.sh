@@ -22,11 +22,14 @@ curl -fsS -o /dev/null "${URL}/" || die "the web app did not answer"
 # refuses an Origin it does not know and curl does not send one by default. A
 # handshake without Origin proves nothing a browser cares about.
 say "checking the voice WebSocket accepts a browser Origin"
-STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -m 20 --http1.1 \
+# A 101 here means curl then sits on an open socket until --max-time kills it,
+# which is the healthy shape and not a failure: the status is already
+# recorded by then. A refused origin answers 403 immediately instead.
+STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -m 8 --http1.1 \
   "${URL}/api/voice/session?provider=sarvam" \
   -H "Origin: ${URL}" \
   -H "Connection: Upgrade" -H "Upgrade: websocket" \
-  -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" || true)"
+  -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" 2>/dev/null || true)"
 [ "$STATUS" = "101" ] \
   || die "the voice WebSocket answered ${STATUS} to an Origin of ${URL}, not 101. \
 Add that origin to CREWOPS_ALLOWED_ORIGINS."

@@ -33,7 +33,6 @@ fi
 # knowable from here, so both are allowed. The project-number form is
 # derivable; the hash form has to be read back off the service, and does not
 # exist yet on the very first deploy, which is what the update below is for.
-PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 ORIGIN_NUMBER="https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app"
 ORIGIN_HASH="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" \
   --region "$REGION" --format='value(status.url)' 2>/dev/null || true)"
