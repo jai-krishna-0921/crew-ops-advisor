@@ -265,6 +265,9 @@ class Tools:
             "status": status,
             "limit": limit,
         }
+        unknown = self._unknown_station(base)
+        if unknown is not None:
+            return error_envelope("find_crew", args, unknown, timer=timer)
         if crew_ids:
             missing = [c for c in crew_ids if self.world.crew_member(c) is None]
             if missing:
@@ -436,6 +439,9 @@ class Tools:
             "registration": registration,
             "limit": limit,
         }
+        unknown = self._unknown_station(origin, destination)
+        if unknown is not None:
+            return error_envelope("find_flights", args, unknown, timer=timer)
         if pairing_id and self.world.pairing(pairing_id) is None:
             return error_envelope(
                 "find_flights", args, self._unknown_pairing(pairing_id), timer=timer
@@ -653,6 +659,9 @@ class Tools:
             "at_time": at_time,
             "crew_id": crew_id,
         }
+        unknown = self._unknown_station(base)
+        if unknown is not None:
+            return error_envelope("list_reserves", args, unknown, timer=timer)
         first, last = self.world.date_range
         if not first <= on_date <= last:
             return error_envelope(
@@ -1111,6 +1120,9 @@ class Tools:
     ) -> ToolEnvelope:
         timer = ToolTimer()
         args = {"min_score": min_score, "base": base, "on_date": on_date, "limit": limit}
+        unknown = self._unknown_station(base)
+        if unknown is not None:
+            return error_envelope("find_crew_at_risk", args, unknown, timer=timer)
         rostered_ids: set[str] | None = None
         if on_date is not None:
             rostered_ids = {
@@ -3004,6 +3016,32 @@ class Tools:
             f"No crew record for {crew_id}. The dataset holds "
             f"{len(self.world.crew)} crew, with ids in the form C-1234."
         )
+
+    def _unknown_station(self, *args: str | None) -> str | None:
+        """The message for the first station named that does not exist.
+
+        "A failed lookup is not a finding of 'none'" is already the rule for a
+        call that errored. This is its mirror: a filter on an identifier the
+        dataset has never heard of is not a query that returned nothing, it is
+        a query that could not be asked. `list_reserves(base="IDR")` answered
+        "0 reserves at IDR", which reads as a finding about IDR's cover.
+
+        Crew ids and pairing ids were checked from the start because they are
+        subjects. Stations are filters, so an unknown one silently matched no
+        rows, which looks exactly like a real station with nothing on it.
+        """
+        known = set(self.world.stations)
+        for value in args:
+            if value is None:
+                continue
+            if value.strip().upper() not in known:
+                return (
+                    f"{value} is not a station in this dataset, so there is "
+                    "nothing to report about it. This network serves "
+                    + ", ".join(sorted(known))
+                    + "."
+                )
+        return None
 
     def _unknown_pairing(self, pairing_id: str) -> str:
         return (
