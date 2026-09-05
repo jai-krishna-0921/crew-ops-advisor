@@ -110,7 +110,7 @@ export function BriefView() {
 
   const router = useRouter();
   const ask = useCallback(
-    (question: string) => router.push(`/?q=${encodeURIComponent(question)}`),
+    (question: string) => router.push(`/ask?q=${encodeURIComponent(question)}`),
     [router],
   );
 
@@ -321,7 +321,7 @@ function AlertRow({ alert }: { alert: Alert }) {
       {alert.suggested_question ? (
         <div className="px-3 py-2">
           <Link
-            href={`/?q=${encodeURIComponent(alert.suggested_question)}`}
+            href={`/ask?q=${encodeURIComponent(alert.suggested_question)}`}
             className="group inline-flex items-center gap-1.5 text-base text-accent"
           >
             {alert.suggested_question}

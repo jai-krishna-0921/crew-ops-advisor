@@ -38,7 +38,7 @@ import { cx } from "@/components/ui/tone";
 type IconType = ComponentType<{ size?: number; weight?: "bold" | "fill"; className?: string }>;
 
 const NAV: ReadonlyArray<{ href: string; label: string; icon: IconType }> = [
-  { href: "/", label: "Ask", icon: ChatCircleIcon },
+  { href: "/ask", label: "Ask", icon: ChatCircleIcon },
   { href: "/brief", label: "Brief", icon: ListChecksIcon },
   { href: "/ops", label: "Rules", icon: SlidersHorizontalIcon },
   { href: "/architecture", label: "How", icon: TreeStructureIcon },

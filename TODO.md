@@ -53,6 +53,44 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
       bubble in its own warm colour. Calmer than the reference: no
       photograph, no six-hue spectrum, chroma about a third of it.
 
+## Landed: a landing page
+
+The advisor moved to `/ask` and `/` became a page that explains the product.
+`/?q=...` and `/?thread=...` forward on the server, so every demo link, the
+brief's suggested questions and anything already shared still land on the
+console with the question intact.
+
+- [x] Built it once as the template and threw that away. Centred eyebrow,
+      centred headline with a gradient on two words, centred subtitle, two
+      centred buttons, repeated five times down the page. Competent, and the
+      exact page a generator produces.
+- [x] Rebuilt asymmetric: the hero is set left with three cards stacked to the
+      right of it at different depths and rotations, each drifting at its own
+      rate. Section headings sit still on the left while their content scrolls
+      past.
+- [x] The three tiers are a horizontal track. The section pins to the window
+      and the cards walk left as the reader scrolls down, on a CSS scroll
+      timeline. No scroll listener anywhere, and where scroll timelines are
+      unsupported the same markup is a row you swipe.
+- [x] A ticker of dataset counts, a highlighter mark, a progress line tied to
+      the same timeline as the track it measures, and a fourth card at the end
+      of the three tiers for the question it refuses.
+- [x] Copy rewritten with a voice. "The model plans and explains,
+      deterministic code computes" is accurate and reads like a datasheet.
+      "The model isn't allowed to do the maths" is the same claim, shorter,
+      and how anybody would say it out loud.
+- [x] shadcn primitives: `Button` and `ButtonLink` on `cva` with the trailing
+      icon in its own disc, and an accordion on Radix for the seven rules so
+      the panel height animates instead of snapping.
+- [x] No scorecard on it, on purpose. `PROGRESS.md` records the same model
+      scoring 16, 15 and 16 on three identical passes, and a landing page is
+      the surface nobody returns to update. The dataset counts cannot drift;
+      an accuracy figure would be quietly false within a week.
+- [x] Fix: the landing page was making two API calls it had nowhere to put,
+      which also made it depend on the API being up. It talks to nothing now.
+- [x] Fix: `router.replace("/")` after a URL-seeded question sent the reader
+      to the landing page instead of to their answer.
+
 ## Landed: the answer has no heading
 
 - [x] `Reply.headline` stops being an `h2` at 24px in the display face. It is

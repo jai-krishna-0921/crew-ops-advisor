@@ -651,13 +651,6 @@
  * layer transparent where it is cut, so there is nothing to see an edge of. */
 @utility hero-wash {
   background-image: var(--grad-hero);
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    #000 26%,
-    #000 64%,
-    transparent 100%
-  );
   mask-image: linear-gradient(
     to bottom,
     transparent 0%,
@@ -838,6 +831,341 @@
   background-size: 220% 100%;
   animation: co-shimmer 2.6s linear infinite;
   border-radius: var(--r-xs);
+}
+
+/* ==========================================================================
+   The landing page.
+   ========================================================================== */
+
+/* THE AURORA. Four soft lights on a fixed layer behind the whole document.
+   Fixed rather than in the flow, because a blurred gradient inside a
+   scrolling container is a full-surface GPU repaint on every frame; pinned
+   behind it, the browser paints it once and scrolls the content over it.
+
+   Every stop is a hue this product already uses. It is the same six card
+   tints spread out and turned up, so the landing and the console read as one
+   thing rather than as a brochure with an application behind it. */
+@utility aurora {
+  position: fixed;
+  /* Only as much bleed as the drift needs. It was `-20vmax`, which made the
+     layer roughly three viewports wide, so every light positioned at a
+     percentage of it landed off screen and all that reached the page was the
+     outer falloff of two of them. The drift translates 3 percent and scales
+     up, so 8 percent of slack is the whole requirement. */
+  inset: -8%;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(
+      34vmax 30vmax at 78% 4%,
+      oklch(62% 0.15 282 / 0.4),
+      transparent 68%
+    ),
+    radial-gradient(
+      30vmax 26vmax at 10% 0%,
+      oklch(76% 0.13 32 / 0.38),
+      transparent 70%
+    ),
+    radial-gradient(
+      34vmax 28vmax at 98% 52%,
+      oklch(72% 0.13 205 / 0.32),
+      transparent 72%
+    ),
+    radial-gradient(
+      30vmax 26vmax at 0% 74%,
+      oklch(70% 0.14 158 / 0.28),
+      transparent 72%
+    );
+  animation: co-drift 34s var(--ease) infinite alternate;
+}
+
+/* GRAIN, ON A FIXED LAYER. An SVG feTurbulence as a data URI, so there is no
+   image request and the page still renders with no network. Four percent: it
+   is there to stop a large flat gradient banding on an 8-bit display, and a
+   grain anybody can see is a texture rather than a fix. */
+@utility grain {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* THE DOUBLE BEZEL. A plate sitting in a tray: an outer shell in a tint of
+   the ground, and an inner core whose radius is the shell's radius minus the
+   shell's padding, so the two curves are concentric rather than two radii
+   that happen to be near each other. `tray` in this stylesheet is the small
+   version of the same idea; this one is sized for a landing page. */
+@utility bezel {
+  border-radius: 2rem;
+  padding: 0.5rem;
+  background: linear-gradient(
+    180deg,
+    oklch(24.5% 0.011 62 / 0.055),
+    oklch(24.5% 0.011 62 / 0.02)
+  );
+  box-shadow: var(--ring-faint);
+}
+
+@utility bezel-core {
+  border-radius: 1.5rem;
+  background: var(--surface);
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / 0.6),
+    var(--shadow-float);
+}
+
+/* Frosted, for the floating navigation only. `backdrop-filter` is cheap on a
+   fixed 60px pill and ruinous on anything that scrolls. */
+/* NO HAND WRITTEN VENDOR PREFIX. Writing `-webkit-backdrop-filter` next to
+   `backdrop-filter` made Lightning CSS treat them as duplicates and keep only
+   the prefixed one, so the nav computed `backdrop-filter: none` and the
+   content scrolling under it stayed perfectly sharp through a pill that was
+   supposed to frost it. The toolchain prefixes from the browser targets; the
+   stylesheet's job is to say what it wants once. */
+@utility frost {
+  background: oklch(99.6% 0.002 84 / 0.72);
+  backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: var(--ring-faint), var(--shadow-float);
+}
+
+@keyframes co-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-3%, 2%, 0) scale(1.08);
+  }
+}
+
+/* ==========================================================================
+   Scroll driven motion.
+
+   CSS scroll timelines, not a scroll listener. A `scroll` handler runs on the
+   main thread on every frame of every wheel tick, and anything it reads forces
+   layout; `animation-timeline` hands the whole thing to the compositor, which
+   is the difference between parallax that holds 60fps on a phone and parallax
+   that is the reason the phone gets warm.
+
+   EVERY BLOCK BELOW IS AN ENHANCEMENT. The base rules are the ones that make
+   the page work with no scroll timelines at all: the horizontal section is an
+   ordinary swipeable row, and the parallax layers simply do not move. Nothing
+   here is load bearing for reading the page.
+   ========================================================================== */
+
+/* The horizontal section, without support: a row you push sideways, with snap
+   points so it still lands somewhere sensible. */
+.hscroll-pin {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding-inline: 1rem;
+}
+
+.hscroll-pin::-webkit-scrollbar {
+  display: none;
+}
+
+.hscroll-track {
+  display: flex;
+  gap: 1rem;
+}
+
+.hscroll-track > * {
+  scroll-snap-align: center;
+}
+
+@supports (animation-timeline: view()) {
+  /* With support: the section becomes a tall block whose child pins to the
+     viewport, and the track walks left as the block scrolls through. The
+     reader scrolls down and the content moves sideways, which is the point.
+
+     `contain` is the range that matters. For a subject taller than the
+     viewport it runs from the moment the subject's top meets the viewport's
+     top to the moment its bottom meets the viewport's bottom, which is
+     exactly the interval the sticky child is pinned for. `cover` would start
+     the track moving while the section was still below the fold. */
+  .hscroll {
+    height: 320vh;
+    view-timeline-name: --hs;
+    view-timeline-axis: block;
+  }
+
+  .hscroll-pin {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    align-items: center;
+    overflow: hidden;
+    padding-inline: 0;
+    scroll-snap-type: none;
+  }
+
+  .hscroll-track {
+    padding-inline: 6vw;
+    animation: co-track linear both;
+    animation-timeline: --hs;
+    animation-range: contain 0% contain 100%;
+  }
+
+  /* How far through the track the reader is. On the same timeline as the
+     track itself, so it cannot drift out of step with what it is measuring,
+     and it is the thing that tells somebody the section is a track at all
+     rather than a page that has stopped scrolling. */
+  .hscroll-progress {
+    transform-origin: left center;
+    animation: co-progress linear both;
+    animation-timeline: --hs;
+    animation-range: contain 0% contain 100%;
+  }
+
+  /* Layers that drift against the scroll. Small numbers on purpose: parallax
+     you notice is parallax that has gone wrong. */
+  .parallax-slow,
+  .parallax-fast,
+  .parallax-tilt {
+    animation: linear both;
+    animation-timeline: view();
+    animation-range: cover 0% cover 100%;
+  }
+
+  .parallax-slow {
+    animation-name: co-parallax-slow;
+  }
+
+  .parallax-fast {
+    animation-name: co-parallax-fast;
+  }
+
+  .parallax-tilt {
+    animation-name: co-parallax-tilt;
+  }
+}
+
+@keyframes co-track {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    /* The track's own width, less a viewport, so the last card finishes flush
+       rather than being dragged past the edge. */
+    transform: translate3d(calc(100vw - 100% - 12vw), 0, 0);
+  }
+}
+
+@keyframes co-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes co-parallax-slow {
+  from {
+    transform: translate3d(0, 44px, 0);
+  }
+  to {
+    transform: translate3d(0, -44px, 0);
+  }
+}
+
+@keyframes co-parallax-fast {
+  from {
+    transform: translate3d(0, 96px, 0);
+  }
+  to {
+    transform: translate3d(0, -96px, 0);
+  }
+}
+
+@keyframes co-parallax-tilt {
+  from {
+    transform: translate3d(0, 60px, 0) rotate(-2.5deg);
+  }
+  to {
+    transform: translate3d(0, -60px, 0) rotate(1.5deg);
+  }
+}
+
+/* THE TICKER. Two identical copies of the content in one row, translated by
+   exactly half, so the seam lands where the second copy's first item sits on
+   top of where the first copy's was. Any other number and the loop visibly
+   jumps once per cycle. */
+.marquee {
+  display: flex;
+  width: max-content;
+  animation: co-marquee 48s linear infinite;
+}
+
+.marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes co-marquee {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+/* A short rule under a phrase, drawn by hand rather than set as an underline,
+   so it reads as somebody marking the page rather than as a link. */
+.scribble {
+  position: relative;
+  white-space: nowrap;
+}
+
+.scribble::after {
+  content: "";
+  position: absolute;
+  inset-inline: -0.2em;
+  bottom: -0.1em;
+  height: 0.5em;
+  /* The amber card tile, not `--accent-tint`. That token is 11 percent alpha,
+     which is right behind a chip and invisible behind a word: the mark read as
+     a slightly heavy underline and nothing else. A highlighter is opaque. */
+  background: var(--tint-3-tile);
+  border-radius: 0.35em 0.8em 0.4em 0.7em;
+  transform: rotate(-0.7deg);
+  z-index: -1;
+}
+
+@keyframes co-accordion-down {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes co-accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+/* The one place this stylesheet animates a layout property. A height that
+   interpolates is the whole point of an accordion, `height` is the only
+   property that expresses it, and Radix publishes the measured target so it
+   does not have to be read back from the DOM mid-transition. */
+.anim-accordion-down {
+  animation: co-accordion-down var(--dur-slow) var(--ease);
+}
+
+.anim-accordion-up {
+  animation: co-accordion-up var(--dur) var(--ease);
 }
 
 @media (prefers-reduced-motion: reduce) {

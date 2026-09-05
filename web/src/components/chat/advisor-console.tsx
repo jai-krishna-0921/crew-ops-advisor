@@ -235,7 +235,14 @@ export function AdvisorConsole() {
     if (!q || seededRef.current === q) return;
     seededRef.current = q;
     ask(q);
-    router.replace("/", { scroll: false });
+    // BACK TO THIS ROUTE, NOT TO `/`. The console lived at `/` and this line
+    // said so literally, so the moment the landing page took that route,
+    // asking a question from a link fired the question and then navigated
+    // away from the answer to the marketing page. The query string is what
+    // needs clearing, not the path: leaving `?q=` in the bar means a reload
+    // asks the same question again, and the back button walks through a
+    // conversation the reader never typed.
+    router.replace("/ask", { scroll: false });
   }, [hydrated, params, ask, router]);
 
   const activeTurn =

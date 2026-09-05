@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import type { SampleQuestion, ThreadSummary } from "@/lib/contracts";
 import { api } from "@/lib/api";
@@ -28,11 +28,33 @@ import { SectionRail } from "@/components/shell/section-rail";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { open, setOpen } = useCommandPalette();
+
+  /**
+   * THE LANDING PAGE IS NOT IN THE CONSOLE. It is the page somebody arrives
+   * on before they are a user of anything, it carries its own floating
+   * navigation, and it scrolls as one document rather than filling a fixed
+   * viewport. Wrapping it in the section rail would put a product's chrome
+   * around a page whose job is to explain what the product is.
+   *
+   * A route check rather than a second root layout, because the two would
+   * then have to keep the fonts, the palette and the metadata in sync, and
+   * the only thing that actually differs is whether the rail is drawn.
+   */
+  const bare = pathname === "/";
   const [questions, setQuestions] = useState<SampleQuestion[]>([]);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
 
   useEffect(() => {
+    // THE LANDING PAGE TALKS TO NOTHING. This effect loads what the command
+    // palette searches, and the palette is not mounted on `/`, so on the one
+    // page a stranger arrives at first it was making two API calls whose
+    // results had nowhere to go. Worse, it made the landing page's console
+    // depend on the API being up, which is exactly backwards: a page that
+    // explains the product should render when the product is not running.
+    if (bare) return;
+
     let cancelled = false;
     Promise.all([api.questions(), api.threads()])
       .then(([q, t]) => {
@@ -46,21 +68,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [bare]);
 
   const ask = useCallback(
     (question: string) => {
-      router.push(`/?q=${encodeURIComponent(question)}`);
+      router.push(`/ask?q=${encodeURIComponent(question)}`);
     },
     [router],
   );
 
   const openThread = useCallback(
     (threadId: string) => {
-      router.push(`/?thread=${encodeURIComponent(threadId)}`);
+      router.push(`/ask?thread=${encodeURIComponent(threadId)}`);
     },
     [router],
   );
+
+  if (bare) return <>{children}</>;
 
   return (
     <div className="flex h-dvh overflow-hidden">
