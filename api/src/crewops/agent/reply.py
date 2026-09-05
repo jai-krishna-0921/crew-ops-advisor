@@ -411,9 +411,16 @@ def _caveats(
             "in the evidence drawer."
         )
     if verification.status is VerificationStatus.REPAIRED:
+        # WORDED FOR BOTH REASONS A SECOND PASS HAPPENS. The old line said the
+        # answer "needed one correction pass before every figure could be
+        # traced", which is true of a grounding repair and false of a style
+        # one: when a guard intercepts the first draft it is never verified at
+        # all, so nothing was untraceable. This says what the reader can rely
+        # on either way, and it is a note about process rather than a warning
+        # about the answer.
         caveats.append(
-            "This answer needed one correction pass before every figure in it "
-            "could be traced to a tool result."
+            "This answer was rewritten once before it passed the checks. Every "
+            "figure in the version above is traced to a tool result."
         )
     return caveats
 

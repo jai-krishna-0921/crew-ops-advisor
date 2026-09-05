@@ -884,6 +884,12 @@ def _guard_outcome(
                 "required_tools": list(failure.required_tools),
             },
         }
+    if not failure.fatal:
+        # ONE ASK, THEN LET IT GO. A style guard has had its correction pass
+        # and the answer is still merely verbose. Abstaining here would trade
+        # a correct answer for a tidy refusal, which is the scoring principle
+        # backwards. The draft goes on to grounding like any other.
+        return {"timings": timings, "pending_guard": None}
     return {
         "verification": report,
         "timings": timings,

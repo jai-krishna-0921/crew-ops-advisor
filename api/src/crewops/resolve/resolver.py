@@ -297,7 +297,13 @@ class DeterministicResolver:
         # grounding check as the agent. It has no repair pass, because a
         # template that produces an unattested figure is a bug in the template,
         # not something to negotiate with.
+        # A STYLE FAILURE IS NOT A REFUSAL. The offline templates cannot be
+        # rewritten mid-turn, so a non-fatal guard here has nothing to ask for.
+        # Abstaining over verbosity would throw away a correct answer, which is
+        # the one trade this system never makes.
         failure = run_guards(draft=text, tier=tier, envelopes=envelopes)
+        if failure is not None and not failure.fatal:
+            failure = None
         if failure is not None:
             return self._abstain(
                 question,
