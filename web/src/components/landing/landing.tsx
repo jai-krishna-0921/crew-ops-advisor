@@ -40,7 +40,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
-  ArrowDownIcon,
   ArrowRightIcon,
   ArrowUpRightIcon,
   CheckCircleIcon,
@@ -49,7 +48,7 @@ import {
   TreeStructureIcon,
 } from "@phosphor-icons/react/dist/ssr";
 
-import { Reveal } from "@/components/landing/reveal";
+import { Reveal, revealClasses, useInView } from "@/components/landing/reveal";
 import {
   Accordion,
   AccordionContent,
@@ -178,6 +177,69 @@ const NAV = [
   { href: "#rules", label: "The rules" },
 ];
 
+/* ------------------------------------------------------------------- pieces */
+
+/**
+ * A heading whose words arrive one after another.
+ *
+ * Split on spaces and each word wrapped, because a heading that fades in as
+ * one block is a heading that appeared, and one that arrives left to right is
+ * a heading being written. The delay is small: 40ms across seven words is
+ * under a third of a second, which reads as one gesture rather than as seven
+ * animations.
+ *
+ * `inline-block` on the word and `overflow-hidden` on the wrapper is what
+ * makes it a mask rather than a fade: the word rises out from behind the line
+ * above it. Descenders would be clipped, so the wrapper carries the leading as
+ * padding and pulls it back with a negative margin.
+ *
+ * ONE OBSERVER, ON THE HEADING, NOT ONE PER WORD. That mask clips the word to
+ * nothing while it is hidden, and IntersectionObserver accounts for clipping
+ * by an ancestor's overflow, so a word watching itself can never see itself
+ * arrive: the mask hides it, the observer reports zero area, and it stays
+ * hidden forever. It only appeared to work at desktop size, where the word was
+ * taller than the 40px of travel and a sliver stayed inside the clip box; at
+ * the smaller mobile heading size every word vanished for good. The heading is
+ * never hidden, so the heading is the thing to watch.
+ */
+function Words({
+  text,
+  className,
+  from = 0,
+}: {
+  text: string;
+  className?: string;
+  from?: number;
+}) {
+  const { ref, shown } = useInView<HTMLSpanElement>();
+  const words = text.split(" ");
+
+  return (
+    <span ref={ref} className={className}>
+      {words.map((word, index) => (
+        <span
+          key={`${word}-${index}`}
+          className={cn(
+            "inline-block -mb-[0.22em] overflow-hidden pb-[0.22em] align-bottom",
+            // THE WORD SPACE IS A MARGIN, NOT A SPACE. A trailing space inside
+            // an inline-block is trimmed, so rendering it after the word ran
+            // the heading together as "Itgoesasfarasthe". A margin cannot be
+            // collapsed away.
+            index < words.length - 1 && "me-[0.25em]",
+          )}
+        >
+          <span
+            style={{ transitionDelay: `${from + index * 40}ms` }}
+            className={cn(revealClasses(shown), "inline-block")}
+          >
+            {word}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 /* --------------------------------------------------------------------- page */
 
 export function Landing() {
@@ -190,6 +252,17 @@ export function Landing() {
       <div aria-hidden className="aurora" />
       <div aria-hidden className="grain" />
 
+      {/* How far down the page the reader is, drawn as a hairline across the
+          top. It is on a scroll timeline like everything else here, so it
+          costs nothing and cannot fall out of step with the scroll it is
+          reporting. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 top-0 z-40 h-[2px]"
+      >
+        <div className="scroll-progress h-full w-full bg-[image:var(--grad-accent)]" />
+      </div>
+
       <Nav />
       <Hero />
       <Ticker />
@@ -197,6 +270,7 @@ export function Landing() {
       <Work />
       <Rules />
       <Close />
+      <Footer />
     </div>
   );
 }
@@ -535,7 +609,7 @@ function Boundary() {
   return (
     <section
       id="boundary"
-      className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 py-24 sm:px-8 sm:py-32"
+      className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 py-32 sm:px-8 sm:py-48"
     >
       <div className="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
         <Reveal>
@@ -546,7 +620,7 @@ function Boundary() {
               Where the line is
             </p>
             <h2 className="macro mt-5 max-w-[14ch] text-[clamp(2rem,4vw,3.25rem)] text-ink">
-              One of these lists is the whole product
+              <Words text="One of these lists is the whole product" />
             </h2>
             <p className="mt-6 max-w-[46ch] text-md leading-relaxed text-ink-2">
               Legality is exact arithmetic against a rulebook. A model that
@@ -564,12 +638,12 @@ function Boundary() {
         </Reveal>
 
         <div className="grid gap-4">
-          <Reveal>
+          <div className="settle">
             <List tone="pass" title="It may" items={MAY} />
-          </Reveal>
-          <Reveal delay={110}>
+          </div>
+          <div className="settle-alt">
             <List tone="breach" title="It may not" items={MAY_NOT} />
-          </Reveal>
+          </div>
           <Reveal delay={200}>
             <div className="rounded-[2rem] bg-ink px-7 py-8 text-page sm:px-9">
               <p className="macro text-xl">And then something checks</p>
@@ -643,39 +717,43 @@ function List({
 function Work() {
   return (
     <section id="work" className="scroll-mt-0">
-      <div className="mx-auto w-full max-w-6xl px-4 pb-10 sm:px-8">
-        <Reveal>
-          <div className="flex flex-wrap items-end justify-between gap-6">
+      <div className="hscroll">
+        <div className="hscroll-pin relative">
+          {/* THE HEADING LIVES INSIDE THE PIN. It used to sit above the
+              section, which meant it had scrolled off the top before the
+              cards started moving: the reader arrived at a screen of cards
+              with no label, scrolled, and could not tell whether the sideways
+              movement was the page doing something or a rendering glitch.
+              Kept on screen for the whole pin, the horizontal walk is
+              obviously the answer to the scroll. */}
+          <div className="mx-auto flex w-full max-w-6xl shrink-0 flex-wrap items-end justify-between gap-4 px-4 pt-24 pb-8 sm:px-8">
             <div>
               <p className="text-2xs font-semibold tracking-[0.2em] text-ink-3 uppercase">
                 Three kinds of question
               </p>
-              <h2 className="macro mt-5 max-w-[16ch] text-[clamp(2rem,4vw,3.25rem)] text-ink">
-                It goes as far as the question does
+              <h2 className="macro mt-4 max-w-[16ch] text-[clamp(1.75rem,3.4vw,2.75rem)] text-ink">
+                <Words text="It goes as far as the question does" />
               </h2>
             </div>
             <p className="flex items-center gap-2 text-base text-ink-3">
-              Keep scrolling
-              <ArrowDownIcon size={14} weight="bold" aria-hidden />
+              Scroll, and they move sideways
+              <ArrowRightIcon size={14} weight="bold" aria-hidden />
             </p>
           </div>
-        </Reveal>
-      </div>
 
-      <div className="hscroll">
-        <div className="hscroll-pin relative">
-          <div className="hscroll-track">
-            {TIERS.map((tier) => (
-              <WorkCard key={tier.n} {...tier} />
-            ))}
-            <FourthCard />
+          <div className="hscroll-scroller flex min-h-0 flex-1 items-center">
+            <div className="hscroll-track">
+              {TIERS.map((tier) => (
+                <WorkCard key={tier.n} {...tier} />
+              ))}
+              <FourthCard />
+            </div>
           </div>
 
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-[6vw] bottom-10 h-px bg-line"
-          >
-            <div className="hscroll-progress h-px w-full bg-[image:var(--grad-accent)]" />
+          <div className="mx-auto w-full max-w-6xl shrink-0 px-4 pt-6 pb-12 sm:px-8">
+            <div aria-hidden className="h-px bg-line">
+              <div className="hscroll-progress h-px w-full bg-[image:var(--grad-accent)]" />
+            </div>
           </div>
         </div>
       </div>
@@ -767,7 +845,7 @@ function Rules() {
   return (
     <section
       id="rules"
-      className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 py-24 sm:px-8 sm:py-32"
+      className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 py-32 sm:px-8 sm:py-48"
     >
       <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
         <Reveal>
@@ -776,7 +854,7 @@ function Rules() {
               Seven, and there is no eighth
             </p>
             <h2 className="macro mt-5 max-w-[12ch] text-[clamp(2rem,4vw,3.25rem)] text-ink">
-              The rulebook, as shipped
+              <Words text="The rulebook, as shipped" />
             </h2>
             <p className="mt-6 max-w-[42ch] text-md leading-relaxed text-ink-2">
               Every candidate for every cover is checked against all seven, on
@@ -830,7 +908,7 @@ function Rules() {
 
 function Close() {
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-8">
+    <section className="mx-auto w-full max-w-6xl px-4 pb-24 sm:px-8 sm:pb-32">
       <Reveal>
         <div className="relative overflow-hidden rounded-[2.5rem] bg-ink px-7 py-20 sm:px-14 sm:py-24">
           <div
@@ -844,7 +922,7 @@ function Close() {
               about 200px, which broke it after "ask it". */}
           <div className="relative">
             <h2 className="macro max-w-[15ch] text-[clamp(2rem,4.5vw,3.5rem)] text-page">
-              Go on, ask it something it cannot answer
+              <Words text="Go on, ask it something it cannot answer" />
             </h2>
             <p className="mt-6 max-w-[48ch] text-md leading-relaxed text-page/70">
               That is the part worth checking first. Everything else any of
@@ -872,30 +950,158 @@ function Close() {
         </div>
       </Reveal>
 
-      <Reveal delay={100}>
-        <footer className="mt-10 flex flex-col gap-3 pb-6 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-ink-3">
-            Built for the dCortex Agentic Crew Ops Advisor problem statement.
-            Snapshot 2026-09-14T18:00:00Z, all times UTC, currency INR.
-          </p>
-          <nav className="flex items-center gap-1">
-            {[
-              { href: "/ask", label: "Ask" },
-              { href: "/brief", label: "Brief" },
-              { href: "/ops", label: "Rules" },
-              { href: "/architecture", label: "Architecture" },
-            ].map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-full px-3 py-1.5 text-xs text-ink-2 transition-colors duration-300 ease-out-quint hover:bg-hover hover:text-ink"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </footer>
-      </Reveal>
     </section>
+  );
+}
+
+/* ------------------------------------------------------------------- footer */
+
+const FOOTER_LINKS = [
+  {
+    heading: "The product",
+    links: [
+      { href: "/ask", label: "Ask it something" },
+      { href: "/brief", label: "The morning brief" },
+      { href: "/ops", label: "The rules engine" },
+      { href: "/architecture", label: "Where the line is" },
+    ],
+  },
+  {
+    heading: "Try these",
+    links: [
+      {
+        href: "/ask?q=Who%20is%20on%20reserve%20at%20BLR%20on%202026-09-15%3F",
+        label: "Reserves at BLR",
+      },
+      {
+        href: "/ask?q=Captain%20C-1042%20calls%20in%20sick%20on%2015%20Sep.%20Which%20flights%20are%20uncrewed%3F",
+        label: "A captain calls in sick",
+      },
+      {
+        href: "/ask?q=C-1042%20is%20out%20for%20P-2291.%20Produce%20ranked%20options%20with%20costs.",
+        label: "Rank me some options",
+      },
+      {
+        href: "/ask?q=Is%20the%20weather%20going%20to%20delay%20DX401%20on%2016%20Sep%3F",
+        label: "Something it refuses",
+      },
+    ],
+  },
+  {
+    heading: "The dataset",
+    links: [
+      { href: "/ops", label: "147 flights, 150 crew" },
+      { href: "/ops", label: "39 pairings, 16 reserves" },
+      { href: "/ops", label: "7 rules, and no eighth" },
+      { href: "/ops", label: "38 questions with keys" },
+    ],
+  },
+];
+
+/** The second ticker, running the other way, so the page closes on a rhyme. */
+const FOOTER_TICKER = [
+  "the model plans",
+  "the code computes",
+  "the guard checks",
+  "and if it cannot, it says so",
+];
+
+function Footer() {
+  return (
+    <footer className="relative mt-8 overflow-hidden">
+      <div className="border-y border-line-soft py-3.5">
+        <div className="marquee-reverse" aria-hidden>
+          {[0, 1].map((copy) => (
+            <div key={copy} className="flex shrink-0 items-center">
+              {FOOTER_TICKER.map((item) => (
+                <span key={item} className="flex items-center">
+                  <span className="px-6 text-base whitespace-nowrap text-ink-3">
+                    {item}
+                  </span>
+                  <span className="size-1 shrink-0 rounded-full bg-line-strong" />
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mx-auto w-full max-w-6xl px-4 pt-16 sm:px-8">
+        <div className="grid gap-12 lg:grid-cols-[1fr_1.5fr]">
+          <Reveal>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <Mark />
+                <p className="text-md font-semibold text-ink">
+                  Crew Ops Advisor
+                </p>
+              </div>
+              <p className="mt-5 max-w-[34ch] text-base leading-relaxed text-ink-2">
+                A decision aid for the dCortex Air Crew Control desk. One week
+                of a real network, seven rules, and an answer you are meant to
+                argue with rather than take on trust.
+              </p>
+              <p className="num mt-5 text-xs text-ink-3">
+                Snapshot 2026-09-14T18:00:00Z. All times UTC, currency INR.
+              </p>
+            </div>
+          </Reveal>
+
+          <div className="grid gap-8 sm:grid-cols-3">
+            {FOOTER_LINKS.map((column, index) => (
+              <Reveal key={column.heading} delay={index * 90}>
+                <p className="text-2xs font-semibold tracking-[0.18em] text-ink-3 uppercase">
+                  {column.heading}
+                </p>
+                <ul className="mt-4 grid gap-2.5">
+                  {column.links.map((link) => (
+                    <li key={link.label}>
+                      <Link
+                        href={link.href}
+                        className="group inline-flex items-center gap-1.5 text-base text-ink-2 transition-colors duration-300 ease-out-quint hover:text-ink"
+                      >
+                        {link.label}
+                        <ArrowUpRightIcon
+                          size={11}
+                          weight="bold"
+                          aria-hidden
+                          className="translate-y-px opacity-0 transition-[opacity,transform] duration-300 ease-out-quint group-hover:translate-x-0.5 group-hover:opacity-100"
+                        />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+
+        <p className="mt-16 flex flex-wrap items-center gap-x-2 gap-y-1 pb-6 text-xs text-ink-3">
+          Built for the dCortex Agentic Crew Ops Advisor problem statement.
+          <span aria-hidden>&middot;</span>
+          <span>
+            The dataset is read only, and the answer keys are the ones it
+            shipped with.
+          </span>
+        </p>
+      </div>
+
+      {/* THE WORDMARK IS THE FLOOR OF THE PAGE. Cropped by the bottom edge on
+          purpose, drifting sideways against the scroll, and `aria-hidden`
+          because it is a piece of furniture rather than a heading: the
+          accessible name of this page is set four times above it already. */}
+      <div
+        aria-hidden
+        className="pointer-events-none relative h-[8.5vw] min-h-[3.25rem] select-none"
+      >
+        {/* Sized to just fill the window rather than to overflow it. At 17vw
+            the word ran a third of a viewport past both edges, which reads as
+            text that has escaped its container rather than as a wordmark
+            cropped on purpose. The drift is small for the same reason. */}
+        <p className="drift-left macro absolute inset-x-0 -bottom-[2vw] text-center text-[11.5vw] leading-none whitespace-nowrap text-ink opacity-[0.06]">
+          crew ops advisor
+        </p>
+      </div>
+    </footer>
   );
 }

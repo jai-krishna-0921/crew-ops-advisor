@@ -954,18 +954,27 @@
    here is load bearing for reading the page.
    ========================================================================== */
 
-/* The horizontal section, without support: a row you push sideways, with snap
-   points so it still lands somewhere sensible. */
+/* Three elements, and the split matters. `.hscroll` is the tall block that
+   provides the scroll distance, `.hscroll-pin` is what sticks to the window
+   and holds the heading as well as the cards, and `.hscroll-scroller` is the
+   only part that moves sideways. Putting the overflow on the pin instead
+   would take the heading with it.
+
+   Without scroll timelines: a row you push sideways, with snap points so it
+   lands somewhere sensible. */
 .hscroll-pin {
   display: flex;
-  gap: 1rem;
+  flex-direction: column;
+}
+
+.hscroll-scroller {
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
   padding-inline: 1rem;
 }
 
-.hscroll-pin::-webkit-scrollbar {
+.hscroll-scroller::-webkit-scrollbar {
   display: none;
 }
 
@@ -998,7 +1007,10 @@
     position: sticky;
     top: 0;
     height: 100dvh;
-    align-items: center;
+    overflow: hidden;
+  }
+
+  .hscroll-scroller {
     overflow: hidden;
     padding-inline: 0;
     scroll-snap-type: none;
@@ -1062,6 +1074,92 @@
   }
   to {
     transform: scaleX(1);
+  }
+}
+
+@supports (animation-timeline: scroll()) {
+  /* How far down the document the reader is. `scroll()` rather than `view()`:
+     the subject is the whole page, not this element, and the nearest scroll
+     container is the one to measure. */
+  .scroll-progress {
+    transform-origin: left center;
+    animation: co-progress linear both;
+    animation-timeline: scroll();
+  }
+}
+
+@supports (animation-timeline: view()) {
+  /* A card that settles as it arrives: a little further away, a little turned,
+     resolving to square by the time it is in the middle of the window. The
+     range stops at 50 percent so the card is finished being animated while
+     the reader is still reading it rather than continuing to creep. */
+  .settle {
+    animation: co-settle-in linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 45%;
+  }
+
+  .settle-alt {
+    animation: co-settle-in-alt linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 45%;
+  }
+
+  /* Sideways drift for the footer wordmark, which is the one place a big
+     horizontal move cannot collide with anything. */
+  .drift-left {
+    animation: co-drift-left linear both;
+    animation-timeline: view();
+    animation-range: cover 0% cover 100%;
+  }
+}
+
+@keyframes co-settle-in {
+  from {
+    transform: translate3d(0, 56px, 0) scale(0.94) rotate(-1.4deg);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes co-settle-in-alt {
+  from {
+    transform: translate3d(0, 56px, 0) scale(0.94) rotate(1.4deg);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes co-drift-left {
+  from {
+    transform: translate3d(4%, 0, 0);
+  }
+  to {
+    transform: translate3d(-4%, 0, 0);
+  }
+}
+
+/* The ticker, running the other way. Same mechanism, mirrored, so the footer
+   reads as an answer to the one under the hero rather than a repeat of it. */
+.marquee-reverse {
+  display: flex;
+  width: max-content;
+  animation: co-marquee-reverse 56s linear infinite;
+}
+
+.marquee-reverse:hover,
+.marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes co-marquee-reverse {
+  from {
+    transform: translate3d(-50%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
   }
 }
 

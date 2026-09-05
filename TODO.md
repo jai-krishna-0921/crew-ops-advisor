@@ -53,6 +53,34 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
       bubble in its own warm colour. Calmer than the reference: no
       photograph, no six-hue spectrum, chroma about a third of it.
 
+## Landed: the landing page moves
+
+- [x] The section heading now lives inside the pinned area rather than above
+      it. It had scrolled off the top before the cards started walking, so a
+      reader arrived at a screen of cards with no label and could not tell
+      whether the sideways movement was the page working or a glitch.
+- [x] A scroll progress hairline across the top of the document, on a
+      `scroll()` timeline.
+- [x] Section headings arrive word by word out of a mask, 40ms apart.
+- [x] Cards settle as they enter: a little further away and a little turned,
+      resolving square by the middle of the window, alternating direction.
+- [x] Section padding up from py-24/32 to py-32/48, so the scroll has room to
+      show what it is doing between blocks.
+- [x] A proper footer: a reverse ticker, three link columns including four
+      questions somebody can click straight into, the brand block, the
+      snapshot line, and a cropped wordmark drifting sideways against the
+      scroll.
+- [x] Fix: `Words` was a deadlock. Each word watched itself with an
+      IntersectionObserver from inside the mask that was hiding it, and the
+      observer accounts for clipping by an ancestor's overflow, so it reported
+      zero area and the word never revealed. It only appeared to work at
+      desktop size, where the word was taller than the 40px of travel and a
+      sliver stayed inside the clip box. One observer on the heading now.
+- [x] Fix: word spaces are a margin. A trailing space inside an inline-block
+      is trimmed, so the heading rendered as "Itgoesasfarasthe questiondoes".
+- [x] Fix: the footer wordmark ran a third of a viewport past both edges,
+      which reads as text that escaped rather than as a crop.
+
 ## Landed: a landing page
 
 The advisor moved to `/ask` and `/` became a page that explains the product.
