@@ -12,9 +12,11 @@
  * be checked without re-deriving it here.
  */
 
+import { useId, useState } from "react";
 import {
   AirplaneTakeoffIcon,
   ArrowsLeftRightIcon,
+  CaretRightIcon,
   ClockCountdownIcon,
   ProhibitIcon,
   SealCheckIcon,
@@ -143,9 +145,31 @@ export function RecommendationView({
   );
 }
 
+/**
+ * One option, open at rank 1 and folded below it.
+ *
+ * Every card used to render in full, and a search that clears six candidates
+ * produced six of these end to end: confidence meter, four stats, reasoning,
+ * cost bars, trade-offs and a rules disclosure, six times over. That is not
+ * thoroughness, it is the same shape repeated until the reader stops
+ * reading, and it buried the notification draft under a screen and a half of
+ * alternatives nobody had asked for yet.
+ *
+ * The header carries what ranking is actually decided on: position, action,
+ * kind, verdict and cost. Folded, the alternatives are a scannable list of
+ * exactly those five things; opened, each is the whole case. Rank 1 starts
+ * open because it is the recommendation, and the answer should not require a
+ * click to say what to do.
+ *
+ * NOTHING IS HIDDEN THAT WAS NOT ALREADY A CLICK AWAY, and the cost
+ * comparison above these cards still shows every option at once, so folding
+ * costs the reader no information about the shape of the choice.
+ */
 export function CoverOptionCard({ option }: { option: CoverOption }) {
   const Icon = KIND_ICON[option.kind];
   const best = option.rank === 1;
+  const [open, setOpen] = useState(best);
+  const bodyId = useId();
 
   return (
     /* Rank 1 is marked by elevation and a solid edge, not by an outline. An
@@ -188,8 +212,35 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
         <span className="num ml-auto text-xl font-semibold text-ink">
           {inr(option.cost.total_inr)}
         </span>
+        {/* The toggle is its own control rather than the whole header,
+            because `option.action` is grounded prose and renders its own
+            buttons for the figures in it. A header wrapped in a button would
+            nest one button inside another, which is invalid and which breaks
+            the fact popovers the action line depends on. */}
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={bodyId}
+          onClick={() => setOpen((value) => !value)}
+          className="-mr-1 inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-sm text-ink-3 hover:bg-hover hover:text-ink"
+        >
+          <span className="sr-only">
+            {open ? "Hide" : "Show"} the detail for option {option.rank}
+          </span>
+          <CaretRightIcon
+            size={12}
+            weight="bold"
+            aria-hidden
+            className={cx(
+              "transition-transform duration-200 ease-out-quint",
+              open && "rotate-90",
+            )}
+          />
+        </button>
       </header>
 
+      {open ? (
+        <div id={bodyId} className="anim-fade-up">
       <div className="px-4 pt-2">
         <ConfidenceMeter confidence={option.confidence} />
       </div>
@@ -276,6 +327,10 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
           </div>
         </Disclosure>
       </div>
+        </div>
+      ) : (
+        <div className="pb-3" />
+      )}
     </article>
   );
 }

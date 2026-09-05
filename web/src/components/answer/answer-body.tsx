@@ -13,7 +13,7 @@ import { WarningIcon } from "@phosphor-icons/react/dist/ssr";
 
 import { useMemo } from "react";
 
-import type { Citation, Reply } from "@/lib/contracts";
+import type { Citation, Recommendation, Reply, Table } from "@/lib/contracts";
 import { collectFacts } from "@/lib/fact-link";
 import { AbstentionCard } from "@/components/answer/abstention";
 import { FigureTiles } from "@/components/answer/charts";
@@ -35,6 +35,31 @@ const SOURCE_CAP = 6;
 
 /** Beyond this many tiles the strip is a wall, and the prose reads better. */
 const TILE_CAP = 6;
+
+/**
+ * Is this table just the recommendation's options in another shape?
+ *
+ * Matched on content rather than on the title, because a title is prose and
+ * would be a guess. Every option's crew id has to appear among the table's
+ * row ids and the counts have to agree, which the cover table satisfies (its
+ * ids are `rank:crew_id`) and an unrelated table in the same answer does
+ * not.
+ *
+ * DELIBERATELY STRICT. If the API ever reshapes either side this stops
+ * matching and both render again, which is the state this replaced: a reader
+ * sees the options twice, which is untidy. The opposite bias, matching
+ * loosely, would silently swallow a table that was not a duplicate, and a
+ * result the controller never sees is a different class of problem entirely.
+ */
+function restatesOptions(
+  table: Table,
+  recommendation: Recommendation | null | undefined,
+): boolean {
+  const options = recommendation?.options ?? [];
+  if (options.length === 0 || table.rows.length !== options.length) return false;
+  const ids = table.row_ids.join("|");
+  return options.every((option) => !option.crew_id || ids.includes(option.crew_id));
+}
 
 function TraceList({ traces }: { traces: Reply["rule_traces"] }) {
   return (
@@ -90,6 +115,18 @@ export function AnswerBody({
   // own copy of both. The card is the one that names the reason and offers a
   // way forward, so the card is the one that stays.
   const declined = reply.abstention != null;
+
+  // THE SAME SIX OPTIONS, THREE TIMES. A Tier 3 answer arrived carrying a
+  // ranked table AND the recommendation those rows were built from, so the
+  // page showed the options as a table and then again as six option cards,
+  // after prose that had already listed them. The cards are the richer
+  // rendering (they carry the legality, the costing and the trade-offs the
+  // table has no room for) and the cost comparison above them covers the
+  // scanning the table was there to do, so the table is the one that goes.
+  const tables = useMemo(
+    () => reply.tables.filter((table) => !restatesOptions(table, reply.recommendation)),
+    [reply.tables, reply.recommendation],
+  );
 
   // Tiles stand in for a structured block, so they yield to every real one.
   const showTiles =
@@ -179,7 +216,7 @@ export function AnswerBody({
 
       {failed ? <VerificationPanel report={reply.verification} /> : null}
 
-      {reply.tables.map((table) => (
+      {tables.map((table) => (
         <DataTable key={table.title} table={table} />
       ))}
 

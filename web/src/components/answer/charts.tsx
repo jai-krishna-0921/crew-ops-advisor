@@ -37,7 +37,13 @@
  * each value on its own and claims no relationship between them.
  */
 
-import type { CostBreakdown, Fact, FlightRef, RuleUnit } from "@/lib/contracts";
+import type {
+  CostBreakdown,
+  CoverOption,
+  Fact,
+  FlightRef,
+  RuleUnit,
+} from "@/lib/contracts";
 import type { Tone } from "@/lib/format";
 import { clock, factValue, inr, plural, withUnit } from "@/lib/format";
 import { FactChip } from "@/components/evidence/fact-chip";
@@ -240,24 +246,35 @@ export function CostBars({ cost }: { cost: CostBreakdown }) {
  * and disruption too. So the rows stay in rank order and the bars describe
  * cost alone, rather than implying the cheapest is the recommendation.
  */
-export function OptionCostCompare({
-  options,
-}: {
-  options: { rank: number; crew_id: string; crew_name: string; cost: CostBreakdown }[];
-}) {
+export function OptionCostCompare({ options }: { options: CoverOption[] }) {
   // One option is not a comparison.
   if (options.length < 2) return null;
 
-  const dearest = Math.max(...options.map((option) => option.cost.total_inr));
+  // THE LAST RESORT MUST NOT SET THE SCALE. Cancelling the pairing costs
+  // INR 15,00,000 against covers at 18,500 to 41,200, so scaling everything
+  // against it drew five identical stubs and one full bar: the chart was
+  // then answering "is cancelling expensive", which nobody asked, and had
+  // stopped answering "which cover is dearer", which is the actual question.
+  // The scale comes from the covers, and anything past it is drawn full and
+  // marked as over the scale rather than silently clipped. Every row still
+  // prints its own figure, so nothing is misread either way.
+  const covers = options.filter((option) => option.kind !== "cancel");
+  const scale = Math.max(
+    ...(covers.length > 0 ? covers : options).map((option) => option.cost.total_inr),
+  );
 
   return (
     <figure className="rounded-md bg-surface px-4 py-3.5 hairline">
       <figcaption className="label-micro">Cost, option by option</figcaption>
       <ul className="mt-2.5 space-y-2">
         {options.map((option) => {
-          const width = dearest > 0 ? (option.cost.total_inr / dearest) * 100 : 0;
+          const over = option.cost.total_inr > scale;
+          const width = scale > 0 ? (option.cost.total_inr / scale) * 100 : 0;
           return (
-            <li key={option.crew_id} className="flex items-center gap-3">
+            <li
+              key={`${option.rank}:${option.crew_id}`}
+              className="flex items-center gap-3"
+            >
               <span className="num w-12 shrink-0 text-xs text-ink-3">
                 #{option.rank} {option.crew_id}
               </span>
@@ -266,11 +283,13 @@ export function OptionCostCompare({
                   aria-hidden
                   className={cx(
                     "block h-full rounded-full transition-[width] duration-500 ease-out-quint",
-                    option.rank === 1
-                      ? "bg-[image:var(--grad-brand)]"
-                      : "bg-na",
+                    over
+                      ? "bg-breach opacity-70"
+                      : option.rank === 1
+                        ? "bg-[image:var(--grad-brand)]"
+                        : "bg-na",
                   )}
-                  style={{ width: `${Math.max(3, width)}%` }}
+                  style={{ width: `${Math.min(100, Math.max(3, width))}%` }}
                 />
               </span>
               <span className="num w-24 shrink-0 text-right text-base font-semibold text-ink">
@@ -280,6 +299,12 @@ export function OptionCostCompare({
           );
         })}
       </ul>
+      {covers.length < options.length ? (
+        <p className="mt-2 text-2xs text-ink-3">
+          Bars are scaled against the dearest cover. Cancelling is off that
+          scale and is drawn full.
+        </p>
+      ) : null}
     </figure>
   );
 }
