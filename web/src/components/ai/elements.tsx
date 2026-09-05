@@ -50,9 +50,14 @@ export function ElapsedLoader({
   label: string;
   since: number;
 }) {
-  const [now, setNow] = useState(() => Date.now());
+  // Keep the first render identical on the server and browser. Reading the
+  // clock in the state initializer makes the elapsed label differ during
+  // hydration, which React cannot patch safely.
+  const [now, setNow] = useState(0);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initialise a client-only clock after hydration
+    setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 100);
     return () => window.clearInterval(id);
   }, []);

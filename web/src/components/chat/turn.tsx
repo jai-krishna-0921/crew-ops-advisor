@@ -36,6 +36,8 @@ import {
   ArrowElbowDownRightIcon,
   MagnifyingGlassIcon,
   WarningCircleIcon,
+  SpeakerHighIcon,
+  StopIcon,
 } from "@phosphor-icons/react/dist/ssr";
 
 import { phaseOf, type TurnState } from "@/lib/turn";
@@ -52,6 +54,8 @@ export function TurnView({
   onFocus,
   isActive,
   onOpenEvidence,
+  onReadAloud,
+  speaking = false,
 }: {
   turn: TurnState;
   /** Position in the thread, zero based. Drawn as the entry's number. */
@@ -63,6 +67,8 @@ export function TurnView({
   onFocus: () => void;
   isActive: boolean;
   onOpenEvidence: () => void;
+  onReadAloud?: () => void;
+  speaking?: boolean;
 }) {
   const phase = phaseOf(turn);
   const reply = phase === "settled" ? turn.reply : null;
@@ -162,6 +168,13 @@ export function TurnView({
               {factCount > 0 ? <span className="num">{factCount}</span> : null}
             </button>
             <TraceChips turn={turn} />
+            {onReadAloud && (reply.abstention || ["verified", "repaired"].includes(reply.verification.status)) ? (
+              <button type="button" onClick={onReadAloud} aria-label={speaking ? "Stop reading answer" : "Read answer aloud"}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-inset px-2.5 py-1 text-xs text-ink-2 hover:bg-hover hover:text-ink">
+                {speaking ? <StopIcon size={12} weight="fill" aria-hidden /> : <SpeakerHighIcon size={12} aria-hidden />}
+                {speaking ? "Stop reading" : "Read aloud"}
+              </button>
+            ) : null}
           </div>
         </div>
       ) : (

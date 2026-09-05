@@ -21,6 +21,10 @@ make dev         # API on :8000, web on :3000
 
 Open <http://localhost:3000>. The console is at `/ask`.
 
+The console also supports hands-free voice with Sarvam transcription and TTS,
+with Gemini available as an alternate cloud provider. Choose a provider above
+the composer, then Start. Setup and controls: [Voice conversation](docs/VOICE.md).
+
 **No API key is needed.** Without one the deterministic resolver answers,
 through the same tools, the same rules engine and the same grounding check.
 Setting `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `OLLAMA_API_KEY` turns on the

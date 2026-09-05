@@ -2,6 +2,10 @@
 SHELL := /bin/bash
 API := api
 WEB := web
+# Local VoiceKit is intentionally disabled for hosting. Uncomment only for
+# optional local experiments.
+# VOICE_DIR ?= ../voice
+# VOICE_PYTHON ?= python3.12
 
 .PHONY: help
 help: ## Show this help
@@ -20,6 +24,28 @@ install-api: ## Python env via uv
 .PHONY: install-web
 install-web: ## Web deps via pnpm
 	cd $(WEB) && pnpm install
+
+.PHONY: test-web
+# Local VoiceKit targets are intentionally commented out for hosted deployments.
+# .PHONY: install-voice voice voice-download dev-voice test-web
+# install-voice: ## Optional local speech dependencies (Python 3.10 through 3.12)
+# 	test -x "$(VOICE_DIR)/.venv/bin/python" || "$(VOICE_PYTHON)" -m venv "$(VOICE_DIR)/.venv"
+# 	"$(VOICE_DIR)/.venv/bin/python" -m pip install -e "$(VOICE_DIR)[stt,tts,api]"
+
+# voice: ## Local VoiceKit on :8001, with the repository environment loaded
+# 	$(API)/.venv/bin/python scripts/voice_service.py serve --voice-dir "$(VOICE_DIR)"
+
+# voice-download: ## Download local speech models before going offline
+# 	$(API)/.venv/bin/python scripts/voice_service.py download --voice-dir "$(VOICE_DIR)"
+
+# dev-voice: ## Local voice, API, and web together
+# 	@trap 'kill 0' EXIT INT TERM; \
+# 	$(MAKE) voice & \
+# 	$(MAKE) dev & \
+# 	wait
+
+test-web: ## Browser voice lifecycle and component tests, no API keys needed
+	cd $(WEB) && pnpm test
 
 # ----------------------------------------------------------------- run
 
@@ -69,7 +95,7 @@ boundary: ## Assert no model client is imported by the deterministic core
 	cd $(API) && uv run pytest tests/test_boundary.py -v
 
 .PHONY: check
-check: lint types boundary test ## Everything CI runs
+check: lint types boundary test test-web ## Everything CI runs
 
 .PHONY: validate-data
 validate-data: ## Run the dataset's own validator, read only

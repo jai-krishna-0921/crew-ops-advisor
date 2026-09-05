@@ -29,7 +29,10 @@
  * finish before asking the next thing, and the same button doing both means
  * the target never moves.
  *
- * IT IS A FIELD AND A BUTTON, and everything else that was here is gone.
+ * IT IS A FIELD, A BUTTON AND THE VOICE PANEL, and everything else that was
+ * here is gone. The voice panel sits inside this shell rather than beside it,
+ * because starting a spoken turn and typing one are the same act from the
+ * controller's side and should not be in two places.
  *
  * Auto / Agent / Offline sat under the field as three uppercase pills, which
  * put a developer's plumbing in front of a crew controller as though it were a
@@ -48,7 +51,7 @@
  * verification that earned it, and that is where it now is.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpIcon, StopIcon } from "@phosphor-icons/react/dist/ssr";
 
 import { cx } from "@/components/ui/tone";
@@ -59,12 +62,14 @@ export function Composer({
   busy,
   placeholder = "Ask about crew, flights, legality or cover",
   autoFocus = false,
+  voicePanel,
 }: {
   onSubmit: (question: string) => void;
   onStop: () => void;
   busy: boolean;
   placeholder?: string;
   autoFocus?: boolean;
+  voicePanel?: ReactNode;
 }) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -91,65 +96,68 @@ export function Composer({
 
   return (
     <div className="px-4 pb-5 sm:px-6">
-      <div
-        className={cx(
-          "relative flex items-end gap-2.5 rounded-[1.6rem] bg-surface py-2.5 pr-2.5 pl-4",
-          "shadow-float transition-shadow duration-200 ease-out-quint focus-within:shadow-pop",
-        )}
-      >
-        {/* The prompt caret. It marks where typing begins the way a terminal
-            does, which is the association this bar wants, and unlike the
-            sparkle it stood in for it makes no claim about intelligence. */}
-        <span
-          aria-hidden
-          className="mono pointer-events-none shrink-0 py-0.5 text-md leading-relaxed font-semibold text-ink-3 select-none"
-        >
-          &rsaquo;
-        </span>
+      <div className="relative overflow-hidden rounded-[1.6rem] bg-surface shadow-float transition-shadow duration-200 ease-out-quint focus-within:shadow-pop">
+        {/* The voice panel is inside the composer, not floating beside it,
+            because starting a spoken turn and typing one are the same act
+            from the controller's side. `overflow-hidden` on the shell is what
+            lets the panel carry its own ground to the rounded edge. */}
+        {voicePanel}
 
-        <textarea
-          ref={ref}
-          rows={1}
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              send();
-            }
-          }}
-          placeholder={placeholder}
-          aria-label="Ask the advisor"
-          className="block max-h-42 min-w-0 flex-1 resize-none bg-transparent py-0.5 text-md leading-relaxed text-ink placeholder:text-ink-3 focus:outline-none"
-        />
+        <div className="flex items-end gap-2.5 py-2.5 pr-2.5 pl-4">
+          {/* The prompt caret. It marks where typing begins the way a terminal
+              does, and unlike the sparkle it stood in for it makes no claim
+              about intelligence. */}
+          <span
+            aria-hidden
+            className="mono pointer-events-none shrink-0 py-0.5 text-md leading-relaxed font-semibold text-ink-3 select-none"
+          >
+            &rsaquo;
+          </span>
 
-        <button
-          type="button"
-          onClick={busy ? onStop : send}
-          disabled={!busy && !canSend}
-          className={cx(
-            "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-base font-semibold",
-            "transition-[background-color,color,box-shadow] duration-200 ease-out-quint",
-            "disabled:cursor-not-allowed",
-            busy
-              ? "bg-ink text-page"
-              : canSend
-                ? "bg-[image:var(--grad-accent)] text-page shadow-panel"
-                : "bg-inset text-ink-3",
-          )}
-        >
-          {busy ? (
-            <>
-              <StopIcon size={11} weight="fill" aria-hidden />
-              Stop
-            </>
-          ) : (
-            <>
-              Ask
-              <ArrowUpIcon size={12} weight="bold" aria-hidden />
-            </>
-          )}
-        </button>
+          <textarea
+            ref={ref}
+            rows={1}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                send();
+              }
+            }}
+            placeholder={placeholder}
+            aria-label="Ask the advisor"
+            className="block max-h-42 min-w-0 flex-1 resize-none bg-transparent py-0.5 text-md leading-relaxed text-ink placeholder:text-ink-3 focus:outline-none"
+          />
+
+          <button
+            type="button"
+            onClick={busy ? onStop : send}
+            disabled={!busy && !canSend}
+            className={cx(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-base font-semibold",
+              "transition-[background-color,color,box-shadow] duration-200 ease-out-quint",
+              "disabled:cursor-not-allowed",
+              busy
+                ? "bg-ink text-page"
+                : canSend
+                  ? "bg-[image:var(--grad-accent)] text-page shadow-panel"
+                  : "bg-inset text-ink-3",
+            )}
+          >
+            {busy ? (
+              <>
+                <StopIcon size={11} weight="fill" aria-hidden />
+                Stop
+              </>
+            ) : (
+              <>
+                Ask
+                <ArrowUpIcon size={12} weight="bold" aria-hidden />
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
