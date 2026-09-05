@@ -348,6 +348,51 @@ request for decoration).
       card with `overflow-hidden`. It renders in a portal now, measured off
       the trigger, which no ancestor can cut off.
 
+## Landed: the report from the console
+
+Five things a demo run turned up, all of them the answer being correct and the
+delivery not.
+
+- [x] **"A tool result was capped for the prompt budget" on every tier 3
+      answer.** Measured: `find_cover_options` with its rejects serialises to
+      223,156 characters against a 6,000 budget, so the model was handed rank
+      1, part of rank 2 and "...[truncated]", then asked to write about six
+      options. `agent/compact.py` drops the per-rule per-day arithmetic the
+      interface draws and the prose may not restate, keeping identity,
+      verdict, price and reason for every option: 223,156 to about 11,000.
+- [x] **"This answer needed one correction pass" on most of them.** Same
+      cause. Writing from a blob that stops inside option two, the model got a
+      figure slightly wrong and the verifier sent it back, and that repair is
+      a whole extra model round trip. Measured after: 11.0s, 11.0s, verified
+      on the first pass, no banners.
+- [x] **36 seconds and a budget abstention** on the same question. The repair
+      round trip was most of the 30 second budget.
+- [x] **The same six covers three times**, as prose, as a cost comparison and
+      as six cards. `enumeration_guard` allows the recommendation and one
+      alternative, which is the shape the offline renderer already produced
+      unprompted. Non-fatal: verbosity is not worth an abstention.
+- [x] **Tables hanging off the page.** `lg:-mx-14 xl:-mx-24` bled a wide table
+      into margins the conversations rail and the section rail are already
+      using. The inner scroller was correct all along.
+- [x] **The voice, continuous and expressionless.** `speech_chunks` repacked
+      paragraphs up to a thousand characters, so a six paragraph answer
+      reached the synthesiser as one 547 character utterance with nowhere to
+      breathe. And it read "C-3310", "INR 18,500", "0h30m", "RULE-REST-04",
+      "06:00Z" as characters. Chunks now follow paragraphs and end on a full
+      stop, and `speech_for_voice` substitutes notation, never value.
+
+## Open, in order
+
+- [ ] Presentation deck. The one unticked box on the problem statement's own
+      deliverables checklist (section 8). Everything else there exists.
+- [ ] A real `ANTHROPIC_API_KEY` in `.env.local`, and delete
+      `CREWOPS_LLM_PROVIDER=ollama`. Every remaining agent-side failure is
+      model-side: bare refusals, one 30s timeout, S6 answering short.
+- [ ] Voice: a listen check on real audio. The chunking and the notation are
+      tested; how it actually sounds is not, and cannot be from here.
+- [ ] `find_cover_options` is 223KB on the wire to the browser too. The UI
+      renders all of it, so this is not wrong, but it is worth knowing.
+
 ## Open
 
 Everything below is coverage. The deterministic path currently answers 27 of 38
