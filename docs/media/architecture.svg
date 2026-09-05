@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 700" width="1360" height="700" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-labelledby="svgtitle svgdesc">
+  <title id="svgtitle">Extroc architecture: the boundary between model and deterministic code</title>
+  <desc id="svgdesc">A turn crosses the boundary four times. The model plans, deterministic code runs the tools and the rules engine, the model drafts prose, and deterministic code verifies every figure against the facts the tools emitted before anything reaches the controller.</desc>
+
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="modelBand" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#eef2ff"/>
+      <stop offset="100%" stop-color="#f7f8ff"/>
+    </linearGradient>
+    <linearGradient id="codeBand" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f4f8f7"/>
+      <stop offset="100%" stop-color="#eaf1ef"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c8798"/>
+    </marker>
+    <filter id="soft" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <rect width="1360" height="700" fill="#fbfaf8"/>
+
+  <!-- Bands -->
+  <rect x="0" y="100" width="1360" height="176" fill="url(#modelBand)"/>
+  <rect x="0" y="404" width="1360" height="188" fill="url(#codeBand)"/>
+
+  <!-- Title -->
+  <text x="34" y="50" font-size="26" font-weight="800" fill="#0f172a">Extroc</text>
+  <text x="34" y="76" font-size="15" fill="#475569">The model plans and explains. It never produces a fact and never does arithmetic.</text>
+
+  <!-- Band labels -->
+  <text x="34" y="134" font-size="12.5" font-weight="700" letter-spacing="1.6" fill="#4f46e5">THE MODEL MAY</text>
+  <text x="34" y="154" font-size="12.5" fill="#6366f1">plan, choose tools, phrase</text>
+  <text x="34" y="438" font-size="12.5" font-weight="700" letter-spacing="1.6" fill="#0f766e">ONLY CODE MAY</text>
+  <text x="34" y="458" font-size="12.5" fill="#0d9488">compute, decide legality, verify</text>
+
+  <!-- Connectors, drawn before the boxes so the boxes cap the ends -->
+  <g fill="none" stroke="#7c8798" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)">
+    <path d="M 150 500 L 300 500 L 300 244"/>
+    <path d="M 388 186 L 550 186 L 550 430"/>
+    <path d="M 682 504 L 804 504 L 804 244"/>
+    <path d="M 892 186 L 1050 186 L 1050 430"/>
+    <path d="M 1160 504 L 1194 504"/>
+  </g>
+
+  <!-- THE BOUNDARY -->
+  <line x1="0" y1="340" x2="1360" y2="340" stroke="#0f172a" stroke-width="2" stroke-dasharray="10 8" opacity="0.5"/>
+  <rect x="576" y="322" width="208" height="36" rx="18" fill="#0f172a"/>
+  <text x="680" y="345" font-size="13.5" font-weight="700" letter-spacing="1.2" fill="#ffffff" text-anchor="middle">THE BOUNDARY</text>
+
+  <!-- The turn itself, crossing four times -->
+  <circle r="7" fill="url(#brand)">
+    <animateMotion dur="8s" repeatCount="indefinite"
+      path="M 150 500 L 300 500 L 300 186 L 550 186 L 550 504 L 804 504 L 804 186 L 1050 186 L 1050 504 L 1194 504"/>
+    <animate attributeName="opacity" values="0;1;1;1;0" keyTimes="0;0.03;0.5;0.95;1" dur="8s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- ========================= Nodes ========================= -->
+
+  <!-- Question -->
+  <g filter="url(#soft)"><rect x="34" y="468" width="116" height="70" rx="12" fill="#ffffff" stroke="#e2e8f0"/></g>
+  <text x="92" y="498" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">Question</text>
+  <text x="92" y="518" font-size="11.5" fill="#64748b" text-anchor="middle">plain language</text>
+
+  <!-- 1. Plan -->
+  <g filter="url(#soft)"><rect x="212" y="142" width="176" height="102" rx="12" fill="#ffffff" stroke="#c7d2fe"/></g>
+  <circle cx="236" cy="168" r="11" fill="#4f46e5"/>
+  <text x="236" y="172" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">1</text>
+  <text x="256" y="173" font-size="14" font-weight="700" fill="#0f172a">Plan</text>
+  <text x="232" y="200" font-size="11.5" fill="#475569">Which tools to call,</text>
+  <text x="232" y="219" font-size="11.5" fill="#475569">with what arguments,</text>
+  <text x="232" y="238" font-size="11.5" fill="#475569">in what order.</text>
+
+  <!-- 2. Tools, rules, ops -->
+  <g filter="url(#soft)"><rect x="418" y="430" width="264" height="150" rx="12" fill="#ffffff" stroke="#99f6e4"/></g>
+  <circle cx="442" cy="456" r="11" fill="#0f766e"/>
+  <text x="442" y="460" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+  <text x="462" y="461" font-size="14" font-weight="700" fill="#0f172a">Tools, rules, ops</text>
+  <text x="438" y="488" font-size="11.5" fill="#475569">Typed tools over an immutable</text>
+  <text x="438" y="507" font-size="11.5" fill="#475569">WorldState. The seven rules.</text>
+  <text x="438" y="526" font-size="11.5" fill="#475569">Cover search, costing, ranking.</text>
+  <text x="438" y="550" font-size="11.5" font-weight="700" fill="#0f766e">Every figure is a Fact,</text>
+  <text x="438" y="566" font-size="11.5" font-weight="700" fill="#0f766e">carrying its own arithmetic.</text>
+
+  <!-- 3. Draft -->
+  <g filter="url(#soft)"><rect x="716" y="142" width="176" height="102" rx="12" fill="#ffffff" stroke="#c7d2fe"/></g>
+  <circle cx="740" cy="168" r="11" fill="#4f46e5"/>
+  <text x="740" y="172" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">3</text>
+  <text x="760" y="173" font-size="14" font-weight="700" fill="#0f172a">Draft the prose</text>
+  <text x="736" y="200" font-size="11.5" fill="#475569">Phrases what the tools</text>
+  <text x="736" y="219" font-size="11.5" fill="#475569">returned, for someone</text>
+  <text x="736" y="238" font-size="11.5" fill="#475569">under time pressure.</text>
+
+  <!-- 4. Verify -->
+  <g filter="url(#soft)"><rect x="940" y="430" width="220" height="150" rx="12" fill="#ffffff" stroke="#99f6e4"/></g>
+  <rect x="940" y="430" width="220" height="150" rx="12" fill="none" stroke="#0f766e" stroke-width="2.5" opacity="0">
+    <animate attributeName="opacity" values="0;0;0.9;0" keyTimes="0;0.78;0.86;0.93" dur="8s" repeatCount="indefinite"/>
+  </rect>
+  <circle cx="964" cy="456" r="11" fill="#0f766e"/>
+  <text x="964" y="460" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle">4</text>
+  <text x="984" y="461" font-size="14" font-weight="700" fill="#0f172a">Verify</text>
+  <text x="960" y="488" font-size="11.5" fill="#475569">Every number, identifier,</text>
+  <text x="960" y="507" font-size="11.5" fill="#475569">date, station and rule id,</text>
+  <text x="960" y="526" font-size="11.5" fill="#475569">checked against those Facts.</text>
+  <text x="960" y="550" font-size="11.5" font-weight="700" fill="#0f766e">Unattested content is</text>
+  <text x="960" y="566" font-size="11.5" font-weight="700" fill="#0f766e">rejected, not trimmed.</text>
+
+  <!-- Outcome -->
+  <g filter="url(#soft)"><rect x="1194" y="452" width="132" height="106" rx="12" fill="#0f172a"/></g>
+  <text x="1260" y="484" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">Answer</text>
+  <text x="1260" y="504" font-size="11.5" fill="#cbd5e1" text-anchor="middle">with its working</text>
+  <text x="1260" y="529" font-size="11.5" fill="#94a3b8" text-anchor="middle">or a refusal that</text>
+  <text x="1260" y="545" font-size="11.5" fill="#94a3b8" text-anchor="middle">says what was missing</text>
+
+  <!-- ========================= Footnotes ========================= -->
+  <text x="34" y="634" font-size="12.5" font-weight="700" fill="#0f172a">Enforced, not requested</text>
+  <text x="34" y="656" font-size="12" fill="#475569">A build test fails if a model client is reachable from domain, rules, ops, store, tools or verify.</text>
+  <text x="34" y="676" font-size="12" fill="#475569">Graph edges, not prompt text, require a legality result before any verdict and a cover search before any recommendation.</text>
+
+  <text x="1326" y="656" font-size="11.5" fill="#94a3b8" text-anchor="end">With no API key, steps 1 and 3 become a deterministic resolver.</text>
+  <text x="1326" y="676" font-size="11.5" fill="#94a3b8" text-anchor="end">Steps 2 and 4 are unchanged, and the answer is still verified.</text>
+</svg>

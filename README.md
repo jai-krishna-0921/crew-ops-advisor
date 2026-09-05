@@ -105,6 +105,16 @@ guarantee written as a graph edge is a guarantee.
 
 ## Architecture
 
+A turn crosses the boundary four times: the model plans, code computes, the
+model drafts the prose, and code verifies every figure in it before a
+controller sees anything.
+
+<p align="center">
+  <img src="docs/media/architecture.svg" alt="The boundary between the model and deterministic code, crossed four times in one turn" width="1000">
+</p>
+
+The same thing as a component tree:
+
 ```
 Next.js console  --SSE-->  FastAPI  -->  LangGraph agent
                                              |

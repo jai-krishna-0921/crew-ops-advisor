@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Extroc: presentation deck</title>
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  :root {
+    --ink: #0f172a;
+    --ink-2: #334155;
+    --ink-3: #64748b;
+    --page: #fbfaf8;
+    --line: #e2e8f0;
+    --model: #4f46e5;
+    --code: #0f766e;
+    --warn: #b45309;
+    --brand: linear-gradient(135deg, #4f46e5, #f59e0b);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #64748b;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .slide {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    padding: 64px 76px;
+    background: var(--page);
+    margin: 0 auto 22px;
+    overflow: hidden;
+    page-break-after: always;
+    break-after: page;
+    display: flex;
+    flex-direction: column;
+  }
+  .slide:last-child { page-break-after: auto; break-after: auto; margin-bottom: 0; }
+  .num {
+    position: absolute; right: 44px; bottom: 34px;
+    font-size: 13px; color: #94a3b8; font-variant-numeric: tabular-nums;
+  }
+  .eyebrow {
+    font-size: 13px; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--model); margin: 0 0 18px;
+  }
+  h1 { font-size: 64px; line-height: 1.04; letter-spacing: -1.6px; margin: 0 0 20px; font-weight: 800; }
+  h2 { font-size: 42px; line-height: 1.1; letter-spacing: -0.8px; margin: 0 0 26px; font-weight: 800; }
+  p  { font-size: 21px; line-height: 1.5; color: var(--ink-2); margin: 0 0 16px; max-width: 60ch; }
+  .lede { font-size: 25px; color: var(--ink-2); }
+  ul { margin: 0; padding-left: 24px; }
+  li { font-size: 20px; line-height: 1.55; color: var(--ink-2); margin-bottom: 12px; max-width: 62ch; }
+  li b, p b { color: var(--ink); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  .cols-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .card {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    padding: 24px 26px; box-shadow: 0 2px 6px rgba(15,23,42,.05);
+  }
+  .card h3 { margin: 0 0 10px; font-size: 19px; }
+  .card p { font-size: 16px; margin: 0; line-height: 1.5; }
+  .tag {
+    display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 1.4px;
+    text-transform: uppercase; padding: 5px 11px; border-radius: 999px; margin-bottom: 12px;
+  }
+  .tag.model { background: #eef2ff; color: var(--model); }
+  .tag.code  { background: #ecfdf5; color: var(--code); }
+  .tag.warn  { background: #fffbeb; color: var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+  th, td { text-align: left; padding: 11px 14px; font-size: 17px; border-bottom: 1px solid var(--line); }
+  th { font-size: 13px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--ink-3); font-weight: 700; }
+  td.n { font-variant-numeric: tabular-nums; text-align: right; }
+  .big { font-size: 78px; font-weight: 800; letter-spacing: -2px; line-height: 1; }
+  .big.ok { color: var(--code); }
+  .stat-label { font-size: 15px; color: var(--ink-3); margin-top: 8px; }
+  code, .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 15px; background: #f1f5f9; padding: 2px 6px; border-radius: 5px;
+  }
+  pre {
+    background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 22px 24px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 15px; line-height: 1.6; overflow: hidden; margin: 0;
+  }
+  pre .k { color: #a5b4fc; }
+  pre .s { color: #fcd34d; }
+  pre .c { color: #94a3b8; }
+  .rule { height: 4px; width: 90px; border-radius: 2px; background: var(--brand); margin: 0 0 26px; }
+  .quote {
+    border-left: 4px solid var(--model); padding-left: 26px;
+    font-size: 27px; line-height: 1.42; color: var(--ink); font-weight: 600; max-width: 54ch;
+  }
+  .fill { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .center { align-items: center; text-align: center; justify-content: center; }
+  .foot { font-size: 15px; color: var(--ink-3); margin-top: auto; padding-top: 18px; }
+  img.diagram { width: 100%; border-radius: 12px; border: 1px solid var(--line); }
+  .logo { width: 320px; margin-bottom: 30px; }
+  a { color: var(--model); }
+</style>
+</head>
+<body>
+
+<!-- 1 -->
+<section class="slide center">
+  <div class="fill center" style="display:flex">
+    <img class="logo" src="media/logo.png" alt="Extroc">
+    <h1 style="font-size:52px">A crew desk advisor<br>that never guesses</h1>
+    <p class="lede" style="max-width:64ch">
+      The model plans and explains. Deterministic code computes.
+      A guard checks every figure against what the tools returned.
+    </p>
+    <p style="margin-top:18px"><a href="https://extroc-jpkcqxtlma-uc.a.run.app">extroc-jpkcqxtlma-uc.a.run.app</a></p>
+  </div>
+  <div class="foot">dCortex, Agentic Crew Ops Advisor</div>
+</section>
+
+<!-- 2 -->
+<section class="slide">
+  <p class="eyebrow">The problem</p>
+  <div class="rule"></div>
+  <h2>The bottleneck is not detecting that something broke</h2>
+  <p>It is reasoning correctly, and fast, about what follows. A sick call at 05:00 breaks
+  a pairing, strands downstream legs, and every fix creates the next problem.</p>
+  <div class="cols-3" style="margin-top:24px">
+    <div class="card">
+      <h3>Fragmented</h3>
+      <p>One answer spans rosters, duty clocks, schedules, reserves, qualifications and the rulebook.</p>
+    </div>
+    <div class="card">
+      <h3>Consequence blind</h3>
+      <p>The broken flight is obvious. The four that break next are not.</p>
+    </div>
+    <div class="card">
+      <h3>Exact, not approximate</h3>
+      <p>Legality is arithmetic against a rulebook. An approximate answer is a violation.</p>
+    </div>
+  </div>
+  <div class="foot">Today that reasoning lives in one experienced controller's head. It degrades exactly when it matters most.</div>
+  <div class="num">2</div>
+</section>
+
+<!-- 3 -->
+<section class="slide">
+  <p class="eyebrow">The question actually being asked</p>
+  <div class="rule"></div>
+  <div class="fill">
+    <p class="quote">
+      What should the language model do, what should deterministic code do,
+      and how do you compose them into a system that is both conversational
+      and correct?
+    </p>
+    <p style="margin-top:36px">
+      Put the data in the prompt and let the model answer, and Tier 1 works.
+      Tier 2 and Tier 3 fail. A model that approximates a duty hour calculation
+      produces answers that are fluent, confident and wrong.
+    </p>
+    <p><b>Operationally, that is worse than no answer.</b></p>
+  </div>
+  <div class="num">3</div>
+</section>
+
+<!-- 4 -->
+<section class="slide">
+  <p class="eyebrow">Our answer</p>
+  <div class="rule"></div>
+  <h2>The model plans and explains.<br>It never produces a fact.</h2>
+  <div class="cols" style="margin-top:10px">
+    <div class="card">
+      <span class="tag model">The model may</span>
+      <ul style="padding-left:20px">
+        <li>Decide which tools to call, with what arguments, in what order</li>
+        <li>Decide when it has enough, and when it must decline</li>
+        <li>Phrase the result for someone with a radio in one hand</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag code">Only code may</span>
+      <ul style="padding-left:20px">
+        <li>Compute any number, and show the arithmetic that produced it</li>
+        <li>Decide that an assignment is legal or illegal</li>
+        <li>Verify the drafted answer before a controller sees it</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot">A turn crosses that boundary four times. The next slide is the shape of it.</div>
+  <div class="num">4</div>
+</section>
+
+<!-- 5 -->
+<section class="slide">
+  <p class="eyebrow">Architecture</p>
+  <div class="rule"></div>
+  <div class="fill" style="justify-content:flex-start">
+    <img class="diagram" src="media/architecture.svg" alt="The boundary between the model and deterministic code">
+  </div>
+  <div class="num">5</div>
+</section>
+
+<!-- 6 -->
+<section class="slide">
+  <p class="eyebrow">Why it holds</p>
+  <div class="rule"></div>
+  <h2>Enforced, not requested</h2>
+  <p>A guarantee written into a prompt is a request. These are the three places the boundary is actually held.</p>
+  <table>
+    <tr><th>Mechanism</th><th>What it stops</th></tr>
+    <tr>
+      <td>A build test walks the import graph of <span class="mono">domain</span>, <span class="mono">rules</span>, <span class="mono">ops</span>, <span class="mono">store</span>, <span class="mono">tools</span> and <span class="mono">verify</span>, and fails if a model client is reachable</td>
+      <td>Arithmetic drifting into the model's half</td>
+    </tr>
+    <tr>
+      <td>The verifier rejects any atom in the prose that no tool emitted as a <span class="mono">Fact</span> this turn</td>
+      <td>The model stating a plausible number nobody computed</td>
+    </tr>
+    <tr>
+      <td>Graph edges require a legality result before any verdict, and a cover search before any recommendation</td>
+      <td>The model inferring a verdict from context</td>
+    </tr>
+  </table>
+  <div class="foot">The third matters most. A guarantee written as a graph edge is a guarantee.</div>
+  <div class="num">6</div>
+</section>
+
+<!-- 7 -->
+<section class="slide">
+  <p class="eyebrow">Explainability</p>
+  <div class="rule"></div>
+  <h2>Every figure carries its own working</h2>
+  <div class="cols" style="align-items:center">
+    <div>
+      <pre><span class="k">Fact</span>(
+  key=<span class="s">"C-2087.duty_7d.projected"</span>,
+  label=<span class="s">"Projected 7 day duty"</span>,
+  value=<span class="s">61.33</span>,
+  unit=<span class="s">"hours"</span>,
+  provenance=COMPUTED,
+  source=<span class="s">"crewops.rules.duty.window"</span>,
+  derivation=<span class="s">"51.83h prior + 9.50h from</span>
+    <span class="s">P-2291 = 61.33h against a 60.00h</span>
+    <span class="s">limit, over by 1.33h"</span>,
+)</pre>
+    </div>
+    <div>
+      <p><b><span class="mono">derivation</span> is the point.</b> A controller about to move a crew member
+      and sign their name to it does not want to be told the answer. They want to check it
+      and argue with it.</p>
+      <p>It is also what makes the verifier possible. If a number can appear in an answer,
+      a tool must have emitted a Fact for it.</p>
+      <p><b>When verification fails, the fix is to add the missing fact to the tool.
+      It is never to relax the check.</b></p>
+    </div>
+  </div>
+  <div class="num">7</div>
+</section>
+
+<!-- 8 -->
+<section class="slide">
+  <p class="eyebrow">Measured</p>
+  <div class="rule"></div>
+  <h2>44 cases: 38 shipped questions, 6 worked scenarios</h2>
+  <table>
+    <tr><th>Tier</th><th class="n">Cases</th><th class="n">Correct</th><th class="n">Abstained</th><th class="n">Wrong</th><th class="n">Accuracy when answered</th></tr>
+    <tr><td>Tier 1, lookup</td><td class="n">16</td><td class="n">15</td><td class="n">1</td><td class="n">0</td><td class="n">100%</td></tr>
+    <tr><td>Tier 2, consequence</td><td class="n">14</td><td class="n">10</td><td class="n">4</td><td class="n">0</td><td class="n">100%</td></tr>
+    <tr><td>Tier 3, recommendation</td><td class="n">14</td><td class="n">10</td><td class="n">4</td><td class="n">0</td><td class="n">100%</td></tr>
+    <tr><td><b>Overall</b></td><td class="n"><b>44</b></td><td class="n"><b>35</b></td><td class="n"><b>9</b></td><td class="n"><b>0</b></td><td class="n"><b>100%</b></td></tr>
+  </table>
+  <div class="cols-3" style="margin-top:26px">
+    <div><div class="big ok">0</div><div class="stat-label">wrong answers, and no verdict inversions</div></div>
+    <div><div class="big">35</div><div class="stat-label">of 44 answers passed grounding verification</div></div>
+    <div><div class="big">122<span style="font-size:30px">ms</span></div><div class="stat-label">p95 on the deterministic path</div></div>
+  </div>
+  <div class="foot">Reproduce with <span class="mono">make eval</span>. Deterministic path, which runs with no API key.</div>
+  <div class="num">8</div>
+</section>
+
+<!-- 9 -->
+<section class="slide">
+  <p class="eyebrow">The design choice we would defend hardest</p>
+  <div class="rule"></div>
+  <h2>Abstention is a feature, and it is scored as one</h2>
+  <p>The evaluation harness counts abstentions separately from wrong answers and never
+  treats one as a failure. A grader that scored refusal as failure would push the system
+  toward confident guessing, which is the exact failure mode the brief warns about.</p>
+  <div class="cols" style="margin-top:22px">
+    <div class="card">
+      <span class="tag code">Correct outcome</span>
+      <p>"I cannot answer that reliably." Then: what was missing, what was established
+      anyway, and three questions that would work instead.</p>
+    </div>
+    <div class="card">
+      <span class="tag warn">Never acceptable</span>
+      <p>A fluent, confident figure nobody computed. The verifier rejects it rather
+      than trimming it, so it cannot reach the screen.</p>
+    </div>
+  </div>
+  <div class="foot">9 of 44 cases abstained. Every one of them declined honestly rather than guessing.</div>
+  <div class="num">9</div>
+</section>
+
+<!-- 10 -->
+<section class="slide">
+  <p class="eyebrow">Beyond the brief</p>
+  <div class="rule"></div>
+  <h2>Voice is a peripheral, not a second brain</h2>
+  <p>Speech in becomes a transcript. The transcript goes to the same endpoint, through the
+  same tools, the same seven rules and the same verifier. Speech out reads prose the
+  verifier has already passed.</p>
+  <ul style="margin-top:14px">
+    <li>Nothing under <span class="mono">agent/voice/</span> imports a model client. No speech provider ever sees the dataset.</li>
+    <li>A draft that fails verification is <b>never spoken</b>: the selector returns nothing at all unless the reply is verified or repaired.</li>
+    <li>Hands free, it reads the verified headline first and offers the detail, so a controller can keep their hands on the desk.</li>
+  </ul>
+  <div class="foot">Also shipped: proactive alerting, multi turn memory, drafted crew notifications, chained disruptions.</div>
+  <div class="num">10</div>
+</section>
+
+<!-- 11 -->
+<section class="slide">
+  <p class="eyebrow">Honest limits</p>
+  <div class="rule"></div>
+  <h2>What breaks, and how badly</h2>
+  <p>Every failure is graded safe or unsafe. A safe failure declines. An unsafe failure
+  answers wrongly. We treat the second as a different class of problem.</p>
+  <ul style="margin-top:12px">
+    <li><b>Agent mode is not reproducible.</b> Three identical passes scored 16, 15 and 16. We quote a range, never a single number.</li>
+    <li><b>Nine cases abstain</b> that a stronger router would answer. Each is a routing gap, not a reasoning error.</li>
+    <li><b>The eighth rule problem.</b> Answer keys exclude candidates for reasons the rulebook does not cover, most importantly double booking. Modelling it as a <span class="mono">RULE-</span> id would misrepresent the rulebook, so it is carried as an operational feasibility issue instead: blocking, but honestly labelled.</li>
+    <li><b>Grounding is per atom, not per claim.</b> It catches an invented figure. It would not catch a correctly quoted figure used in a wrong sentence.</li>
+  </ul>
+  <div class="foot">Full analysis, failure by failure, in docs/FAILURE-ANALYSIS.md</div>
+  <div class="num">11</div>
+</section>
+
+<!-- 12 -->
+<section class="slide">
+  <p class="eyebrow">If this were real</p>
+  <div class="rule"></div>
+  <div class="cols-3">
+    <div class="card">
+      <h3>Impact</h3>
+      <p>The work is the cross referencing, not the decision. Collapsing that from minutes
+      to seconds is the value, and the ranked options make the decision reviewable
+      afterwards.</p>
+    </div>
+    <div class="card">
+      <h3>Scale</h3>
+      <p>WorldState is loaded once and immutable, with a SQLite projection for lookups.
+      The rules engine is pure arithmetic over typed records, so it scales with crew count,
+      not with prompt size.</p>
+    </div>
+    <div class="card">
+      <h3>Crew PII</h3>
+      <p>The model never needs identity. It plans over ids and receives Facts. Names can
+      stay behind the tool boundary and be joined at render time, so PII need never enter
+      a prompt.</p>
+    </div>
+  </div>
+  <div class="foot">Reasoning and arithmetic behind each of these in docs/PRODUCTION.md</div>
+  <div class="num">12</div>
+</section>
+
+<!-- 13 -->
+<section class="slide center">
+  <div class="fill center" style="display:flex">
+    <p class="eyebrow">Live</p>
+    <h1 style="font-size:46px">Ask it something it cannot answer</h1>
+    <p class="lede" style="max-width:58ch">
+      That is the demo we would run first. A system that says
+      "I cannot answer that reliably, and here is what was missing"
+      is the one worth having at 06:00 on a bad day.
+    </p>
+    <p style="margin-top:22px; font-size:22px"><a href="https://extroc-jpkcqxtlma-uc.a.run.app">extroc-jpkcqxtlma-uc.a.run.app</a></p>
+    <p style="font-size:17px; color:var(--ink-3)">Runs with no API key. The deterministic path answers through the same tools, rules and verifier.</p>
+  </div>
+  <div class="num">13</div>
+</section>
+
+</body>
+</html>
