@@ -414,19 +414,25 @@ function Hero() {
         </Reveal>
 
         <Reveal delay={80}>
+          {/* WHAT IT DOES, NOT WHAT IT IS STOPPED FROM DOING. The headline
+              was "The model isn't allowed to do the maths", which is the same
+              claim phrased as a prohibition, and a prohibition asks the reader
+              to picture the failure before the product. Every figure on the
+              screen can be traced to the tool that produced it, and a receipt
+              is what anybody would call that. */}
           <h1 className="macro mt-5 max-w-[13ch] text-[clamp(2.75rem,6.4vw,4.75rem)] text-ink">
-            The model isn&rsquo;t{" "}
-            <span className="ink-gradient">allowed</span> to do the maths
+            Every figure comes with{" "}
+            <span className="ink-gradient">a receipt</span>
           </h1>
         </Reveal>
 
         <Reveal delay={150}>
           <p className="mt-7 max-w-[52ch] text-md leading-relaxed text-ink-2">
-            It plans the work and it writes the explanation, which is what a
-            language model is genuinely good at. Every number in that
-            explanation comes from deterministic code, and a guard reads the
-            draft back against the tool results before anybody sees it. A figure
-            it cannot trace does not ship.
+            The model plans the work and writes the explanation, which is what
+            a language model is genuinely good at. The arithmetic belongs to
+            deterministic code, and a guard reads the draft back against the
+            tool results before anybody sees it. Click any number in an answer
+            and it will show you the file, the record and the subtraction.
           </p>
         </Reveal>
 
@@ -726,7 +732,7 @@ function Work() {
               movement was the page doing something or a rendering glitch.
               Kept on screen for the whole pin, the horizontal walk is
               obviously the answer to the scroll. */}
-          <div className="mx-auto flex w-full max-w-6xl shrink-0 flex-wrap items-end justify-between gap-4 px-4 pt-24 pb-8 sm:px-8">
+          <div className="mx-auto w-full max-w-6xl shrink-0 px-4 pt-24 pb-8 sm:px-8">
             <div>
               <p className="text-2xs font-semibold tracking-[0.2em] text-ink-3 uppercase">
                 Three kinds of question
@@ -735,10 +741,6 @@ function Work() {
                 <Words text="It goes as far as the question does" />
               </h2>
             </div>
-            <p className="flex items-center gap-2 text-base text-ink-3">
-              Scroll, and they move sideways
-              <ArrowRightIcon size={14} weight="bold" aria-hidden />
-            </p>
           </div>
 
           <div className="hscroll-scroller flex min-h-0 flex-1 items-center">

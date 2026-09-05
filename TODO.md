@@ -53,6 +53,27 @@ Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
       bubble in its own warm colour. Calmer than the reference: no
       photograph, no six-hue spectrum, chroma about a third of it.
 
+## Landed: four corrections
+
+- [x] The scroll hint is gone from the pinned section. The heading being on
+      screen while the cards walk already says it.
+- [x] New headline: "Every figure comes with a receipt". The old one, "The
+      model isn't allowed to do the maths", is the same claim phrased as a
+      prohibition, and a prohibition asks the reader to picture the failure
+      before the product.
+- [x] Fix: starting a conversation and clicking an older one destroyed the new
+      one. Switching aborted the request, and the server records a turn only
+      when the reply is produced, so a closed connection stopped the generator
+      before it got there. The conversation was in neither the rail nor the
+      database. It is left running now, its events dropped on arrival by the
+      generation guard, and the rail refetches when it settles. `stop()` still
+      aborts, because that is somebody saying they do not want the answer.
+- [x] Reasoning renders above the tool rows, and renders at all. `turn.traces`
+      was collected by the reducer and shown only inside the evidence drawer,
+      folded into each tool's envelope, which put the thinking underneath the
+      thing it was the reason for. The deterministic stream emits the trace
+      events first too, so the arrival order matches the reading order.
+
 ## Landed: the landing page moves
 
 - [x] The section heading now lives inside the pinned area rather than above

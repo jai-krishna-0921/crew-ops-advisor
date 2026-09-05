@@ -41,6 +41,8 @@ export interface Conversation extends ConversationState {
    * it. See the restore effect for what goes wrong otherwise.
    */
   hydrated: boolean;
+  /** Increments when a superseded run settles into the log anyway. */
+  stranded: number;
   ask: (question: string) => void;
   stop: () => void;
   newThread: () => void;
@@ -52,6 +54,8 @@ export function useConversation(mode: AnswerMode | "auto"): Conversation {
   const [state, setState] = useState<ConversationState>(EMPTY_CONVERSATION);
   const [memory, setMemory] = useState<ThreadMemory | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  /** Bumped when a run the view has moved on from settles anyway. */
+  const [stranded, setStranded] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
   /** Incremented by anything that changes which conversation is on screen. */
@@ -98,23 +102,41 @@ export function useConversation(mode: AnswerMode | "auto"): Conversation {
     saveSession(state);
   }, [state, hydrated]);
 
-  /** Abandon whatever is in flight and claim a fresh generation. */
-  const beginGeneration = useCallback(() => {
-    abortRef.current?.abort();
+  /**
+   * Claim a fresh generation and LET THE RUNNING ANSWER FINISH.
+   *
+   * Switching conversations used to abort the request. That is the right thing
+   * for the view, which must stop showing it, and the wrong thing for the
+   * answer, which is not saved until it settles: the server records a turn
+   * when the reply is produced, and a closed connection stops the generator
+   * before it gets there. So starting a conversation, asking something, and
+   * clicking an older thread while it was still working destroyed the new
+   * conversation outright. It was never in the rail, and it was not in the
+   * database either.
+   *
+   * The generation counter is what makes leaving it running safe: every event
+   * from a superseded run is already dropped on arrival, so the stream writes
+   * nothing to the screen. It finishes into the log instead, and the rail
+   * picks it up on the next refresh.
+   *
+   * `stop()` still aborts, because that is a person saying they do not want
+   * the answer, which is different from wanting to look at something else.
+   */
+  const detachGeneration = useCallback(() => {
     abortRef.current = null;
     genRef.current += 1;
     return genRef.current;
   }, []);
 
   const newThread = useCallback(() => {
-    beginGeneration();
+    detachGeneration();
     setState(EMPTY_CONVERSATION);
     setMemory(null);
-  }, [beginGeneration]);
+  }, [detachGeneration]);
 
   const openThread = useCallback(
     (threadId: string) => {
-      const gen = beginGeneration();
+      const gen = detachGeneration();
       // The id and the loading state are applied immediately so the rail
       // highlights the right row while the history is still in flight.
       setState({ threadId, turns: [], status: "loading", loadError: null });
@@ -144,7 +166,7 @@ export function useConversation(mode: AnswerMode | "auto"): Conversation {
           });
         });
     },
-    [beginGeneration],
+    [detachGeneration],
   );
 
   const ask = useCallback(
@@ -172,7 +194,14 @@ export function useConversation(mode: AnswerMode | "auto"): Conversation {
       }));
 
       const apply = (event: StreamEvent) => {
-        if (genRef.current !== gen) return;
+        if (genRef.current !== gen) {
+          // A superseded run still lands in the log, and the rail is how
+          // anybody finds it again. Counting the settlements is enough: the
+          // console watches this and refetches, so a conversation somebody
+          // started and then navigated away from appears where they left it.
+          if (event.type === "reply") setStranded((n) => n + 1);
+          return;
+        }
         setState((current) => ({
           ...current,
           threadId:
@@ -275,12 +304,13 @@ export function useConversation(mode: AnswerMode | "auto"): Conversation {
       ...state,
       memory,
       hydrated,
+      stranded,
       ask,
       stop,
       newThread,
       openThread,
       dismissLoadError,
     }),
-    [state, memory, hydrated, ask, stop, newThread, openThread, dismissLoadError],
+    [state, memory, hydrated, stranded, ask, stop, newThread, openThread, dismissLoadError],
   );
 }

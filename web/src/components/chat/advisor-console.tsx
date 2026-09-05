@@ -101,6 +101,7 @@ export function AdvisorConsole() {
     status,
     loadError,
     hydrated,
+    stranded,
     ask,
     stop,
     newThread,
@@ -221,6 +222,14 @@ export function AdvisorConsole() {
   useEffect(() => {
     if (status === "idle" && turns.length > 0) refreshThreads();
   }, [status, turns.length, refreshThreads]);
+
+  // And again when a run this view has already moved on from settles anyway.
+  // Switching conversations no longer kills the answer in flight, so the
+  // conversation somebody started before they clicked away finishes into the
+  // log; without this it would not appear in the rail until the next reload.
+  useEffect(() => {
+    if (stranded > 0) refreshThreads();
+  }, [stranded, refreshThreads]);
 
   // A question in the URL fires once. This makes every demo question a link.
   //

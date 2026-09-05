@@ -222,6 +222,15 @@ class Advisor:
         )
         await self._record(reply)
 
+        # THE REASONING GOES FIRST. These were emitted after the tool rows, so
+        # a reader watching the stream saw six tool names arrive and then, once
+        # everything had already happened, the account of why any of them ran.
+        # The interface draws reason above work; the stream may as well arrive
+        # in the same order, and none of it is chronological anyway since the
+        # resolver has already finished by the time any of it is replayed.
+        for step in reply.traces:
+            yield TraceEvent(**_next(), step=step)
+
         for envelope in reply.tool_calls:
             yield ToolCallEvent(
                 **_next(),
@@ -237,9 +246,6 @@ class Advisor:
                 summary=_envelope_summary(envelope),
                 envelope=envelope,
             )
-
-        for step in reply.traces:
-            yield TraceEvent(**_next(), step=step)
 
         yield VerificationEvent(**_next(), report=reply.verification)
         if reply.abstention is not None:

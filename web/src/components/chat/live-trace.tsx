@@ -19,7 +19,11 @@
  * as a dotted underline rather than being switched off with the animation.
  */
 
-import { ListChecksIcon, ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr";
+import {
+  BrainIcon,
+  ListChecksIcon,
+  ShieldCheckIcon,
+} from "@phosphor-icons/react/dist/ssr";
 
 import { latency, TOOL_TIER_LABEL, toolLabel } from "@/lib/format";
 import { phaseOf, type TurnState } from "@/lib/turn";
@@ -75,6 +79,37 @@ export function LiveTrace({ turn }: { turn: TurnState }) {
               <li key={step} className="flex gap-2.5 text-base text-ink-2">
                 <span className="num w-3 shrink-0 text-2xs text-ink-3">{index + 1}</span>
                 <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
+      {/* THE REASONING GOES ABOVE THE TOOL ROWS, and it used to go nowhere.
+          `turn.traces` was collected by the reducer and rendered only inside
+          the evidence drawer, folded into each tool's envelope, which put the
+          thinking underneath the thing it was the reason for. A controller
+          reading down this panel met six tool names and then, much later and
+          behind a disclosure, the account of why any of them ran.
+
+          Reason first, then the work: that is the order it happened in and
+          the order it has to be checked in. */}
+      {turn.traces.length > 0 ? (
+        <section aria-label="Reasoning" className="rounded-md bg-inset/70 px-3.5 py-3">
+          <div className="flex items-center gap-1.5">
+            <BrainIcon size={12} weight="bold" aria-hidden className="text-ink-3" />
+            <Eyebrow>Reasoning</Eyebrow>
+          </div>
+          <ol className="mt-2 space-y-1.5">
+            {turn.traces.map((step, index) => (
+              <li key={`${step.label}-${index}`} className="flex gap-2.5">
+                <span className="num w-3 shrink-0 pt-0.5 text-2xs text-ink-3">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 text-base leading-relaxed text-ink-2">
+                  <span className="font-medium text-ink">{step.label}.</span>{" "}
+                  {step.detail}
+                </span>
               </li>
             ))}
           </ol>
