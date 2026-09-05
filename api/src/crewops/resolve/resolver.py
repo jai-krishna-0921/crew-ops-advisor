@@ -36,6 +36,7 @@ from crewops.resolve.render import render
 from crewops.resolve.triage import (
     canonical_question,
     reads_as_followup,
+    refers_without_naming,
     triage_question,
 )
 from crewops.verify import Verifier
@@ -103,7 +104,9 @@ class DeterministicResolver:
         # the situation. When the same thread has an answered turn behind it,
         # that turn supplies the subject and this one supplies the change.
         prior = self.threads.recall(thread_id)
-        follow_up = prior is not None and reads_as_followup(asked)
+        follow_up = prior is not None and (
+            reads_as_followup(asked) or refers_without_naming(asked, triage.entities)
+        )
         entities = triage.entities
         if follow_up and prior is not None:
             entities = merge_entities(prior.entities, triage.entities, asked)
@@ -132,13 +135,19 @@ class DeterministicResolver:
                 tier=triage.tier,
             )
 
-        # The follow-up runs the SHAPE the thread was already in. "What about
-        # DEL" after a flights question is a flights question; re-matching it
-        # on its own words would pick whatever shape happens to read a bare
-        # station, which is how a conversation changes subject by accident.
-        intent = prior.intent if (follow_up and prior is not None) else None
-        if intent is None:
-            intent = match_intent(asked, entities)
+        # A follow-up that has a shape of its own keeps it. "Is C-3305 legal
+        # for the whole pairing?" is a legality question that happens to point
+        # at the previous turn for its subject, and running the previous turn's
+        # shape over it would answer the earlier question again with a new
+        # crew id in it.
+        #
+        # A follow-up with NO shape of its own runs the one the thread was
+        # already in: "what about DEL" after a flights question is a flights
+        # question, and re-matching it on its own words would pick whatever
+        # shape happens to read a bare station.
+        intent = match_intent(asked, entities)
+        if intent is None and follow_up and prior is not None:
+            intent = prior.intent
         if intent is None:
             return self._abstain(
                 question,
@@ -162,6 +171,21 @@ class DeterministicResolver:
             )
 
         gaps = intent.missing(entities)
+        if gaps and prior is not None and not follow_up:
+            # AN ARGUMENT THIS QUESTION IS MISSING MAY BE ONE THE THREAD
+            # ALREADY HAS. "What are my options, cheapest first?" after
+            # "Captain C-1042 calls in sick on 15 Sep for P-2291" names no
+            # pairing and was refused for it, one turn after the pairing was
+            # established and shown on screen. Nothing is guessed: the value
+            # came from an answered turn in this conversation, and the reply
+            # names what it used, so the inheritance is visible and can be
+            # argued with. A gap context cannot close is still a refusal.
+            inherited = merge_entities(
+                prior.entities, triage.entities, asked, carry_temporal=False
+            )
+            if not intent.missing(inherited):
+                entities = inherited
+                gaps = []
         if gaps:
             return self._abstain(
                 question,

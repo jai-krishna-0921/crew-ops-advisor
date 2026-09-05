@@ -351,6 +351,21 @@ def _render_notification(envelopes: Sequence[ToolEnvelope], question: str) -> st
         text = getattr(envelope.payload, "text", None)
         if isinstance(text, str):
             return text
+        # THE MESSAGE ITSELF. `draft_notification` returns a typed
+        # `NotificationDraft` with a subject and a ready-to-send body, and none
+        # of the three shapes above is it, so the whole draft fell through to
+        # the generic template and the controller was shown a checklist of what
+        # a callout should contain instead of the callout. Rendering payload
+        # fields verbatim is safe: the verifier walks the same payload.
+        body = getattr(envelope.payload, "body", None)
+        if isinstance(body, str) and body.strip():
+            subject = getattr(envelope.payload, "subject", "")
+            channel = getattr(envelope.payload, "channel", "")
+            head = subject if isinstance(subject, str) and subject else "Callout"
+            lines = [head, "", body.strip()]
+            if isinstance(channel, str) and channel:
+                lines.append(f"\nSend by {channel}.")
+            return "\n".join(lines)
     return _render_generic(envelopes, question)
 
 

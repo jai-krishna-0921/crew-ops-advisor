@@ -51,13 +51,27 @@ class PriorTurn:
     question: str
 
 
-def merge_entities(prior: Entities, current: Entities, question: str) -> Entities:
+def merge_entities(
+    prior: Entities,
+    current: Entities,
+    question: str,
+    *,
+    carry_temporal: bool = True,
+) -> Entities:
     """The follow-up's entities, filled in from the turn before it.
 
     Field by field: whatever the follow-up names wins, and anything it leaves
     silent is inherited. `numbers` is never inherited, because a bare figure
     from the previous question means nothing in this one and is the easiest
     way to smuggle a stale value into a plan.
+
+    `carry_temporal` is off when the previous turn is only filling a gap the
+    current question left. AN IDENTIFIER IS A REFERENCE; A DATE OR A WINDOW IS
+    THE EVENT ITSELF. "P-2291" a turn later still means P-2291. Inheriting
+    08:00 to 14:00 into "BLR is fogged in" would invent the window the
+    controller is being asked for and then report it as a finding, which is
+    the one failure this system exists to avoid. So a bare reference to a
+    subject carries the clock; a missing argument does not.
     """
     merged = Entities(
         crew_ids=current.crew_ids or prior.crew_ids,
@@ -66,8 +80,8 @@ def merge_entities(prior: Entities, current: Entities, question: str) -> Entitie
         tails=current.tails or prior.tails,
         rule_ids=current.rule_ids or prior.rule_ids,
         stations=current.stations or prior.stations,
-        dates=current.dates or prior.dates,
-        times=current.times or prior.times,
+        dates=current.dates or (prior.dates if carry_temporal else ()),
+        times=current.times or (prior.times if carry_temporal else ()),
         aircraft_types=current.aircraft_types or prior.aircraft_types,
         numbers=current.numbers,
         rank=current.rank or prior.rank,

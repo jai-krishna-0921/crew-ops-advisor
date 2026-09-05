@@ -138,3 +138,96 @@ def test_threads_do_not_leak_into_each_other(resolver) -> None:
     _ask(resolver, "Who is on reserve at BLR on 2026-09-15?", thread="t-a", turn="u-1")
     reply = _ask(resolver, "And what about the next day?", thread="t-b", turn="u-1")
     assert reply.kind.value == "abstain", _text(reply)
+
+
+# ------------------------------------ a missing argument the thread already has
+
+"""The second half of a conversation is not always marked as one.
+
+Eight turns of an ordinary desk exchange, offline:
+
+    5. "Captain C-1042 calls in sick on 15 Sep for P-2291."   answered
+    6. "What are my options, cheapest first?"                 refused
+    7. "Is C-3305 legal for the whole pairing?"               refused
+    8. "Draft the callout to C-3310."                         refused
+
+None of those three carries a continuation marker, so the follow-up test does
+not fire. Every one of them matches a shape and then fails for the same reason:
+it does not name the pairing. Turn 5 named it, and the thread has held it ever
+since.
+
+So the rule widens from "reads like a follow-up" to the more useful one: **an
+argument this question is missing may be filled from what an answered turn on
+the same thread established.** Nothing is guessed. The value was computed and
+shown to the controller minutes ago, and the reply names what it used, so the
+inheritance is visible and can be argued with. When the gap does not close from
+context, the refusal stands and still says what is missing.
+"""
+
+
+def test_a_missing_pairing_is_inherited(resolver) -> None:
+    _ask(resolver, "Captain C-1042 calls in sick on 15 Sep for P-2291.", thread="t-gap", turn="u-1")
+    reply = _ask(resolver, "What are my options, cheapest first?", thread="t-gap", turn="u-2")
+    assert reply.kind.value == "answer", reply.text
+    assert reply.recommendation is not None and reply.recommendation.options
+
+
+def test_the_inherited_answer_names_what_it_used(resolver) -> None:
+    """Inheriting silently would be guessing with extra steps."""
+    _ask(
+        resolver,
+        "Captain C-1042 calls in sick on 15 Sep for P-2291.",
+        thread="t-gap2",
+        turn="u-1",
+    )
+    reply = _ask(resolver, "What are my options, cheapest first?", thread="t-gap2", turn="u-2")
+    assert "P-2291" in _text(reply), _text(reply)
+
+
+def test_a_legality_question_inherits_the_pairing(resolver) -> None:
+    _ask(
+        resolver,
+        "Captain C-1042 calls in sick on 15 Sep for P-2291.",
+        thread="t-gap3",
+        turn="u-1",
+    )
+    reply = _ask(resolver, "Is C-3305 legal for the whole pairing?", thread="t-gap3", turn="u-2")
+    assert reply.kind.value == "answer", reply.text
+    surface = _text(reply)
+    assert "C-3305" in surface and "P-2291" in surface, surface
+
+
+def test_a_gap_that_context_cannot_close_is_still_refused(resolver) -> None:
+    _ask(resolver, "Who is on reserve at BLR on 2026-09-15?", thread="t-gap4", turn="u-1")
+    reply = _ask(resolver, "Is C-3305 legal for the whole pairing?", thread="t-gap4", turn="u-2")
+    assert reply.kind.value == "abstain", _text(reply)
+    assert reply.abstention is not None and reply.abstention.missing
+
+
+def test_a_first_turn_gap_is_still_refused(resolver) -> None:
+    reply = _ask(resolver, "What are my options, cheapest first?", thread="t-gap5", turn="u-1")
+    assert reply.kind.value == "abstain", _text(reply)
+
+
+def test_the_callout_draft_inherits_the_pairing(resolver) -> None:
+    """"Draft the callout to C-3310" is the last beat of the demo and the
+    pairing is two turns back. The tool refused the empty argument and the
+    controller read "every lookup failed"."""
+    _ask(
+        resolver,
+        "Captain C-1042 calls in sick on 15 Sep for P-2291.",
+        thread="t-call",
+        turn="u-1",
+    )
+    reply = _ask(resolver, "Draft the callout to C-3310.", thread="t-call", turn="u-2")
+    assert reply.kind.value == "answer", reply.text
+    assert "C-3310" in _text(reply), _text(reply)
+
+
+def test_a_callout_with_no_thread_says_what_it_needs(resolver) -> None:
+    """With nothing behind it the refusal has to name the missing argument,
+    not report a failed lookup."""
+    reply = _ask(resolver, "Draft the callout to C-3310.", thread="t-call2", turn="u-1")
+    assert reply.kind.value == "abstain"
+    assert reply.abstention is not None
+    assert reply.abstention.reason.value != "tool_error", reply.text

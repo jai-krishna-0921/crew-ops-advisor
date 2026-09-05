@@ -67,6 +67,15 @@ class Intent:
                 gaps.append("a flight number, for example DX412")
             elif requirement == "time" and not entities.times:
                 gaps.append("a release time, for example 15:30Z")
+            elif requirement == "assignment" and not (
+                entities.pairing_ids or entities.flight_numbers
+            ):
+                # `draft_notification` declared only a crew id and its build
+                # needs the duty too, so a first-turn "draft the callout to
+                # C-3310" reached the tool with nothing to name and came back
+                # as "every lookup failed". A missing argument is a question,
+                # not a failure.
+                gaps.append("the duty: a pairing id, or flight numbers with a date")
             elif requirement == "cover_target" and not (
                 entities.pairing_ids or entities.flight_numbers or entities.crew_ids
             ):
@@ -151,7 +160,8 @@ INTENTS: Final[tuple[Intent, ...]] = (
         tier=3,
         priority=95,
         patterns=_rx(r"\bdraft\b.*\b(?:notification|callout|message|sms)\b"),
-        requires=("crew_id",),
+        requires=("crew_id", "assignment"),
+        missing_hint='For example "draft the callout to C-3310 for P-2291".',
         template="notification",
         build=lambda e, s: [
             PlannedCall(
@@ -501,6 +511,13 @@ INTENTS: Final[tuple[Intent, ...]] = (
             r"\bcan\b.*\blegally\b",
             r"\blegally (?:cover|operate|fly|take)\b",
             r"\bis (?:it|this|that) legal\b",
+            # "Is C-3305 legal for the whole pairing?" is the question this
+            # system exists to answer and it matched nothing. Interrogative
+            # only: a bare "legal for" also appears in a prompt injection
+            # asserting that a made up crew id is legal, and echoing that back
+            # is exactly what the hostile-input test guards against.
+            r"\bis\s+C-\d{2,6}\s+legal\b",
+            r"\bare\s+they\s+legal\b",
             r"\blegal\?",
             r"\bcover the full\b",
             r"\bfor the full pairing\b",

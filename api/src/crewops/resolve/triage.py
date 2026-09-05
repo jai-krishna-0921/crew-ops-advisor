@@ -29,6 +29,7 @@ __all__ = [
     "day_shift",
     "extract_entities",
     "reads_as_followup",
+    "refers_without_naming",
     "triage_question",
 ]
 
@@ -452,6 +453,32 @@ def reads_as_followup(question: str) -> bool:
     return bool(_FOLLOW_UP_RE.search(question))
 
 
+#: "the pairing", "that flight", "the same crew". A definite article in front
+#: of a subject noun, with no identifier anywhere in the sentence, IS a
+#: reference to the previous turn. Indefinite forms are deliberately absent:
+#: "a pairing" starts something, "the pairing" continues it.
+_BARE_REFERENCE: Final = re.compile(
+    r"\b(?:the|that|this|same)\s+(?:full\s+|whole\s+|entire\s+|same\s+)?"
+    r"(?:pairing|flight|duty|roster|crew\s+member|assignment|cover"
+    r"|callout|call-?out|notification|message)\b",
+    re.IGNORECASE,
+)
+
+
+def refers_without_naming(question: str, entities: Entities) -> bool:
+    """Does this point at a subject it never names?
+
+    "Is C-3305 legal for the whole pairing?" names a crew member and a pairing
+    that only the previous turn knows. Without this the question matched its
+    shape, ran with no pairing, and the tool refused it, which reached the
+    controller as "every lookup failed" rather than as an answer about the
+    pairing they had been discussing for two turns.
+    """
+    if entities.pairing_ids or entities.flight_numbers:
+        return False
+    return bool(_BARE_REFERENCE.search(question))
+
+
 def day_shift(question: str) -> int:
     """How far a follow-up moves the previous turn's date: +1, -1 or 0.
 
@@ -550,7 +577,9 @@ _SYNONYMS: Final[tuple[tuple[re.Pattern[str], str], ...]] = tuple(
         (r"\bfly\s+again\b", "report next"),
         # A whole multi-day pairing.
         (r"\bthe\s+whole\s+of\s+(?:the\s+)?pairing\b", "the full pairing"),
+        (r"\bthe\s+whole\s+pairing\b", "the full pairing"),
         (r"\bthe\s+entire\s+pairing\b", "the full pairing"),
+        (r"\bboth\s+days\s+of\s+the\s+pairing\b", "the full pairing"),
     )
 )
 
