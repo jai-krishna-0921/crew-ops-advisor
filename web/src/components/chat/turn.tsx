@@ -3,24 +3,28 @@
 /**
  * One exchange: what the controller asked, and what the Advisor answered.
  *
- * NEITHER SIDE IS IN A BUBBLE, AND THE PAGE IS NOT A CHAT.
+ * THE PAGE IS A NUMBERED LOG, NOT A TRANSCRIPT OF TWO PARTICIPANTS.
  *
- * The answer never was: it is set as the page's own body text at full
- * measure, so a table or an option card can use the whole column instead of
- * bursting a rounded container. The question used to be, right aligned and
- * filled, on the argument that a bubble is how a page shows a thing somebody
- * said. That argument is fine and the result was still wrong, because two
- * facing shapes is the one visual signature every chat product shares, and
- * wearing it told a controller they were looking at a chat.
+ * A controller asks one question and the system produces a record: a
+ * verdict, its arithmetic, the rules it checked, the options it ranked and
+ * the ones it threw out. What a desk keeps of that is a numbered log, so
+ * the turn is drawn as one. Each entry hangs off a spine with its index on
+ * it, and the transcript reads down the page as a docket of decisions.
  *
- * They are not. A controller asks one question and the system produces a
- * record: a verdict, its arithmetic, the rules it checked, the options it
- * ranked and the ones it threw out. What a desk keeps of that is a numbered
- * log, so the turn is drawn as one. Each entry hangs off a spine with its
- * index on it, and the question is the entry's heading rather than something
- * a participant said. The transcript reads down the page as a docket of
- * decisions, which is what it is, and looks nothing like two people talking,
- * which is what it never was.
+ * THE ANSWER IS NOT IN A SHAPE. It is set as the page's own body text at
+ * full measure, so a table, a bar or an option card can use the whole column
+ * instead of bursting a rounded container.
+ *
+ * THE QUESTION IS, and the distinction is worth stating precisely, because
+ * this file has been wrong in both directions. Filling a shape is how a page
+ * shows that somebody said something, and taking the fill away entirely left
+ * the question reading as a title for the answer rather than as a separate
+ * act. What actually made the old version look like every chat product was
+ * not the fill: it was floating the shape to the right and capping its
+ * width, which is the signature of two participants facing each other. So
+ * the fill is back, in the reader's own colour, and it is left aligned and
+ * full width inside the entry. It is a filled panel in a log, not a bubble
+ * in a conversation.
  *
  * The trace and the evidence are offered under the answer, not beside it. A
  * controller reads the answer first and interrogates it second, and the
@@ -83,24 +87,42 @@ export function TurnView({
       </div>
 
       <div className="min-w-0">
-        {/* The question is the entry's heading, not something a participant
-            said, so it is set in the display face at the size of a section
-            title and given a rule under it.
+        {/* The question is the entry's heading, filled in the reader's own
+            colour so it is unmistakably the thing they asked rather than the
+            first line of what the system said back. Set as a plain rule and
+            heading it was too quiet: an answer that opens with prose
+            immediately under a line of type made the question read as a
+            title for the answer instead of as a separate act.
+
+            Left aligned and full width inside the entry, which is the
+            difference between this and the bubble it replaced. Filling a
+            shape says "somebody said this"; floating it to the right and
+            capping its width is what turns a page into a transcript of two
+            participants, and that was the part worth losing.
 
             A question the last answer proposed says so above itself. Without
             it every entry opens identically and a thread reads as a stack of
             unrelated enquiries, when half of them are the controller pulling
             on a thread the system handed them. */}
-        <div className="border-b border-line-soft pb-2.5">
+        <div
+          className="rounded-md px-4 py-3"
+          style={{
+            backgroundImage: "var(--grad-voice)",
+            color: "var(--voice-ink)",
+          }}
+        >
           {followsUp ? (
-            <p className="mb-1 flex items-center gap-1.5 text-2xs font-semibold tracking-[0.08em] text-ink-3 uppercase">
+            /* No opacity on this. Knocking it back to 70 percent put a small
+               bold uppercase label at about 3.5:1 against the panel it sits
+               on, under the 4.5:1 that size needs. It is already secondary
+               by being half the size of the question, uppercase and tracked
+               out, so the colour does not have to do it as well. */
+            <p className="mb-1 flex items-center gap-1.5 text-2xs font-semibold tracking-[0.08em] uppercase">
               <ArrowElbowDownRightIcon size={11} weight="bold" aria-hidden />
               Follow-up
             </p>
           ) : null}
-          <h2 className="macro text-[1.2rem] leading-snug text-ink">
-            {turn.question}
-          </h2>
+          <h2 className="macro text-[1.2rem] leading-snug">{turn.question}</h2>
         </div>
 
       {reply ? (
