@@ -358,6 +358,19 @@ def _recommendation_from_joint_plan(
     if plan is None:
         return None
     covered = ", ".join(plan.gaps_covered) or "the simultaneous gaps"
+    # THE CONTENTION IS THE WORK, AND IT WAS INVISIBLE. `ops.py` says it in as
+    # many words: "`rejected` matters as much as `options`. A controller trusts
+    # a system that shows its rejects, because it proves the search was real."
+    # A joint plan has no rejects. Contention is its equivalent, it names the
+    # candidate that was rank 1 for both gaps and how the tie was broken, and
+    # it lives on `JointPlan`, which the web contracts do not model at all.
+    # `ranking_basis` is drawn above the cards as "Ranked by", and "why this
+    # allocation and not the obvious one" is exactly what that line is for.
+    basis = [
+        f"Allocated together to {plan.objective.replace('_', ' ')}, so no "
+        "crew member is assigned to two aircraft."
+    ]
+    basis.extend(plan.contention)
     return Recommendation(
         situation=(
             f"Joint cover for {covered}"
@@ -365,10 +378,7 @@ def _recommendation_from_joint_plan(
             else (plan.why_infeasible or "No joint allocation covers these gaps.")
         ),
         options=list(plan.assignments) if plan.feasible else [],
-        ranking_basis=(
-            f"Allocated together to {plan.objective.replace('_', ' ')}, so no "
-            "crew member is assigned to two aircraft."
-        ),
+        ranking_basis=" ".join(basis),
         joint_plan=plan,
         facts=list(plan.facts),
     )
