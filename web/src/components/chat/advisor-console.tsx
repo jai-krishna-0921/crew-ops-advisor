@@ -422,7 +422,7 @@ export function AdvisorConsole() {
             and takes the horizontal one away, which `hidden` would not do
             without also making this a scroll container on both axes. */}
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-x-clip overflow-y-auto">
-          <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
+          <div className="mx-auto w-full max-w-[var(--measure)] px-4 sm:px-6">
             {loadError || actionError ? (
               <div className="flex items-start gap-2 rounded-md bg-breach-wash px-3.5 py-2.5">
                 <WarningCircleIcon
@@ -449,7 +449,7 @@ export function AdvisorConsole() {
           </div>
 
           {status === "loading" ? (
-            <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
+            <div className="mx-auto w-full max-w-[var(--measure)] space-y-6 px-4 py-6 sm:px-6">
               {[0, 1].map((row) => (
                 <div key={row} className="space-y-3">
                   <div className="ml-auto h-10 w-2/5 animate-pulse rounded-xl bg-inset" />
@@ -467,7 +467,7 @@ export function AdvisorConsole() {
           ) : (
             /* The bottom padding clears the floating composer, so the last
                answer can be scrolled fully clear of it. */
-            <div className="mx-auto w-full max-w-3xl px-4 pt-4 sm:px-6" style={{ paddingBottom: composerHeight }}>
+            <div className="mx-auto w-full max-w-[var(--measure)] px-4 pt-4 sm:px-6" style={{ paddingBottom: composerHeight }}>
               {turns.map((turn, index) => (
                 <TurnView
                   key={turn.localId}
@@ -496,7 +496,7 @@ export function AdvisorConsole() {
             answer dissolve under the field instead of ending at a rule. */}
         <div ref={composerArea} className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
           <div className="veil pt-12">
-            <div className="pointer-events-auto mx-auto w-full max-w-3xl">
+            <div className="pointer-events-auto mx-auto w-full max-w-[var(--measure)]">
               {/* Voice does not need the persisted text-session restore to
                   render. Keeping this tied only to stable render state
                   avoids changing the button's disabled attribute during
@@ -763,7 +763,7 @@ function Welcome({
   );
 
   return (
-    <div className="relative mx-auto w-full max-w-3xl px-6 pt-24" style={{ paddingBottom: bottomSpacing }}>
+    <div className="relative mx-auto w-full max-w-[var(--measure)] px-6 pt-24" style={{ paddingBottom: bottomSpacing }}>
       {/* THE LIGHT IS FULL BLEED, THE CONTENT IS NOT. `hero-wash` used to sit
           on this column, which is 768px wide, so three radial gradients were
           clipped to a box narrower than any of them and read as a smudge with

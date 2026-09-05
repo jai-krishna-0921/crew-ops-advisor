@@ -52,8 +52,17 @@ function link(children: ReactNode, facts: Fact[]): ReactNode {
 function componentsFor(facts: Fact[]): Components {
   const linked = (children: ReactNode) => link(children, facts);
   return {
+    /* THE COLUMN WIDENED; THE PROSE DID NOT. A paragraph is easiest to read
+       at roughly 60 to 75 characters a line, and past that the eye loses the
+       start of the next line on the way back. The container is wide for the
+       things that need it, the option cards, the cost comparison, the rule
+       rows and the tables, and running text keeps its own measure inside it.
+       `grounded-prose.tsx` already did this for a verified answer; markdown
+       never did, so a wider column would have made every paragraph worse. */
     p: ({ children }) => (
-      <p className="my-4 text-md leading-[1.72] text-ink">{linked(children)}</p>
+      <p className="my-4 max-w-[68ch] text-md leading-[1.72] text-ink">
+        {linked(children)}
+      </p>
     ),
     strong: ({ children }) => (
       <strong className="font-semibold text-ink">{linked(children)}</strong>
@@ -74,7 +83,9 @@ function componentsFor(facts: Fact[]): Components {
         {children}
       </ol>
     ),
-    li: ({ children }) => <li className="pl-1.5">{linked(children)}</li>,
+    li: ({ children }) => (
+      <li className="max-w-[68ch] pl-1.5">{linked(children)}</li>
+    ),
 
     /* A heading belongs to what comes after it, so it carries a large space
        above and a small one below. */
