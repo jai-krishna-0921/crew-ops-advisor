@@ -1,16 +1,26 @@
 # Presentation deck
 
-Thirteen slides. Print ready as [`deck.pdf`](deck.pdf), source in
-[`deck.html`](deck.html), which prints to PDF with:
+Thirteen slides, in three forms.
+
+| File | For |
+|---|---|
+| [`deck.pptx`](deck.pptx) | Presenting and editing. Native slides with real text boxes, so it opens in PowerPoint, Keynote or Google Slides and can be re-ordered or re-worded. |
+| [`deck.pdf`](deck.pdf) | Reading and sharing. Fixed layout, no font substitution. |
+| `DECK.md` | This file. The same content as text, so it is readable and diffable on GitHub. |
+
+Rebuild either from source:
 
 ```bash
 cd docs && google-chrome --headless --no-pdf-header-footer \
-  --print-to-pdf=deck.pdf deck.html
+  --print-to-pdf=deck.pdf deck.html          # deck.html is the PDF source
+
+uv run --with python-pptx python scripts/build_deck_pptx.py   # builds deck.pptx
 ```
 
-This file is the same content as text, so it is readable and diffable on
-GitHub. If the two disagree, `deck.html` is what gets presented and this is
-the bug.
+The `.pptx` is generated rather than exported, so it is native slides rather
+than a PDF flattened into pictures. The one bitmap in it is the architecture
+diagram, because PowerPoint's SVG support is not dependable enough for the
+slide carrying the argument.
 
 ---
 

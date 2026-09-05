@@ -294,7 +294,7 @@ Against the checklist in section 8 of the problem statement.
 | Architecture diagram, showing the LLM against the deterministic boundary | [`docs/architecture.pdf`](docs/architecture.pdf), interactive at `/architecture` |
 | README with setup, approach and trade-offs | This file, plus [`docs/SETUP.md`](docs/SETUP.md) |
 | Sample inputs and outputs, with a failure case and analysis | `make eval` writes to `api/.eval/`, analysed in [`docs/FAILURE-ANALYSIS.md`](docs/FAILURE-ANALYSIS.md) |
-| Presentation deck | [`docs/DECK.md`](docs/DECK.md), print ready as [`docs/deck.pdf`](docs/deck.pdf) |
+| Presentation deck | [`docs/deck.pptx`](docs/deck.pptx) to edit or present, [`docs/deck.pdf`](docs/deck.pdf) to read, [`docs/DECK.md`](docs/DECK.md) as text |
 | Live demo | <https://extroc-jpkcqxtlma-uc.a.run.app> |
 
 ---
@@ -304,7 +304,7 @@ Against the checklist in section 8 of the problem statement.
 | Path | What is in it |
 |---|---|
 | `docs/SETUP.md` | Install, run, configure, and what to do when it does not work |
-| `docs/DECK.md` | The presentation deck, in source form |
+| `docs/DECK.md` | The presentation deck as text, alongside `deck.pptx` and `deck.pdf` |
 | `docs/PRODUCTION.md` | Crew PII, scaling to a real airline, and business impact |
 | `COMMANDS.md` | The demo script: every command in order, with what each proves |
 | `docs/CONTRACTS.md` | The seam: tool surface, HTTP and SSE contracts |
