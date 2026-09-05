@@ -68,3 +68,18 @@ it("toggles the hero answer between lookup and recommendation output", () => {
   expect(screen.getByText("INR 18,500")).toBeTruthy();
   expect(screen.getAllByText("Legal").length).toBeGreaterThan(0);
 });
+
+it("uses the Extroc wordmark in the landing page chrome", () => {
+  render(<Landing />);
+
+  const wordmarks = screen.getAllByRole<HTMLImageElement>("img", {
+    name: "Extroc",
+  });
+
+  expect(wordmarks).toHaveLength(2);
+  expect(
+    wordmarks.every((wordmark) =>
+      wordmark.getAttribute("src")?.includes("logo-with-name.png"),
+    ),
+  ).toBe(true);
+});
