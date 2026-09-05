@@ -233,7 +233,23 @@ def rendered_surface(reply: Reply) -> str:
 
 
 def produced_verdict(reply: Reply) -> bool | None:
-    """Whether the reply asserts legality, illegality, or neither."""
+    """Whether the reply asserts legality, illegality, or neither.
+
+    A COVER SEARCH IS ANSWERED BY ITS OPTIONS, NOT BY ITS REJECTS.
+    `collect_rule_traces` walks a payload recursively, so a Tier 3 reply
+    carries the breaching trace of every candidate the search excluded. Reading
+    those as the reply's verdict marked a correct, complete Q37 answer as an
+    inverted verdict: full recall, grounded, and flagged unsafe for showing its
+    working. `expected_verdict` above refuses to read a verdict out of a Tier 3
+    key for the same reason, and says so; this is the produced side of that.
+
+    So when a recommendation is present the verdict is whether a legal option
+    exists, which the recommendation states directly. Rejected candidates are
+    evidence about other people, not a verdict about this assignment.
+    """
+    if reply.recommendation is not None:
+        return any(option.legal for option in reply.recommendation.options)
+
     breaches = [t for t in reply.rule_traces if t.verdict is Verdict.BREACH]
     passes = [t for t in reply.rule_traces if t.verdict is Verdict.PASS]
     if breaches:

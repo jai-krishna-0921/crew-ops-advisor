@@ -40,14 +40,24 @@ _PAIRING_RE: Final = re.compile(r"\bP-\d{2,6}\b", re.IGNORECASE)
 _FLIGHT_RE: Final = re.compile(r"\bDX\d{2,4}\b", re.IGNORECASE)
 _TAIL_RE: Final = re.compile(r"\bVT-[A-Z]{2,4}\b", re.IGNORECASE)
 _RULE_RE: Final = re.compile(r"\bRULE-[A-Z]{2,8}-\d{1,3}\b", re.IGNORECASE)
-_ISO_DATE_RE: Final = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+#: The trailing boundary was `\\b`, which cannot end on a "T": "T" is a word
+#: character, so `2026-09-15T05:00:00Z` carried no date at all and the plan
+#: quietly fell back to the snapshot. An ops feed writes every instant that
+#: way. `(?![\\d-])` ends the date without demanding what follows it be a
+#: separator, while still refusing to bite into a longer number.
+_ISO_DATE_RE: Final = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})(?![\d-])")
 _LOOSE_DATE_RE: Final = re.compile(
     r"\b(\d{1,2})\s+"
     r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?"
     r"(?:\s+(\d{4}))?\b",
     re.IGNORECASE,
 )
-_TIME_RE: Final = re.compile(r"\b(\d{1,2}):(\d{2})\s*Z?\b")
+#: Not missing, WRONG, which is worse. In `T05:00:00Z` the leading `\\b` fails
+#: at the hour (preceded by "T") and succeeds at the seconds pair, so an
+#: event reported at 05:00 was extracted as 00:00 and nothing flagged it.
+#: Anchor on "not preceded by a digit or a colon", swallow an optional
+#: seconds field, and the whole instant is consumed in one match.
+_TIME_RE: Final = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?::\d{2})?\s*Z?(?![\d:])")
 _AIRCRAFT_RE: Final = re.compile(r"\b(A\d{3}|ATR\s?\d{2})\b", re.IGNORECASE)
 
 _MONTHS: Final[dict[str, int]] = {
@@ -94,6 +104,72 @@ _OUT_OF_SCOPE_TERMS: Final[frozenset[str]] = frozenset(
     }
 )
 
+#: What a Crew Control desk says when a station stops working, in two groups.
+#:
+#: SELF ASSERTING. Naming one of these at a station IS the report: "fog at BLR"
+#: is not a question about fog. No qualifier needed.
+_ASSERTS_DISRUPTION: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:"
+    r"fog(?:ged|gy)?|mist|storm|thunderstorm|snow|monsoon|cyclone|wind\s?shear"
+    r"|go[\s-]?slow|strike|industrial\s+action|walkout|congestion"
+    r"|shutdown|unusable|unserviceable|blocked"
+    # "disruption" is deliberately absent. It is a generic operations noun,
+    # and Q16 asks for "the disruption-risk score for C-1042", which is a
+    # crew attribute and has nothing to do with a station going down.
+    r"|below\s+minima|socked\s+in|diverted"
+    r")\b",
+    re.IGNORECASE,
+)
+
+#: NEUTRAL. A runway, ATC or the weather can be mentioned without anything being
+#: wrong, so one of these counts only next to a word saying conditions are bad.
+#: This is what keeps "what is the weather at BLR tomorrow" out of scope, which
+#: it should be: there is no weather in this dataset and there is no honest
+#: answer to give.
+_NEUTRAL_CONDITION: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:weather|visibility|minima|runway|taxiway|apron|airfield|airport"
+    r"|atc|flow\s+control|slot|slots)\b",
+    re.IGNORECASE,
+)
+
+#: Words that turn a neutral mention into an assertion that things are bad.
+_UNSUITABLE_RE: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:not\s+suitable|unsuitable|unusable|below\s+minima|bad|poor|severe"
+    r"|closed?|shut|restricted|blocked|disrupt(?:ed|ion)"
+    r"|delays?|delayed|holding|stopped|halted|suspended)\b",
+    re.IGNORECASE,
+)
+
+#: What the intent table matches on. A station code has to be present, because
+#: the whole point is to turn the report into a closure window *somewhere*.
+#: Without the lookahead the vocabulary alone matched Q16 and hijacked it.
+STATION_DISRUPTION_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?=.*\b(?:" + "|".join(sorted(STATIONS)) + r")\b)"
+    r".*(?:"
+    + _ASSERTS_DISRUPTION.pattern
+    + "|"
+    + _NEUTRAL_CONDITION.pattern
+    + ")",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def reads_as_station_disruption(question: str, entities: Entities) -> bool:
+    """Is this a controller stating that a station has stopped working?
+
+    A station this system knows has to be named, because the whole point is to
+    turn the report into a closure window somewhere. Then either the condition
+    asserts itself, or a neutral one is qualified as bad.
+    """
+    if not entities.stations:
+        return False
+    if _ASSERTS_DISRUPTION.search(question):
+        return True
+    return bool(
+        _NEUTRAL_CONDITION.search(question) and _UNSUITABLE_RE.search(question)
+    )
+
+
 #: Tier 3 asks for a decision, not a fact.
 _TIER3_MARKERS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"\bwhat should (?:i|we|the desk|crew control)\b", re.IGNORECASE),
@@ -124,8 +200,48 @@ _TIER2_MARKERS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"\b(?:is|are)\s+(?:delayed|cancelled|canceled)\b", re.IGNORECASE),
     re.compile(r"\bwhat is the (?:operational )?consequence\b", re.IGNORECASE),
     re.compile(r"\bwhich flights are (?:now )?uncrewed\b", re.IGNORECASE),
-    re.compile(r"\bearliest they may report\b", re.IGNORECASE),
     re.compile(r"\bat risk\b", re.IGNORECASE),
+    # WRITTEN AS SHAPES, NOT AS SHIPPED PHRASINGS.
+    #
+    # The markers above were lifted from questions.json, so they matched those
+    # questions and nothing else. `\bearliest they may report\b` was Q23 word
+    # for word and "soonest they can start again" fell through to tier 1, which
+    # disarms `tier_guard` on a rest calculation. Five of nine reworded tier 2
+    # questions came back tier 1 that way.
+    #
+    # Permission asked in any of its ordinary words.
+    re.compile(
+        r"\b(?:allowed|permitted|entitled|cleared|eligible)\s+to\b", re.IGNORECASE
+    ),
+    # Breaking a rule, without using the word "breach".
+    re.compile(
+        r"\bbreak(?:s|ing)?\b[^.?!]{0,20}\brules?\b|\brule\s+break\b|\bviolat",
+        re.IGNORECASE,
+    ),
+    # Validity as of a date is a RULE-CERT-06 question, not a field read.
+    re.compile(r"\bvalid\s+(?:for|on|at|until|through)\b", re.IGNORECASE),
+    # Looking forward to the next legal duty, however it is phrased.
+    re.compile(
+        # 60 rather than 40: "When can a crew released at 22:15Z on 15 Sep
+        # next fly?" puts 44 characters between the two halves.
+        r"\b(?:earliest|soonest|when)\b[^.?!]{0,60}"
+        r"\b(?:report|start|fly|operate|next\s+duty|resume)\b",
+        re.IGNORECASE,
+    ),
+    # A threshold over a window is a computation over the clocks. Q26 is
+    # declared tier 2 and was classified tier 1 for exactly this reason.
+    re.compile(
+        r"\b(?:more|less|fewer|greater|above|below|over|under|at\s+least)\b"
+        r"[^.?!]{0,20}\b\d+(?:\.\d+)?\b[^.?!]{0,20}\bhours?\b"
+        r"|\b\d+(?:\.\d+)?\s+or\s+(?:more|fewer|less)\b",
+        re.IGNORECASE,
+    ),
+    # Consequence framing.
+    re.compile(
+        r"\bwhat\s+happens\s+if\b|\bknock[\s-]?on\b|\bcascade\b"
+        r"|\bdownstream\b|\bripple\b|\bgrounding\b|\bgrounded\b",
+        re.IGNORECASE,
+    ),
 )
 
 
@@ -163,6 +279,14 @@ class Triage:
     reason: str
     entities: Entities = field(default_factory=Entities)
     abstention_reason: AbstentionReason | None = None
+
+    #: What was absent, as a noun, for the "what was missing" panel.
+    #:
+    #: Both answer paths used to pass `reason` here, so the console rendered
+    #: the same sentence twice: once as the answer and again under WHAT WAS
+    #: MISSING. A refusal that repeats itself reads as a system with one
+    #: sentence rather than one that knows what it lacked.
+    missing: tuple[str, ...] = ()
 
 
 def _dedupe(values: list[str]) -> tuple[str, ...]:
@@ -255,6 +379,27 @@ _GREETING_TOKENS: Final[frozenset[str]] = frozenset(
 _GREETING_MAX_TOKENS: Final = 4
 
 
+#: Being asked what it does. Answered rather than refused: it is the first
+#: thing anyone types, and "the question names nothing in the crew operations
+#: dataset" is the least useful sentence available in reply to it.
+_CAPABILITY_RE: Final[re.Pattern[str]] = re.compile(
+    r"\bwhat\s+(?:can|could)\s+(?:you|i|we)\b"
+    r"|\bwhat\s+(?:do|are)\s+you\b"
+    r"|\bwhat\s+(?:are\s+)?your\s+capabilit"
+    r"|\bwhat\s+(?:kind|sort)\s+of\s+questions?\b"
+    r"|\bhow\s+(?:do|can)\s+i\s+use\b"
+    r"|\bwho\s+are\s+you\b"
+    r"|^\s*help\s*[?.!]?\s*$"
+    r"|\bwhat\s+(?:is|are)\s+this\b",
+    re.IGNORECASE,
+)
+
+
+def is_capability_question(question: str) -> bool:
+    """Is the user asking what this system is for?"""
+    return bool(_CAPABILITY_RE.search(question))
+
+
 def _is_greeting(question: str) -> bool:
     """True when the whole question is an opener or a thank you.
 
@@ -306,6 +451,43 @@ _LOOSE_CREW_RE: Final = re.compile(r"\b([CP])[\s-]?(\d{4})\b", re.IGNORECASE)
 _LOOSE_FLIGHT_RE: Final = re.compile(r"\b(DX)[\s-]?(\d{3,4})\b", re.IGNORECASE)
 
 
+#: Ways of saying the same operational thing. Folded before matching, so one
+#: table serves every intent and the tier classifier, instead of each intent
+#: growing its own synonyms and then needing them again for the next wording.
+#:
+#: Rewording five shipped tier 2 questions, the resolver answered none of them
+#: while the agent answered all five. Four missed by a synonym alone.
+#:
+#: Each entry is a word-for-word equivalence in this domain, never a change of
+#: meaning, and the *question* is all that is rewritten: `Reply.question` keeps
+#: what the controller typed, so nothing here can put a value on screen that a
+#: tool did not produce.
+_SYNONYMS: Final[tuple[tuple[re.Pattern[str], str], ...]] = tuple(
+    (re.compile(pattern, re.IGNORECASE), replacement)
+    for pattern, replacement in (
+        # Breaking a rule is breaching one.
+        (r"\bbreak(?:s|ing)?\s+(?:any\s+|a\s+|the\s+)?rules?\b", "breach"),
+        (r"\brule\s+break(?:s|ing)?\b", "rule breach"),
+        (r"\bviolat(?:e|es|ing|ion)\b", "breach"),
+        # Permission, however it is asked.
+        (r"\b(?:allowed|permitted|cleared|entitled)\s+to\b", "legally"),
+        # A station stopping work.
+        (r"\bshuts?\s+down\b", "is closed"),
+        (r"\bshuts\b", "is closed"),
+        # Forward-looking rest.
+        (r"\bsoonest\b", "earliest"),
+        (r"\b(?:finished|finishes|ends?|ended)\s+(?:their\s+)?duty\b", "is released"),
+        (r"\bcame?\s+off\s+duty\b", "is released"),
+        (r"\bsign(?:s|ed)?\s+off\b", "is released"),
+        (r"\bstart\s+(?:work\s+)?again\b", "report next"),
+        (r"\bfly\s+again\b", "report next"),
+        # A whole multi-day pairing.
+        (r"\bthe\s+whole\s+of\s+(?:the\s+)?pairing\b", "the full pairing"),
+        (r"\bthe\s+entire\s+pairing\b", "the full pairing"),
+    )
+)
+
+
 def canonical_question(question: str) -> str:
     """Rewrite a question into the spelling the dataset uses.
 
@@ -324,9 +506,10 @@ def canonical_question(question: str) -> str:
 
     text = _LOOSE_CREW_RE.sub(lambda m: f"{m.group(1).upper()}-{m.group(2)}", question)
     text = _LOOSE_FLIGHT_RE.sub(lambda m: f"{m.group(1).upper()}{m.group(2)}", text)
-    return _STATION_ALIAS_RE.sub(
-        lambda m: _STATION_ALIASES[m.group(1).lower()], text
-    )
+    text = _STATION_ALIAS_RE.sub(lambda m: _STATION_ALIASES[m.group(1).lower()], text)
+    for pattern, replacement in _SYNONYMS:
+        text = pattern.sub(replacement, text)
+    return text
 
 
 def triage_question(question: str) -> Triage:
@@ -368,6 +551,46 @@ def triage_question(question: str) -> Triage:
     # does not model AND names nothing this system can compute over. "Is the
     # weather going to break C-1042's duty limit" stays in scope; "what is the
     # weather at BLR" does not.
+    if is_capability_question(question):
+        return Triage(
+            in_scope=False,
+            tier=1,
+            reason=(
+                "I am a decision aid for an airline Crew Control desk. I answer "
+                "from one week of dCortex Air's schedule out of BLR: 147 flights, "
+                "150 crew, 39 pairings, 16 reserves and seven duty rules. Ask me "
+                "who is on reserve, whether a crew member is legal for a duty, "
+                "what breaks when someone calls in sick or a station closes, and "
+                "what the ranked ways to cover a gap cost. Every figure comes "
+                "from the data with its arithmetic shown, and when I cannot "
+                "answer reliably I say so and say what was missing."
+            ),
+            entities=entities,
+            # GREETING, not OUT_OF_SCOPE. The reason decides the tone: a
+            # greeting is answered and carries no "I cannot", which is right
+            # here because nothing is missing. The user has not asked for
+            # anything yet, they have asked what there is to ask for.
+            abstention_reason=AbstentionReason.GREETING,
+        )
+
+    # A STATED DISRUPTION IS NOT AN OUT OF SCOPE QUESTION.
+    #
+    # "BLR weather is not suitable" names weather, which is not modelled, and
+    # was refused in 4ms. But the controller is not asking about weather: they
+    # are saying a station has stopped working, and that is a closure window,
+    # which is modelled exactly. The refusal was true and useless.
+    #
+    # "What is the weather at BLR tomorrow" still falls through to the refusal
+    # below, because it asks about the weather itself rather than asserting a
+    # condition. `reads_as_station_disruption` is what separates them.
+    if reads_as_station_disruption(question, entities):
+        return Triage(
+            in_scope=True,
+            tier=2,
+            reason="A station is reported unusable, which is a closure window.",
+            entities=entities,
+        )
+
     if out_of_scope_hits and not in_scope_hits and not entities.any_identifier():
         return Triage(
             in_scope=False,
@@ -378,6 +601,11 @@ def triage_question(question: str) -> Triage:
             ),
             entities=entities,
             abstention_reason=AbstentionReason.OUT_OF_SCOPE,
+            missing=(
+                f"{out_of_scope_hits[0].capitalize()} data. This dataset covers "
+                "crew, flights, pairings, duty clocks, certifications and the "
+                "seven rules, for one week out of BLR.",
+            ),
         )
 
     if not in_scope_hits and not entities.any_identifier() and not entities.stations:

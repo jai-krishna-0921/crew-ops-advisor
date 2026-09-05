@@ -1,6 +1,6 @@
 # TODO
 
-Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
+Working tracker for the Extroc submission. Ticked as each lands.
 
 ## Landed: the chat surface
 
@@ -215,7 +215,7 @@ request for decoration).
 - [x] Fix: a greeting is no longer dressed as a failure. It was headed "No
       answer given" beside an empty status pill, because the web
       `AbstentionReason` union never learned the `greeting` case the API had
-      started sending. It now reads "Crew Ops Advisor" and "Try asking",
+      started sending. It now reads "Extroc" and "Try asking",
       matching what the CLI already did.
 - [x] Conversation names come from the question, not the answer's headline.
       Five words, identifier first, no model: `agent/titles.py`, checked
@@ -298,6 +298,56 @@ request for decoration).
 - [x] Fix: an invisible full-viewport backdrop swallowed every click meant
       for the menu it was supposed to dismiss
 
+## Landed: Extroc's own identity
+
+- [x] Renamed to Extroc everywhere the product names itself. The hackathon's
+      name and the dataset's name are dCortex's and stay as they are.
+- [x] A brand gradient (indigo into warm amber) kept separate from the action
+      gradient, so the logo stops reading as another call to action. On the
+      mark's clock hand via an SVG gradient, and on `brand-edge`.
+- [x] `brand-edge`: the accent rail for surfaces where the product speaks in
+      its own voice (the reasoning trace, the greeting) rather than reporting
+      a computed result. Deliberately not on data tables.
+- [x] The reasoning trace stops being a grey box with a "Show"/"Hide" toggle,
+      which was ChatGPT's collapsible thought panel in all but name, and uses
+      the product's own caret disclosure.
+- [x] Landing footer: the wordmark on a dark plinth instead of six percent
+      ink on cream, where it read as a printing fault.
+
+## Landed: elements instead of prose
+
+- [x] `LimitBar`: a rule trace's observed against its limit, with the ceiling
+      marked and the overshoot painted past it. A breach reads before the
+      words do.
+- [x] `CostBars`, above one line item only, since a lone bar is full width
+      whatever the number says.
+- [x] `OptionCostCompare`: the ranked options side by side on cost. Cost
+      only, because the ranking is not a function of it.
+- [x] `FlightTimeline`: uncrewed flights on one clock, so the shape of the
+      hole in the day is visible rather than inferred from six pairs of
+      times.
+- [x] `FigureTiles` for loose facts, stating each value on its own.
+- [x] The rule the file is built on: geometry is a view over supplied
+      numbers, the way sorting is, but every visible label is a value a tool
+      emitted. No percentages anywhere, because no tool emits one.
+
+## Landed: the console stops looking like a chat
+
+- [x] Attested figures are set in semibold, not underlined. Six dotted rules
+      in one sentence read as struck-through text.
+- [x] The question is the heading of a numbered entry on a spine, not a right
+      aligned filled bubble.
+- [x] A question the previous answer proposed is marked as a follow-up, by
+      matching what was offered rather than by position in the thread.
+- [x] The composer keeps its pill, loses the sparkle and the circular
+      gradient arrow, and gains a prompt caret and a control with a word on
+      it.
+- [x] The reading column widened from 3xl to 5xl. Prose still holds its own
+      measure; tables, bars and option cards use the room.
+- [x] Fix: the fact popover was clipped by the scroll container and by any
+      card with `overflow-hidden`. It renders in a portal now, measured off
+      the trigger, which no ancestor can cut off.
+
 ## Open
 
 Everything below is coverage. The deterministic path currently answers 27 of 38
@@ -320,15 +370,22 @@ gap, never a rules, tool or arithmetic gap.
 - [ ] Agent-mode Tier 2 is 11 of 14 plus or minus 2. Quote a median of five
       runs, never a single run.
 
-- [ ] 7 golden failures (Q19, Q29, S1, S2, S3, S6, flagship), all traced to
-      intent matching in `resolve/`, not to the tools or the ops engine
-- [ ] Six of the eight Tier 3 questions abstain on one shared cause:
-      `find_cover_options` wants a pairing and the question names a person and
-      a date. Same `resolve/` intent matching, so likely one fix for both.
-- [ ] `docs/SAMPLES.md`, a required deliverable
-- [ ] Presentation deck, a required deliverable
-- [ ] Architecture diagram of the LLM vs deterministic boundary. It is the 20%
-      criterion and the strongest part of the build.
+- [x] 7 golden failures (Q19, Q29, S1, S2, S3, S6, flagship). All fixed. Every
+      one was intent matching or rendering in `resolve/`, never the tools or
+      the ops engine: the engine reproduced each answer key exactly the whole
+      time, and the plumbing between it and the screen threw the answer away.
+- [x] Six of the eight Tier 3 questions abstained on one shared cause:
+      `find_cover_options` wanted a pairing and the question named a person and
+      a date. `for_crew_id` fixed it. Agent mode now answers 6 of 8; the
+      offline resolver still abstains on 5, which is the deliberate narrower
+      path rather than a defect.
+- [x] Sample inputs and outputs, a required deliverable. `make eval` writes the
+      question, answer, tools and grade for all 38 questions and 6 scenarios to
+      `api/.eval/`, and `COMMANDS.md` is the same set as a runnable script.
+- [ ] Presentation deck, a required deliverable. **The only unbuilt one.**
+- [x] Architecture diagram of the LLM vs deterministic boundary, the 20%
+      criterion. `docs/architecture.pdf` (12 pages) plus the interactive
+      version at `/architecture` in the running app.
 
 ## The model layer
 

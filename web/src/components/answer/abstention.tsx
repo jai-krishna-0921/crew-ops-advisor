@@ -39,7 +39,7 @@ export function AbstentionCard({
   return (
     <section
       aria-label={greeting ? "Welcome" : "The advisor declined to answer"}
-      className="rounded-md bg-surface hairline"
+      className="rounded-md pl-3.5 brand-edge"
     >
       <header className="flex flex-wrap items-center gap-2 px-3 py-2">
         {greeting ? (
@@ -58,7 +58,7 @@ export function AbstentionCard({
           />
         )}
         <h3 className="text-base font-semibold text-ink">
-          {greeting ? "Crew Ops Advisor" : "No answer given"}
+          {greeting ? "Extroc" : "No answer given"}
         </h3>
         {greeting ? null : (
           <Pill tone="unknown">{ABSTENTION_LABEL[abstention.reason]}</Pill>

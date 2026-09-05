@@ -19,6 +19,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  CaretRightIcon,
   CheckIcon,
   CircleNotchIcon,
   DatabaseIcon,
@@ -232,6 +233,11 @@ export function ToolChip({
  *
  * The summary line stays honest about what it is hiding. "How this was worked
  * out, 6 steps" is a claim the row underneath has to be able to support.
+ *
+ * `brand-edge` and a rotating caret, not a grey box with a "Show"/"Hide"
+ * label: that combination is the product's own disclosure idiom (see
+ * `Disclosure` in `ui/primitives.tsx`), used here instead of the plain
+ * collapsible box every chat product ships this exact feature as.
  */
 export function Thinking({
   summary,
@@ -246,17 +252,31 @@ export function Thinking({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-md bg-inset/70">
+    <div className="rounded-md pl-3.5 brand-edge">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left hover:bg-hover"
+        className="flex w-full items-center gap-2 rounded-r-md px-3 py-2 text-left hover:bg-hover"
       >
-        <SparkleIcon size={12} weight="fill" aria-hidden className="shrink-0 text-ink-3" />
+        <SparkleIcon
+          size={12}
+          weight="fill"
+          aria-hidden
+          className="shrink-0"
+          style={{ color: "var(--brand-from)" }}
+        />
         <span className="text-base font-medium text-ink-2">{summary}</span>
         {meta ? <span className="num text-xs text-ink-3">{meta}</span> : null}
-        <span className="ml-auto text-xs text-ink-3">{open ? "Hide" : "Show"}</span>
+        <CaretRightIcon
+          size={12}
+          weight="bold"
+          aria-hidden
+          className={cx(
+            "ml-auto shrink-0 text-ink-3 transition-transform duration-200 ease-out-quint",
+            open && "rotate-90",
+          )}
+        />
       </button>
       {open ? <div className="anim-fade-up px-3 pb-3">{children}</div> : null}
     </div>

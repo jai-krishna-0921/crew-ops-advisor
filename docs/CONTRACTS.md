@@ -11,12 +11,12 @@ Python wins and this document is the bug.
 
 ## Ownership map
 
-| Workstream | Owns (writes) | Reads | Never touches |
-|---|---|---|---|
-| **Core** | `api/src/crewops/{domain,rules,ops,store,tools}/`, `api/tests/core/` | `data/`, `contracts/` | `agent/`, `verify/`, `server/`, `web/` |
-| **Agent** | `api/src/crewops/{agent,verify,server}/`, `api/src/crewops/cli.py`, `api/tests/agent/` | `contracts/`, `tools/` interface | `domain/`, `rules/`, `ops/`, `store/`, `web/` |
-| **UI** | `web/` | `contracts/stream.py`, this document | everything under `api/src/` |
-| **Root** | `contracts/`, `Makefile`, `CLAUDE.md`, `docs/` | everything | |
+| Workstream      | Owns (writes)                                                                                | Reads                                  | Never touches                                           |
+| --------------- | -------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------- |
+| **Core**  | `api/src/crewops/{domain,rules,ops,store,tools}/`, `api/tests/core/`                     | `data/`, `contracts/`              | `agent/`, `verify/`, `server/`, `web/`          |
+| **Agent** | `api/src/crewops/{agent,verify,server}/`, `api/src/crewops/cli.py`, `api/tests/agent/` | `contracts/`, `tools/` interface   | `domain/`, `rules/`, `ops/`, `store/`, `web/` |
+| **UI**    | `web/`                                                                                     | `contracts/stream.py`, this document | everything under`api/src/`                            |
+| **Root**  | `contracts/`, `Makefile`, `CLAUDE.md`, `docs/`                                       | everything                             |                                                         |
 
 `data/` is read only for everyone, always.
 
@@ -82,12 +82,12 @@ workstream binds it and never reaches past it.
 
 Twenty four tools across three tiers:
 
-| Tier | Tools |
-|---|---|
-| 1, retrieval | `find_crew`, `get_crew_detail`, `find_flights`, `find_pairings`, `get_duty_clocks`, `list_reserves`, `find_expiring_certifications`, `get_pairing`, `get_roster`, `find_crew_at_risk`, `aggregate`, `get_cost_rates` |
-| 2, consequence | `check_legality`, `simulate_absence`, `simulate_reassignment`, `simulate_station_closure`, `simulate_delay`, `scan_duty_headroom` |
-| 3, recommendation | `find_cover_options`, `plan_joint_cover`, `draft_notification` |
-| cross cutting | `get_watchlist`, `get_world_summary`, `explain_rule` |
+| Tier              | Tools                                                                                                                                                                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1, retrieval      | `find_crew`, `get_crew_detail`, `find_flights`, `find_pairings`, `get_duty_clocks`, `list_reserves`, `find_expiring_certifications`, `get_pairing`, `get_roster`, `find_crew_at_risk`, `aggregate`, `get_cost_rates` |
+| 2, consequence    | `check_legality`, `simulate_absence`, `simulate_reassignment`, `simulate_station_closure`, `simulate_delay`, `scan_duty_headroom`                                                                                                |
+| 3, recommendation | `find_cover_options`, `plan_joint_cover`, `draft_notification`                                                                                                                                                                         |
+| cross cutting     | `get_watchlist`, `get_world_summary`, `explain_rule`                                                                                                                                                                                   |
 
 `RETRIEVAL_ONLY` names the tools that cannot, on their own, support a Tier 2 or
 Tier 3 answer. Retrieval establishes what is; it does not establish what
@@ -111,20 +111,20 @@ Request body is `ChatRequest`:
 Response is a sequence of SSE events. Every event is one JSON object with a
 `type` discriminator, a `turn_id`, a monotonic `seq` and an `at` timestamp.
 
-| `type` | Carries | UI should |
-|---|---|---|
-| `run_started` | `thread_id`, `question`, `mode` | open the turn, show the mode badge |
-| `plan` | `intent`, `tier`, `steps[]` | show what the system intends to do |
-| `tool_call` | `tool`, `args`, `label` | append a live step chip |
-| `tool_result` | `tool`, `ok`, `latency_ms`, `summary`, `envelope` | settle the chip, stock the evidence drawer |
-| `trace` | `step` | append to the reasoning trail |
-| `token` | `text` | stream provisional prose, visibly provisional |
-| `verifying` | `atom_count` | show the grounding check running |
-| `verification` | `report` | show verified, repaired or rejected |
-| `abstain` | `abstention` | render the refusal card, not an error |
-| `reply` | full `Reply` | replace provisional prose with the settled answer |
-| `error` | `message`, `recoverable` | error state |
-| `done` | `total_ms` | close the turn |
+| `type`         | Carries                                                     | UI should                                         |
+| ---------------- | ----------------------------------------------------------- | ------------------------------------------------- |
+| `run_started`  | `thread_id`, `question`, `mode`                       | open the turn, show the mode badge                |
+| `plan`         | `intent`, `tier`, `steps[]`                           | show what the system intends to do                |
+| `tool_call`    | `tool`, `args`, `label`                               | append a live step chip                           |
+| `tool_result`  | `tool`, `ok`, `latency_ms`, `summary`, `envelope` | settle the chip, stock the evidence drawer        |
+| `trace`        | `step`                                                    | append to the reasoning trail                     |
+| `token`        | `text`                                                    | stream provisional prose, visibly provisional     |
+| `verifying`    | `atom_count`                                              | show the grounding check running                  |
+| `verification` | `report`                                                  | show verified, repaired or rejected               |
+| `abstain`      | `abstention`                                              | render the refusal card, not an error             |
+| `reply`        | full`Reply`                                               | replace provisional prose with the settled answer |
+| `error`        | `message`, `recoverable`                                | error state                                       |
+| `done`         | `total_ms`                                                | close the turn                                    |
 
 **Ordering guarantee:** `reply` always arrives before `done`, and `verification`
 always arrives before `reply`. Tokens are provisional until `reply` lands. The
@@ -133,31 +133,31 @@ system that looks honest and one that is.
 
 ### Other routes
 
-| Method | Path | Returns |
-|---|---|---|
-| `GET` | `/api/health` | `{status, dataset_loaded, snapshot, llm_configured, mode}` |
-| `GET` | `/api/world/summary` | counts, snapshot time, base, date range |
-| `GET` | `/api/brief?date=YYYY-MM-DD` | `Watchlist` |
-| `POST` | `/api/simulate` | `ImpactReport`, deterministic, no model |
-| `POST` | `/api/legality` | `LegalityReport`, deterministic, no model |
-| `POST` | `/api/cover` | `Recommendation`, deterministic, no model |
-| `GET` | `/api/threads` | thread list from checkpoint memory |
-| `GET` | `/api/threads/{id}` | full turn history for a thread |
-| `GET` | `/api/rules` | the seven rules as shipped |
-| `GET` | `/api/questions` | the 38 sample questions, for the demo launcher |
+| Method   | Path                           | Returns                                                      |
+| -------- | ------------------------------ | ------------------------------------------------------------ |
+| `GET`  | `/api/health`                | `{status, dataset_loaded, snapshot, llm_configured, mode}` |
+| `GET`  | `/api/world/summary`         | counts, snapshot time, base, date range                      |
+| `GET`  | `/api/brief?date=YYYY-MM-DD` | `Watchlist`                                                |
+| `POST` | `/api/simulate`              | `ImpactReport`, deterministic, no model                    |
+| `POST` | `/api/legality`              | `LegalityReport`, deterministic, no model                  |
+| `POST` | `/api/cover`                 | `Recommendation`, deterministic, no model                  |
+| `GET`  | `/api/threads`               | thread list from checkpoint memory                           |
+| `GET`  | `/api/threads/{id}`          | full turn history for a thread                               |
+| `GET`  | `/api/rules`                 | the seven rules as shipped                                   |
+| `GET`  | `/api/questions`             | the 38 sample questions, for the demo launcher               |
 
 **Response envelopes, stated exactly.** Naming a type here without pinning its
 JSON is how the console ended up crashing against the live server: both sides
 implemented something reasonable and they disagreed. So, precisely:
 
-| Path | Body |
-|---|---|
-| `/api/health` | the object itself, unwrapped |
-| `/api/world/summary` | `{summary, facts, snapshot}`, the world under `summary` |
-| `/api/rules` | `{rules, count}`, and each entry is itself an envelope with the rule under `payload` |
-| `/api/questions` | `{questions, count}`, records in the dataset's own vocabulary: `question_id`, `tier`, `prompt` |
-| `/api/threads` | `{threads, count}`, records in the memory layer's vocabulary: `first_question`, `turns`, `started_at` |
-| `/api/brief`, `/api/simulate`, `/api/legality`, `/api/cover` | a full `ToolEnvelope`, result under `payload`, with `facts` alongside |
+| Path                                                                 | Body                                                                                                          |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `/api/health`                                                      | the object itself, unwrapped                                                                                  |
+| `/api/world/summary`                                               | `{summary, facts, snapshot}`, the world under `summary`                                                   |
+| `/api/rules`                                                       | `{rules, count}`, and each entry is itself an envelope with the rule under `payload`                      |
+| `/api/questions`                                                   | `{questions, count}`, records in the dataset's own vocabulary: `question_id`, `tier`, `prompt`        |
+| `/api/threads`                                                     | `{threads, count}`, records in the memory layer's vocabulary: `first_question`, `turns`, `started_at` |
+| `/api/brief`, `/api/simulate`, `/api/legality`, `/api/cover` | a full`ToolEnvelope`, result under `payload`, with `facts` alongside                                    |
 
 The envelope is deliberate on the tool-backed routes: its `facts` are what let
 the console trace a figure on screen back to the arithmetic that produced it.

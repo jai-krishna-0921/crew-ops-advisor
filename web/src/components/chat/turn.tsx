@@ -3,19 +3,24 @@
 /**
  * One exchange: what the controller asked, and what the Advisor answered.
  *
- * THE ANSWER IS NOT IN A BUBBLE. The question is, because a question is a
- * thing somebody said and a filled shape aligned right is how a page shows
- * that. The answer is set as the page's own body text at full measure, with
- * nothing drawn around it.
+ * NEITHER SIDE IS IN A BUBBLE, AND THE PAGE IS NOT A CHAT.
  *
- * That asymmetry is the whole layout, and it is what both of the chat
- * interfaces worth copying do. Two facing bubbles make a transcript of a
- * conversation between two participants of equal standing. What is actually
- * happening here is that a controller asks and the system produces a
- * document: a verdict, its arithmetic, a ranked table, the rules it checked.
- * A document does not go in a speech bubble. Once the frame is gone the
- * answer can also use the full width for a table or an option card, which the
- * bubble version could not without bursting its own container.
+ * The answer never was: it is set as the page's own body text at full
+ * measure, so a table or an option card can use the whole column instead of
+ * bursting a rounded container. The question used to be, right aligned and
+ * filled, on the argument that a bubble is how a page shows a thing somebody
+ * said. That argument is fine and the result was still wrong, because two
+ * facing shapes is the one visual signature every chat product shares, and
+ * wearing it told a controller they were looking at a chat.
+ *
+ * They are not. A controller asks one question and the system produces a
+ * record: a verdict, its arithmetic, the rules it checked, the options it
+ * ranked and the ones it threw out. What a desk keeps of that is a numbered
+ * log, so the turn is drawn as one. Each entry hangs off a spine with its
+ * index on it, and the question is the entry's heading rather than something
+ * a participant said. The transcript reads down the page as a docket of
+ * decisions, which is what it is, and looks nothing like two people talking,
+ * which is what it never was.
  *
  * The trace and the evidence are offered under the answer, not beside it. A
  * controller reads the answer first and interrogates it second, and the
@@ -24,6 +29,7 @@
 
 import {
   ArrowClockwiseIcon,
+  ArrowElbowDownRightIcon,
   MagnifyingGlassIcon,
   WarningCircleIcon,
   SpeakerHighIcon,
@@ -37,6 +43,8 @@ import { Thinking } from "@/components/ai/elements";
 
 export function TurnView({
   turn,
+  index,
+  followsUp = false,
   onAsk,
   onRetry,
   onFocus,
@@ -46,6 +54,10 @@ export function TurnView({
   speaking = false,
 }: {
   turn: TurnState;
+  /** Position in the thread, zero based. Drawn as the entry's number. */
+  index: number;
+  /** This question is one the previous answer proposed, taken up. */
+  followsUp?: boolean;
   onAsk: (question: string) => void;
   onRetry: (question: string) => void;
   onFocus: () => void;
@@ -62,24 +74,43 @@ export function TurnView({
     <article
       onFocusCapture={onFocus}
       data-active={isActive ? "true" : undefined}
-      className="anim-fade-up pb-12"
+      className="anim-fade-up grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-3 pb-12 sm:grid-cols-[2.25rem_minmax(0,1fr)] sm:gap-x-5"
     >
-      <div className="flex justify-end">
-        {/* The question is the one thing on the page that is not the system
-            talking, so it gets a colour rather than another grey fill. */}
-        <p
-          className="max-w-[42ch] rounded-xl rounded-br-sm px-4 py-2.5 text-md leading-snug"
-          style={{
-            backgroundImage: "var(--grad-voice)",
-            color: "var(--voice-ink)",
-          }}
-        >
-          {turn.question}
-        </p>
+      {/* THE SPINE. The index sits on it and the rule falls from there to the
+          bottom of the entry, so a thread of ten answers reads as ten
+          numbered records on one continuous line rather than as ten
+          free floating blocks. It is decoration and is hidden from the
+          reader of a screen reader, who gets the heading instead. */}
+      <div aria-hidden className="relative">
+        <span className="num block text-right text-xs leading-6 font-semibold text-ink-3 tabular-nums sm:text-center">
+          {String(index + 1).padStart(2, "0")}
+        </span>
+        <span className="absolute inset-x-0 top-8 bottom-0 mx-auto w-px bg-line-soft" />
       </div>
 
+      <div className="min-w-0">
+        {/* The question is the entry's heading, not something a participant
+            said, so it is set in the display face at the size of a section
+            title and given a rule under it.
+
+            A question the last answer proposed says so above itself. Without
+            it every entry opens identically and a thread reads as a stack of
+            unrelated enquiries, when half of them are the controller pulling
+            on a thread the system handed them. */}
+        <div className="border-b border-line-soft pb-2.5">
+          {followsUp ? (
+            <p className="mb-1 flex items-center gap-1.5 text-2xs font-semibold tracking-[0.08em] text-ink-3 uppercase">
+              <ArrowElbowDownRightIcon size={11} weight="bold" aria-hidden />
+              Follow-up
+            </p>
+          ) : null}
+          <h2 className="macro text-[1.2rem] leading-snug text-ink">
+            {turn.question}
+          </h2>
+        </div>
+
       {reply ? (
-        <div className="mt-6 space-y-4">
+        <div className="mt-5 space-y-4">
           {/* THE WORKING COMES FIRST, FOLDED. It sat under the answer, on the
               argument that a controller reads the answer and interrogates it
               second. That is true of the DETAIL and not of the fact that
@@ -125,7 +156,7 @@ export function TurnView({
           </div>
         </div>
       ) : (
-        <div className="mt-6">
+        <div className="mt-5">
           <LiveTrace turn={turn} />
         </div>
       )}
@@ -146,6 +177,7 @@ export function TurnView({
           ) : null}
         </div>
       ) : null}
+      </div>
     </article>
   );
 }

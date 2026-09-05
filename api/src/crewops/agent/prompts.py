@@ -26,7 +26,7 @@ __all__ = [
     "repair_prompt",
 ]
 
-PROMPT_VERSION: Final = "2026-09-04.4"
+PROMPT_VERSION: Final = "2026-09-05.1"
 
 _RULE_LIST: Final = ", ".join(ALL_RULE_IDS)
 
@@ -73,7 +73,7 @@ def _tool_catalogue() -> str:
 #   "no em dashes"                                 -> agent.guards.style_guard
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT: Final = f"""\
-You are the reasoning layer of the Crew Ops Advisor, sitting beside an airline
+You are the reasoning layer of Extroc, sitting beside an airline
 Crew Control desk. A controller under time pressure is reading your answer and
 will act on it.
 

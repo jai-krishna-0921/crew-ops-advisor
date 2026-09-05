@@ -25,6 +25,7 @@ import {
 import type { CoverKind, CoverOption, Recommendation } from "@/lib/contracts";
 import { inr, joinParts, minutesToClock, plural } from "@/lib/format";
 import { GroundedText } from "@/components/answer/grounded-prose";
+import { CostBars, OptionCostCompare } from "@/components/answer/charts";
 import {
   firstBreach,
   LegalityReportView,
@@ -88,6 +89,8 @@ export function RecommendationView({
         <span className="label-micro mr-2 inline">Ranked by</span>
         {recommendation.ranking_basis}
       </p>
+
+      <OptionCostCompare options={options} />
 
       <div className="space-y-2.5">
         {options.map((option) => (
@@ -238,36 +241,9 @@ export function CoverOptionCard({ option }: { option: CoverOption }) {
       {option.cost.line_items.length > 0 ? (
         <div className="mx-4 mb-3.5 rounded-md bg-inset px-3 py-2.5">
           <Eyebrow>Cost</Eyebrow>
-          <table className="mt-1.5 w-full table-auto text-base">
-            <tbody>
-              {option.cost.line_items.map((line) => (
-                <tr key={line.label} className="last:border-0">
-                  <td className="py-1 pr-2 align-top text-ink-2">{line.label}</td>
-                  <td className="num py-1 pr-2 align-top text-xs text-ink-3">
-                    {line.basis}
-                    {line.rule_ref ? (
-                      <span className="ml-1 text-ink-3 opacity-70">
-                        ({line.rule_ref})
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="num py-1 text-right align-top whitespace-nowrap text-ink">
-                    {inr(line.amount_inr)}
-                  </td>
-                </tr>
-              ))}
-              <tr>
-                <td className="py-1 pr-2 font-medium text-ink">Total</td>
-                <td />
-                <td className="num py-1 text-right font-semibold whitespace-nowrap text-ink">
-                  {inr(option.cost.total_inr)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          {option.cost.note ? (
-            <p className="mt-1 text-xs text-ink-3">{option.cost.note}</p>
-          ) : null}
+          <div className="mt-2">
+            <CostBars cost={option.cost} />
+          </div>
         </div>
       ) : null}
 

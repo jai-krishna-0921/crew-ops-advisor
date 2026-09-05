@@ -59,7 +59,7 @@ load_env(REPO_ROOT)
 
 app = typer.Typer(
     name="crewops",
-    help="Crew Ops Advisor: a decision aid for an airline Crew Control desk.",
+    help="Extroc: a decision aid for an airline Crew Control desk.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -194,7 +194,7 @@ def _render_abstention(reply: Reply) -> None:
     console.print(
         Panel(
             Group(*body),
-            title="Crew Ops Advisor" if greeting else f"Declined: {abstention.reason.value}",
+            title="Extroc" if greeting else f"Declined: {abstention.reason.value}",
             border_style="cyan" if greeting else "red",
         )
     )
@@ -390,7 +390,7 @@ def chat(
             console.print(
                 Panel(
                     Text(
-                        "Crew Ops Advisor. dCortex Air, hub BLR, week 2026-09-14 to "
+                        "Extroc. dCortex Air, hub BLR, week 2026-09-14 to "
                         "2026-09-20, all times UTC.\n"
                         f"Mode: {mode}. Type a question, or 'exit'.",
                     ),
@@ -485,7 +485,7 @@ def serve(
         os.environ["CREWOPS_DATA_DIR"] = str(data_dir)
     console.print(
         Text(
-            f"Crew Ops Advisor on http://{host}:{port}  "
+            f"Extroc on http://{host}:{port}  "
             f"(mode: {'agent' if llm_configured() else 'deterministic'})",
             style="cyan",
         )
@@ -506,7 +506,7 @@ def health(
     ] = None,
 ) -> None:
     """What is configured, what is loaded, and which mode is active."""
-    table = Table(header_style="bold", title="Crew Ops Advisor")
+    table = Table(header_style="bold", title="Extroc")
     table.add_column("Check")
     table.add_column("Value")
 
@@ -518,6 +518,19 @@ def health(
     )
     table.add_row("Mode", "agent" if key else "deterministic")
     table.add_row("Model", cfg.model if key else "not used on the deterministic path")
+
+    # WHY, not just what. "Mode: deterministic" is the symptom a teammate is
+    # already looking at; what they need is which files were read and which
+    # value was ignored. Never prints a key.
+    from crewops.agent import providers as _providers
+
+    report = _providers.diagnose()
+    table.add_row("Why", Text(report.detail, style="" if report.provider else "yellow"))
+    if report.skipped:
+        table.add_row(
+            "Placeholders ignored",
+            Text(", ".join(report.skipped), style="red"),
+        )
 
     try:
         tools = load_tools(data_dir)

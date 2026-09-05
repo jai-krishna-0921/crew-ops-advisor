@@ -30,7 +30,9 @@ latency budget of every turn.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Final, Literal
 
 __all__ = [
@@ -39,9 +41,12 @@ __all__ = [
     "NONE",
     "OLLAMA",
     "OPENAI",
+    "ProviderReport",
     "ProviderSpec",
     "UnknownProviderError",
     "build",
+    "diagnose",
+    "is_placeholder",
     "resolve",
     "spec",
     "structured_output_method",
@@ -153,6 +158,110 @@ def structured_output_method(name: str) -> str | None:
     return spec(name).structured_method
 
 
+#: Values that are a template rather than a key. A `.env.example` copied into
+#: place with `ANTHROPIC_API_KEY=your-key-here` still selects Anthropic, because
+#: the string is not empty, and then every turn fails to authenticate while a
+#: working `OLLAMA_API_KEY` sits behind it in the precedence order. The user has
+#: a key, the system has a key, and the one it picked is a placeholder.
+#:
+#: Matched on the whole value, case insensitively, so a real key containing the
+#: letters "todo" is unaffected.
+_PLACEHOLDER_RE: Final = re.compile(
+    r"^(?:"
+    r"|none|null|nil|todo|tbd|changeme|change[-_ ]me|replace[-_ ]?me"
+    r"|x+|\.+|sk-\.+|your[-_ ]?(?:api[-_ ]?)?key(?:[-_ ]?here)?"
+    r"|<.*>|\{.*\}|\[.*\]"
+    r"|(?:my|the|a)[-_ ]?(?:api[-_ ]?)?key"
+    r"|paste[-_ ]?(?:your[-_ ]?)?key(?:[-_ ]?here)?"
+    r")$",
+    re.IGNORECASE,
+)
+
+
+def is_placeholder(value: str) -> bool:
+    """Is this a template value rather than a credential?"""
+    return bool(_PLACEHOLDER_RE.fullmatch(value.strip()))
+
+
+def _live(candidate: ProviderSpec) -> str | None:
+    """The first variable of this provider that carries a usable value."""
+    for var in candidate.selects_on:
+        value = os.environ.get(var, "").strip()
+        if value and not is_placeholder(value):
+            return var
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderReport:
+    """Why the system is in the mode it is in, in words a teammate can act on.
+
+    Written because `/api/health` said `llm_configured: false` with
+    `detail: null`, which is the truth and none of the explanation. A key is
+    never included: this string is printed, logged and served over HTTP.
+    """
+
+    provider: str | None
+    detail: str
+    searched: tuple[str, ...] = ()
+    skipped: tuple[str, ...] = ()
+
+
+def diagnose(root: object = None) -> ProviderReport:
+    """Explain the current provider selection, naming nothing secret."""
+    from crewops.env import search_paths
+
+    searched = tuple(str(path) for path in search_paths(root))  # type: ignore[arg-type]
+    found = tuple(s for s in searched if Path(s).is_file())
+
+    skipped = tuple(
+        var
+        for candidate in _SPECS
+        for var in candidate.selects_on
+        if os.environ.get(var, "").strip() and is_placeholder(os.environ.get(var, ""))
+    )
+
+    explicit = os.environ.get("CREWOPS_LLM_PROVIDER", "").strip().lower()
+    chosen = resolve()
+
+    parts: list[str] = []
+    if chosen is None:
+        if explicit == NONE:
+            parts.append(
+                "CREWOPS_LLM_PROVIDER is set to 'none', so the deterministic "
+                "path is being used on purpose."
+            )
+        else:
+            parts.append(
+                "No provider key is set, so answers come from the deterministic "
+                "path. Set one of "
+                + ", ".join(c.selects_on[0] for c in _SPECS)
+                + " to turn the agent on."
+            )
+    else:
+        var = _live(chosen) or chosen.selects_on[0]
+        why = f"CREWOPS_LLM_PROVIDER={explicit}" if explicit else f"{var} is set"
+        parts.append(f"Agent mode, provider {chosen.name}, because {why}.")
+
+    if skipped:
+        parts.append(
+            "Ignored as a placeholder rather than a key: "
+            + ", ".join(sorted(set(skipped)))
+            + ". Replace the value or remove the line."
+        )
+    parts.append(
+        ("Env files read: " + ", ".join(found))
+        if found
+        else "No .env or .env.local file was found in any of the searched paths."
+    )
+    return ProviderReport(
+        provider=chosen.name if chosen else None,
+        detail=" ".join(parts),
+        searched=searched,
+        skipped=tuple(sorted(set(skipped))),
+    )
+
+
 def resolve() -> ProviderSpec | None:
     """The provider this environment selects, or None for the offline path.
 
@@ -167,7 +276,7 @@ def resolve() -> ProviderSpec | None:
         return spec(explicit)
 
     for candidate in _SPECS:
-        if any(os.environ.get(var, "").strip() for var in candidate.selects_on):
+        if _live(candidate) is not None:
             return candidate
     return None
 

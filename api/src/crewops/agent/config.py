@@ -41,6 +41,14 @@ DEFAULT_TOOL_ITERATIONS: Final = 8
 DEFAULT_TURN_BUDGET_MS: Final = 30_000
 
 
+def _env_flag(name: str, *, default: bool) -> bool:
+    """An environment flag. Anything but a recognised truthy value is False."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _env_int(name: str, default: int) -> int:
     raw = os.environ.get(name)
     if not raw:
@@ -83,6 +91,19 @@ class AgentConfig:
     #: instead of the caller timing out on a dead socket.
     turn_budget_ms: int = DEFAULT_TURN_BUDGET_MS
 
+    #: Run the offline resolver's tool plan during planning, so the agent's
+    #: first call has the results already in hand.
+    #:
+    #: Measured: the deterministic core costs 0 to 11 ms of a turn, and about
+    #: 93% of the wall clock is model round trips at ~4.5s each. Three model
+    #: calls answers in five seconds; six takes twenty-plus and hits the
+    #: budget. The loop is the cost, and for a shape the resolver already
+    #: recognises the discovery round trips buy nothing.
+    #:
+    #: Off by default. It changes the graph, so it is opt in until measured on
+    #: the full scorecard.
+    prefetch: bool = False
+
     #: Exactly one correction pass. Never two, never a silent pass through.
     max_repairs: int = 1
 
@@ -114,5 +135,6 @@ class AgentConfig:
             ),
             turn_budget_ms=_env_int("CREWOPS_TURN_BUDGET_MS", DEFAULT_TURN_BUDGET_MS),
             max_repairs=_env_int("CREWOPS_MAX_REPAIRS", 1),
+            prefetch=_env_flag("CREWOPS_PREFETCH", default=False),
             memory_path=Path(raw_memory) if raw_memory else Path(".crewops/memory.db"),
         )

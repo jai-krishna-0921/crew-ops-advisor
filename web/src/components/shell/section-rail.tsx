@@ -21,7 +21,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useId, useState, type ComponentType } from "react";
 import {
   ChatCircleIcon,
   ListChecksIcon,
@@ -151,9 +151,16 @@ export function SectionRail({ onOpenPalette }: { onOpenPalette?: () => void }) {
  * reads at 16px in a browser tab as easily as on the rail.
  */
 function Mark() {
+  const gradientId = useId();
   return (
-    <Link href="/" aria-label="Crew Ops Advisor, home" className="p-2">
+    <Link href="/" aria-label="Extroc, home" className="p-2">
       <svg width="20" height="20" viewBox="0 0 18 18" fill="none" aria-hidden>
+        <defs>
+          <linearGradient id={gradientId} x1="4" y1="3" x2="14" y2="15">
+            <stop offset="0%" style={{ stopColor: "var(--brand-from)" }} />
+            <stop offset="100%" style={{ stopColor: "var(--brand-to)" }} />
+          </linearGradient>
+        </defs>
         <circle
           cx="9"
           cy="9"
@@ -164,7 +171,7 @@ function Mark() {
         />
         <path
           d="M9 4.6V9l3.1 2.2"
-          stroke="var(--accent)"
+          stroke={`url(#${gradientId})`}
           strokeWidth="1.8"
           strokeLinecap="round"
           strokeLinejoin="round"

@@ -1,4 +1,4 @@
-# Crew Ops Advisor
+# Extroc
 
 A conversational decision aid for an airline Crew Control desk. Built for the
 dCortex "Agentic Crew Ops Advisor" hackathon. Problem statement:

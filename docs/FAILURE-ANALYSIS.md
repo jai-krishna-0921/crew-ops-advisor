@@ -19,12 +19,13 @@ three wrong" (page 6).
 
 Everything below is graded on that axis first and on severity second.
 
-> **Status.** This is a first pass, written from the dataset and the design
-> before the full system runs end to end. Entries marked **predicted** are
-> derived from the data and the architecture. Entries marked **observed** have
-> been reproduced. It is refreshed from `make eval` output as the system lands,
-> and predicted entries that turn out to be wrong will be deleted rather than
-> quietly softened.
+> **Status.** The first pass was written from the dataset and the design before
+> the system ran end to end. It has since been refreshed against `make eval`.
+> **handled** means the failure can no longer occur and the entry is kept
+> because the reasoning is the interesting part. **observed** means it has been
+> reproduced. **predicted** means it is still derived from the data and the
+> architecture rather than seen. Predicted entries that turned out to be wrong
+> were deleted rather than quietly softened.
 
 ---
 
@@ -32,14 +33,14 @@ Everything below is graded on that axis first and on severity second.
 
 | # | Failure | Safe or unsafe | Severity | Status |
 |---|---|---|---|---|
-| F1 | Simultaneous disruptions: the same reserve assigned to two aircraft | **unsafe by default** | critical | predicted |
+| F1 | Simultaneous disruptions: the same reserve assigned to two aircraft | **unsafe by default** | critical | handled |
 | F2 | Compound and multi-part questions answered in half | safe | high | predicted |
 | F3 | Ambiguous crew referent, seven names are shared by two crew each | **unsafe if unguarded** | high | observed in the data |
 | F4 | A question needing a rule outside the seven | safe | medium | predicted |
 | F5 | Data the pack does not contain | safe | medium | predicted |
 | F6 | The multi-day pairing trap | safe, and we handle it | high if got wrong | handled |
 | F7 | The 2026-09-14 duty clock overlap | **unsafe if "fixed"** | high | handled |
-| F8 | Aggregation over the schedule, no tool computes a maximum | safe | medium | predicted |
+| F8 | Aggregation over the schedule, no tool computes a maximum | safe | medium | handled |
 | F9 | The deterministic offline path is narrower than the agent path | safe | medium | predicted |
 | F10 | RULE-FLT-03 is implemented and never exercised | latent | low | observed |
 | F11 | Model API failure or timeout during a live demo | safe if handled | medium | predicted |
@@ -65,8 +66,11 @@ and C-1017 on the other.
 may fill both". The constraint is not a rule in `rules.json`, so no per
 candidate legality check catches it either: each assignment really is legal in
 isolation. It is a joint feasibility constraint and it only exists between the
-two answers, which is exactly where nothing is looking. This is GAP-2 in
-`docs/TIER-COVERAGE.md`.
+two answers, which is exactly where nothing is looking.
+
+**Now handled.** `plan_joint_cover` solves the allocation as one problem and
+`JointPlan.double_booked` is asserted empty, so the composition that produced
+this failure can no longer be built. S6 reproduces the shipped key exactly.
 
 **Safe or unsafe: unsafe.** This is the only failure in the whole question set
 that produces a confident wrong operational instruction rather than a refusal.
@@ -74,21 +78,20 @@ Every other gap causes an abstention. A controller acting on this answer sends
 two callouts to the same person and discovers the problem when one aircraft has
 no captain at the gate.
 
-**What we do about it now.** Until a joint planner exists, the correct
-behaviour is an explicit abstention: detect that two or more gaps overlap in
-time, decline to produce a combined plan, and say so with
-`AbstentionReason.UNDERSPECIFIED`, naming the missing capability and offering
-the per pairing option lists separately with a warning that they share
-candidates. Under the second scoring principle that costs almost nothing.
-Answering it wrongly costs us the argument we are making.
-
-**What we would do with more time.** `plan_joint_cover(gaps, objective)` over an
-exhaustive enumeration with a mutual exclusion constraint. Two gaps against a
-candidate list of tens is a few hundred combinations, which is a loop and not
-an optimisation problem, so it stays inside NG-06 ("a full mathematical
+**How it is solved.** `plan_joint_cover(gaps, objective)` enumerates
+exhaustively with a mutual exclusion constraint. Two gaps against a candidate
+list of tens is a few hundred combinations, which is a loop and not an
+optimisation problem, so it stays inside NG-06 ("a full mathematical
 optimisation solver" is out of scope). Equal cost mirror assignments are both
-correct, per the dataset's own note, so the planner must not pretend there is a
-unique answer.
+correct, per the dataset's own note, so the planner does not pretend there is a
+unique answer. If no feasible allocation exists it sets `feasible=False` and
+says why, rather than returning the best independent pair.
+
+**What it cost to get right was not the solver.** It was the plumbing. The
+allocation was correct from the first commit; what was wrong for a long time
+was that the renderer showed one gap and dropped the other, and the tool
+truncated thirteen ranked options to five. Both are fixed and both had a test
+written before the fix.
 
 ## F2. Compound and multi-part questions
 
@@ -251,11 +254,13 @@ abstention, and the first scoring principle says a polished Tier 1 matters more
 than a working Tier 3. Declining "what is the longest flight" in front of a
 judge reads as fragility even though it is the architecture behaving correctly.
 
-**What we would do about it.** GAP-4: have `find_flights` and `find_crew` emit
-aggregate facts (`count`, `max` with the argmax ids, `distinct`) computed over
-the whole matched set before truncation, with `truncated=True` on the envelope.
-That is smaller than a new tool and fixes the silent truncation in the same
-change.
+**Now handled.** `aggregate` computes `count`, `sum`, `max`, `min`, `mean` and
+`distinct` over the whole matched set before any truncation, grouped where
+asked, and emits each result as a `Fact`. Q10, Q11, Q12 and Q14 all answer.
+A related defect outlived the fix and is worth recording: `aggregate` accepted
+a field the collection does not have and returned a single group keyed `"None"`
+holding every row, which is a false success the caller cannot detect. It now
+errors and names the fields that exist.
 
 ## F9. The deterministic offline path is narrower than the agent path
 

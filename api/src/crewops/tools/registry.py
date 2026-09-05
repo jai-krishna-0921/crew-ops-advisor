@@ -42,6 +42,7 @@ from crewops.contracts.tools import DelayMode, JointObjective, TimeOfDay
 from crewops.domain import (
     Crew,
     Flight,
+    Pairing,
     WorldState,
     at_clock,
     format_duration,
@@ -641,6 +642,7 @@ class Tools:
         aircraft_type: str | None = None,
         rank: str | None = None,
         at_time: DateTime | None = None,
+        crew_id: str | None = None,
     ) -> ToolEnvelope:
         timer = ToolTimer()
         args = {
@@ -649,6 +651,7 @@ class Tools:
             "aircraft_type": aircraft_type,
             "rank": rank,
             "at_time": at_time,
+            "crew_id": crew_id,
         }
         first, last = self.world.date_range
         if not first <= on_date <= last:
@@ -663,6 +666,13 @@ class Tools:
         for reserve in self.world.reserves_on(on_date):
             member = self.world.crew_member(reserve.crew_id)
             if member is None:
+                continue
+            # "What is C-3310's on-call window" used to list all sixteen
+            # reserves, because the crew id reached no argument. It graded
+            # correct only because the asked-for row was somewhere in the
+            # table, which is the grader being generous rather than the answer
+            # being right.
+            if crew_id and reserve.crew_id != crew_id:
                 continue
             if base and member.base != base:
                 continue
@@ -1213,6 +1223,36 @@ class Tools:
             rows = self._aggregate_rows(collection)
         except KeyError as exc:
             return error_envelope("aggregate", args, str(exc), timer=timer)
+
+        # A FIELD THIS COLLECTION DOES NOT HAVE IS AN ERROR, NOT AN EMPTY BUCKET.
+        #
+        # `group_by="captain"` over pairings used to return ok=True with a
+        # single group named "None" holding all 39 rows, because `row.get`
+        # returned None and `str(None)` became the key. The caller cannot tell
+        # that from a real result. An agent that got it asked once more, then
+        # abandoned the aggregate and read all 39 pairings one at a time: 23
+        # tool calls, 8 model calls, 37 seconds, and a timeout abstention on a
+        # question the tools could answer in a millisecond.
+        #
+        # The available names are read off the rows rather than restated here,
+        # so this check cannot drift from what `_aggregate_rows` produces.
+        if rows:
+            available = sorted(rows[0])
+            unknown = sorted(
+                {
+                    name
+                    for name in (field, group_by, *(filters or {}))
+                    if name is not None and name not in available
+                }
+            )
+            if unknown:
+                return error_envelope(
+                    "aggregate",
+                    args,
+                    f"{collection} has no field {', '.join(repr(u) for u in unknown)}. "
+                    f"Available fields: {', '.join(available)}.",
+                    timer=timer,
+                )
 
         active = {k: v for k, v in (filters or {}).items() if v is not None}
         for key, value in active.items():
@@ -1988,6 +2028,7 @@ class Tools:
                 result.breach_detail,
                 _SOURCE,
             ),
+            *self._delay_recovery_facts(result),
         ]
         # The FDP evaluation, as a rule trace and not only as prose.
         #
@@ -2033,6 +2074,10 @@ class Tools:
             "partial_fdp": result.partial_fdp,
             "partial_fdp_limit": result.partial_fdp_limit,
             "dropped_flights": list(result.dropped_flights),
+            "partial_duty_flight_numbers": list(result.partial_duty_flight_numbers),
+            "dropped_flight_numbers": list(result.dropped_flight_numbers),
+            "recrew_cost": result.recrew_cost,
+            "cancel_cost": result.cancel_cost,
             "impact": result.impact,
         }
         return ok_envelope(
@@ -2989,6 +3034,14 @@ class Tools:
         )
         return f"Counted records matching {rendered}"
 
+    @staticmethod
+    def _pairing_role(pairing: Pairing, role: str) -> str | None:
+        """The crew id filling one role on a pairing, or None if nobody does."""
+        for member in pairing.crew:
+            if member.role == role:
+                return str(member.crew_id)
+        return None
+
     def _aggregate_rows(self, collection: str) -> list[dict[str, Any]]:
         """Every record of one collection, flattened to scalar fields.
 
@@ -3035,6 +3088,14 @@ class Tools:
                     "duty_days": len(p.days),
                     "total_legs": len(p.flight_ids),
                     "total_seats": self.world.seats_of(p.flight_ids),
+                    # WHO FLIES IT. Without these a pairing row was a shape with
+                    # no people in it, so "which captain holds the most pairings"
+                    # could not be asked of this tool at all. Every pairing in
+                    # the dataset carries exactly one of each of these three
+                    # roles, verified, so each is a clean scalar to group on.
+                    "captain": self._pairing_role(p, "Captain"),
+                    "first_officer": self._pairing_role(p, "First Officer"),
+                    "senior_cabin_crew": self._pairing_role(p, "Senior Cabin Crew"),
                 }
                 for p in self.world.pairings
             ]
@@ -3406,6 +3467,68 @@ class Tools:
                             _SOURCE,
                         )
                     )
+        return facts
+
+    def _delay_recovery_facts(self, result: Any) -> list[Fact]:
+        """The legs, by number, and what each way out of the breach costs.
+
+        The engine has computed all four of these since the first commit and
+        none of them reached an answer. `partial_duty_flights` and
+        `dropped_flights` sat in the payload as ids nothing read, so a delay
+        answer said "3 sectors" where the key names DX401 to DX403.
+        `price_crew_set` computed the 75,000 re-crew and its own docstring says
+        "as in the S4 partial re-crew"; nothing called it.
+
+        Attesting them here is what lets the renderer state them: a figure with
+        no `Fact` behind it is rejected by the verifier, which is the check
+        working rather than something to loosen.
+        """
+        facts: list[Fact] = []
+        if result.partial_duty_flight_numbers:
+            facts.append(
+                computed_fact(
+                    f"{result.pairing_id}.{result.duty_date}.legs_flyable",
+                    "Legs the rostered crew can still fly",
+                    ", ".join(result.partial_duty_flight_numbers),
+                    "flight_no",
+                    "the duty with its last leg dropped, inside the FDP limit for "
+                    "the reduced sector count",
+                    _SOURCE,
+                )
+            )
+        if result.dropped_flight_numbers:
+            facts.append(
+                computed_fact(
+                    f"{result.pairing_id}.{result.duty_date}.legs_to_re_crew",
+                    "Legs that need another crew",
+                    ", ".join(result.dropped_flight_numbers),
+                    "flight_no",
+                    "the legs beyond the delayed crew's FDP limit",
+                    _SOURCE,
+                )
+            )
+        if result.recrew_cost is not None:
+            facts.append(
+                computed_fact(
+                    f"{result.pairing_id}.{result.duty_date}.recrew_cost",
+                    "Cost to re-crew those legs from reserve",
+                    result.recrew_cost.total_inr,
+                    "inr",
+                    "; ".join(line.basis for line in result.recrew_cost.line_items),
+                    _SOURCE,
+                )
+            )
+        if result.cancel_cost is not None:
+            facts.append(
+                computed_fact(
+                    f"{result.pairing_id}.{result.duty_date}.cancel_cost",
+                    "Cost to cancel those legs instead",
+                    result.cancel_cost.total_inr,
+                    "inr",
+                    "; ".join(line.basis for line in result.cancel_cost.line_items),
+                    _SOURCE,
+                )
+            )
         return facts
 
     def _impact_facts(self, report: Any) -> list[Fact]:

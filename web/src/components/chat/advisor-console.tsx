@@ -49,6 +49,7 @@ import type {
 } from "@/lib/contracts";
 import { api } from "@/lib/api";
 import { collectFacts } from "@/lib/fact-link";
+import type { TurnState } from "@/lib/turn";
 import { useConversation } from "@/lib/use-conversation";
 import { useVoice } from "@/lib/voice/use-voice";
 import { useStickToBottom } from "@/components/ai/elements";
@@ -421,7 +422,7 @@ export function AdvisorConsole() {
             and takes the horizontal one away, which `hidden` would not do
             without also making this a scroll container on both axes. */}
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-x-clip overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
+          <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
             {loadError || actionError ? (
               <div className="flex items-start gap-2 rounded-md bg-breach-wash px-3.5 py-2.5">
                 <WarningCircleIcon
@@ -448,7 +449,7 @@ export function AdvisorConsole() {
           </div>
 
           {status === "loading" ? (
-            <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 sm:px-6">
+            <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
               {[0, 1].map((row) => (
                 <div key={row} className="space-y-3">
                   <div className="ml-auto h-10 w-2/5 animate-pulse rounded-xl bg-inset" />
@@ -471,6 +472,8 @@ export function AdvisorConsole() {
                 <TurnView
                   key={turn.localId}
                   turn={turn}
+                  index={index}
+                  followsUp={followsUp(turns[index - 1], turn)}
                   onAsk={ask}
                   onRetry={ask}
                   onReadAloud={turn.reply ? () => { void voiceController.read(turn.reply!, turn.localId); } : undefined}
@@ -569,6 +572,25 @@ export function AdvisorConsole() {
  * with the server render blows up hydration. Open is the default, so the
  * pre-hydration paint is the common case and nobody sees it flip.
  */
+/**
+ * Whether this turn is the previous answer's own suggestion, taken up.
+ *
+ * A FOLLOW UP IS A CLAIM ABOUT WHERE THE QUESTION CAME FROM, so it is
+ * decided by matching the question against what the last answer actually
+ * offered, not by position in the thread. Turn four of a conversation is
+ * often a fresh subject, and labelling it "follow up" because it is not
+ * turn one would be the interface asserting a link that is not there. This
+ * matches only when the controller took a question the system proposed,
+ * which is the one case the badge is telling the truth about.
+ */
+function followsUp(previous: TurnState | undefined, turn: TurnState): boolean {
+  const reply = previous?.reply;
+  if (!reply) return false;
+  const offered = [...reply.follow_ups, ...(reply.abstention?.suggestions ?? [])];
+  const asked = turn.question.trim().toLowerCase();
+  return offered.some((question) => question.trim().toLowerCase() === asked);
+}
+
 function useRailPreference(): [boolean, (open: boolean) => void] {
   const [open, setOpen] = useState(true);
 

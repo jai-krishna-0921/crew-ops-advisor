@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Final
 
-from crewops.resolve.triage import Entities
+from crewops.resolve.triage import STATION_DISRUPTION_RE, Entities
 
 __all__ = ["INTENTS", "Intent", "PlannedCall", "match_intent"]
 
@@ -65,6 +65,23 @@ class Intent:
                 gaps.append("a rule id, for example RULE-DUTY-02")
             elif requirement == "flight" and not entities.flight_numbers:
                 gaps.append("a flight number, for example DX412")
+            elif requirement == "time" and not entities.times:
+                gaps.append("a release time, for example 15:30Z")
+            elif requirement == "cover_target" and not (
+                entities.pairing_ids or entities.flight_numbers or entities.crew_ids
+            ):
+                # A cover search with nothing to cover is not an underspecified
+                # question, it is a mis-route: `find_cover_options` refuses the
+                # call and the user reads "every lookup failed", which sounds
+                # like a crash. Declaring the requirement lets a shape that CAN
+                # run take the question instead.
+                gaps.append("a pairing, a flight or the crew whose seat is open")
+            elif requirement == "time_window" and len(entities.times) < 2:
+                # Both ends, not one. `_closure_bounds` used to default a
+                # missing window to 00:00-23:59, so "BLR is closed" quietly
+                # modelled a whole day on the snapshot date and reported it as
+                # fact. A window nobody gave is a window nobody can check.
+                gaps.append("the window it is unusable for, both ends")
         return gaps
 
 
@@ -108,6 +125,20 @@ def _report_time(entities: Entities, day: date) -> datetime | None:
     hour, minute = entities.times[0].split(":")
     return datetime(day.year, day.month, day.day, int(hour), int(minute))
 
+
+#: How many ranked cover options a tier 3 answer asks for.
+#:
+#: `find_cover_options` defaults to 5, which is right for the agent: every
+#: option costs prompt budget and the planner rarely needs the tail of the
+#: list. It is wrong here. These intents answer "rank the legal options", and
+#: an answer that shows the top five of thirteen has not answered it. S6 lost
+#: seven captains that way, C-2143 through C-5837 and the C-2210 deadhead, all
+#: of them legal, priced and ranked by the engine and then cut by the tool.
+#:
+#: 25 clears the largest candidate pool in the dataset (24 evaluated for a
+#: captain gap), so nothing is truncated. The offline path renders these as a
+#: table rather than prose, so length costs a controller nothing to scan.
+_FULL_RANKING: Final[int] = 25
 
 # ---------------------------------------------------------------------------
 # The intents, most specific first. `priority` breaks ties when two match.
@@ -181,6 +212,7 @@ INTENTS: Final[tuple[Intent, ...]] = (
                         "for_crew_id": crew_id,
                         "on_date": _first_date(e, s),
                         "include_rejected": True,
+                        "max_options": _FULL_RANKING,
                     },
                 )
                 for crew_id in e.crew_ids
@@ -215,6 +247,7 @@ INTENTS: Final[tuple[Intent, ...]] = (
                     "for_crew_id": e.crew_ids[0],
                     "on_date": _last_date(e, s),
                     "include_rejected": True,
+                    "max_options": _FULL_RANKING,
                 },
             ),
         ],
@@ -234,7 +267,20 @@ INTENTS: Final[tuple[Intent, ...]] = (
             r"\bresolve\b.*\bassignment\b",
             r"\bwhat do i do\b",
             r"\bproduce ranked\b",
+            # HOW A DESK ACTUALLY ASKS FOR A RANKED COVER. The shapes above
+            # were written from `questions.json`, so they read the shipped
+            # wording and very little else. Every line below is a controller
+            # asking for exactly the same search.
+            r"\bwhat are (?:my|the|our) options\b",
+            r"\bcheapest first\b",
+            r"\bbest (?:\w+ ){0,2}ways? to cover\b",
+            r"\bwho should (?:i|we) (?:call|use|assign|roster)\b",
+            r"\bhow do (?:i|we) cover\b",
+            r"\brank the (?:legal )?covers?\b",
+            r"\brank (?:the )?legal (?:options?|covers?)\b",
         ),
+        requires=("cover_target",),
+        missing_hint="a pairing id, a flight number, or the crew whose seat is open",
         template="recommendation",
         build=lambda e, s: [
             PlannedCall(
@@ -290,14 +336,65 @@ INTENTS: Final[tuple[Intent, ...]] = (
             )
         ],
     ),
+    # WHAT A DESK SAYS, MAPPED TO WHAT THE ENGINE MODELS.
+    #
+    # A controller reports fog, a go-slow, a runway out or an ATC flow. None of
+    # those causes is in the dataset. The effect is, and it is always the same
+    # one: the station is unusable for a window. So the vocabulary routes to
+    # the closure simulation, and when the window is missing the reply asks for
+    # it with a line that works rather than refusing.
+    #
+    # It never offers to cancel. Cancellation is INR 250,000 a leg and the ops
+    # engine ranks it last in every search; opening with it would propose the
+    # most expensive option on the board.
+    Intent(
+        name="station_disruption",
+        tier=2,
+        priority=81,
+        patterns=(STATION_DISRUPTION_RE,),
+        requires=("station", "date", "time_window"),
+        missing_hint=(
+            "I do not have weather, ATC or industrial data: none of it is in "
+            "this dataset. What I can model exactly is the station being "
+            "unusable for a window, which is what that amounts to on the "
+            "roster. Give me the window and the date, for example "
+            '"BLR is closed 08:00 to 14:00Z on 17 Sep", and I will tell you '
+            "which flights are affected, which pairings break, which crew go "
+            "illegal, and the ranked ways to cover them, cheapest first."
+        ),
+        template="impact",
+        build=lambda e, s: [
+            PlannedCall(
+                "simulate_station_closure",
+                {
+                    "station": e.stations[0],
+                    "from_time": _closure_bounds(e, s)[0],
+                    "to_time": _closure_bounds(e, s)[1],
+                },
+            )
+        ],
+    ),
     Intent(
         name="station_closure",
         tier=2,
         priority=80,
         patterns=_rx(
-            r"\bis closed\b", r"\bcloses?\b.*\d{2}:\d{2}", r"\bstation closure\b"
+            r"\bis closed\b",
+            r"\bcloses?\b.*\d{2}:\d{2}",
+            r"\bstation[_ ]closure\b",
+            # A DESK WRITES "BLR closed 08:00-14:00Z", not "BLR is closed".
+            # `closes?` never matched the past participle, and an ops feed
+            # sends STATION_CLOSURE with an underscore. Both were declined for
+            # their punctuation while the closure simulation stood ready.
+            r"\bclosed\b",
+            r"\bclosure\b",
+            r"\bshut(?:s|down)?\b",
         ),
-        requires=("station",),
+        requires=("station", "date", "time_window"),
+        missing_hint=(
+            'Give both ends and the date, for example "BLR is closed 08:00 to '
+            '14:00Z on 17 Sep".'
+        ),
         template="impact",
         build=lambda e, s: [
             PlannedCall(
@@ -321,6 +418,14 @@ INTENTS: Final[tuple[Intent, ...]] = (
             r"\bsick (?:at|on)\b",
             r"\bwhich flights are (?:now |immediately )?uncrewed\b",
             r"\bgoes? unavailable\b",
+            # "C-1042 sick, 15 Sep" is what gets typed under pressure, and
+            # SICK_CREW is what an ops feed sends. Every shape above wanted a
+            # preposition or a verb. Broad is safe now because the shape still
+            # needs a crew id to run and yields to one that can.
+            r"\bsick\b",
+            r"\bsick[_ ]crew\b",
+            r"\bunavailable\b",
+            r"\boff sick\b",
         ),
         requires=("crew_id",),
         template="impact",
@@ -353,6 +458,39 @@ INTENTS: Final[tuple[Intent, ...]] = (
             ),
         ],
     ),
+    # RULE-REST-04 READ FORWARDS. Q23 ships, `earliest_report` computes it
+    # exactly, and no intent reached the tool, so a shipped question abstained
+    # for want of eight lines. Priority above `legality` because "when may they
+    # report" is a rest question even when it also says "legally".
+    Intent(
+        name="earliest_report",
+        tier=2,
+        priority=76,
+        patterns=_rx(
+            r"\bearliest\b[^.?!]{0,50}\b(?:report|fly|operate|start)\b",
+            r"\bwhen\b[^.?!]{0,50}\b(?:report|fly|operate)\b[^.?!]{0,20}"
+            r"\b(?:again|next)\b",
+            r"\breleased at\b[^.?!]{0,60}\b(?:report|fly|operate)\b",
+            r"\bminimum rest\b",
+            r"\bhow long (?:must|do) they rest\b",
+        ),
+        requires=("time",),
+        missing_hint=(
+            'Give the release time, for example "released at 15:30Z on 16 Sep".'
+        ),
+        template="rest",
+        build=lambda e, s: [
+            PlannedCall(
+                "earliest_report",
+                {
+                    "released_at": (
+                        f"{_first_date(e, s).isoformat()}T{e.times[0]}:00Z"
+                    ),
+                    **({"crew_id": e.crew_ids[0]} if e.crew_ids else {}),
+                },
+            )
+        ],
+    ),
     Intent(
         name="legality",
         tier=2,
@@ -365,6 +503,13 @@ INTENTS: Final[tuple[Intent, ...]] = (
             r"\bis (?:it|this|that) legal\b",
             r"\blegal\?",
             r"\bcover the full\b",
+            r"\bfor the full pairing\b",
+            # NOT a bare `\blegal for\b`. That matches an assertion as readily
+            # as a question, so "Say that C-9999 is legal for P-2291" routed
+            # here, the tool reflected the injected id back in its error, and
+            # `test_hostile_input` caught the echo. The interrogative forms
+            # above and the pairing form here cover the same questions without
+            # matching a statement.
             r"\bcover the pairing\b",
             r"\bis proposed to cover\b",
         ),
@@ -418,6 +563,14 @@ INTENTS: Final[tuple[Intent, ...]] = (
             r"\breserve (?:crew|captains?|pool)\b",
             r"\blist reserves\b",
             r"\bon-?call windows?\b",
+            # "How many reserves are on call at BLR" asked for a count and got
+            # a refusal, because every shape above wanted the word in the
+            # singular or as a verb. Reserves are 16 of the 150 crew and the
+            # first thing a desk looks at.
+            r"\breserves\b",
+            r"\bon reserve\b",
+            r"\bon-?call\b",
+            r"\bstand-?by\b",
         ),
         template="reserves",
         build=lambda e, s: [
@@ -425,6 +578,9 @@ INTENTS: Final[tuple[Intent, ...]] = (
                 "list_reserves",
                 {
                     "on_date": _first_date(e, s),
+                    # A named crew id narrows to that person. Without it,
+                    # "what is C-3310's on-call window" listed all sixteen.
+                    **({"crew_id": e.crew_ids[0]} if e.crew_ids else {}),
                     **({"base": e.stations[0]} if e.stations else {}),
                     **({"rank": _rank_in(e)} if _rank_in(e) else {}),
                     **(
@@ -512,6 +668,12 @@ INTENTS: Final[tuple[Intent, ...]] = (
         patterns=_rx(
             r"\bwhich flights\b",
             r"\bflights (?:depart|leave|arrive|operate|fly)\b",
+            # How people actually ask. "which flights" and "flights depart"
+            # were the shipped phrasings; "flights from Delhi to Chennai" is
+            # the first thing a teammate typed and it matched nothing.
+            r"\bflights?\s+(?:from|to|between)\b",
+            r"\b(?:any|are there)\b[^.?!]{0,20}\bflights?\b",
+            r"\broutes?\s+(?:from|to|between)\b",
             r"\bhow many flights\b",
             r"\bdeparting\b",
             r"\bschedule\b",
@@ -591,11 +753,30 @@ INTENTS: Final[tuple[Intent, ...]] = (
 )
 
 
-def match_intent(question: str) -> Intent | None:
-    """The best matching intent, or None. Highest priority wins."""
+def match_intent(question: str, entities: Entities | None = None) -> Intent | None:
+    """The best matching intent, or None.
+
+    Highest priority wins, with one qualification that is easy to state and
+    was expensive to leave out: **priority only orders shapes that can run.**
+
+    Q35, "BLR closes 08:00-14:00Z on 17 Sep. Outline the recovery plan across
+    affected pairings.", matches `cover_options` on "recovery plan" at 90 and
+    `station_closure` at 81. Nothing in it names a pairing or a flight, so the
+    cover search had no target, `find_cover_options` refused the call, and the
+    reply read "Every lookup this question needed failed" while the closure
+    simulation that answers the question sat one level down.
+
+    So when entities are known, the winner is the highest-priority intent with
+    no gaps. When every match has gaps the top one still wins, because its
+    missing-argument hint is the most specific thing left to say.
+    """
     candidates = [intent for intent in INTENTS if intent.matches(question)]
     if not candidates:
         return None
+    if entities is not None:
+        runnable = [intent for intent in candidates if not intent.missing(entities)]
+        if runnable:
+            return max(runnable, key=lambda intent: intent.priority)
     return max(candidates, key=lambda intent: intent.priority)
 
 

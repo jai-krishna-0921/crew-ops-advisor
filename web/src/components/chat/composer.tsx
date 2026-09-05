@@ -6,14 +6,23 @@
  * One field, one control. Enter sends, shift-enter breaks a line, and the
  * field grows to about five lines before it scrolls.
  *
- * IT FLOATS, and that is the difference between this and the version it
- * replaces. The old one sat in a fixed strip with a rule along the top, so
- * the conversation ended at a line and the composer was a separate region of
- * the page. Here the scroll area runs to the bottom of the window and the
- * composer sits over it on a shadow, with the page colour drawn back up
- * behind it: the last answer dissolves under the field instead of stopping at
- * an edge. Every chat worth copying does it this way, and the reason is that
- * it keeps the conversation the whole page.
+ * IT FLOATS, so the scroll area runs to the bottom of the window and the last
+ * answer dissolves under the field instead of stopping at an edge. That much
+ * is worth keeping from every chat product: it makes the conversation the
+ * whole page rather than a panel above a toolbar.
+ *
+ * WHAT MADE IT GENERIC was never the rounding. It was the furniture: a
+ * sparkle on the left, standing in for "this is AI", and a circular gradient
+ * arrow on the right, which together are the single most recognisable object
+ * in consumer AI. Those are gone. A prompt caret marks where typing begins,
+ * the way a terminal does, and the control carries a word.
+ *
+ * The pill shape stays, because a soft capsule is a genuinely good shape for
+ * a single line of input and it is not what made the old bar look borrowed.
+ *
+ * The button says what it does. An icon-only circle is fine when the whole
+ * world already knows the icon, and worse than a word when the product is
+ * asking somebody to commit a decision to a log.
  *
  * While a turn is running the send control becomes a stop control. A
  * controller who has read enough should not have to wait for the agent to

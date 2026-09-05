@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Final
 
 from crewops.contracts import (
     CoverOption,
@@ -51,6 +51,7 @@ def render(template: str, envelopes: Sequence[ToolEnvelope], question: str) -> s
         "watchlist": _render_watchlist,
         "reserves": _render_reserves,
         "clocks": _render_clocks,
+        "rest": _render_rest,
         "certifications": _render_certifications,
         "pairing": _render_pairing,
         "crew": _render_crew_detail,
@@ -389,6 +390,20 @@ def _render_watchlist(envelopes: Sequence[ToolEnvelope], question: str) -> str:
 # below comes from a payload field or a `Fact.rendered()` value instead.
 
 
+def _tool_arg(envelopes: Sequence[ToolEnvelope], tool: str, name: str) -> str:
+    """One argument a tool was called with, as text.
+
+    An argument is not a fact the tool produced, so this is only ever used to
+    say back what was asked, never to state a value.
+    """
+    for envelope in envelopes:
+        if envelope.tool == tool:
+            value = (envelope.args or {}).get(name)
+            if value:
+                return str(value)
+    return ""
+
+
 def _tool_payload(envelopes: Sequence[ToolEnvelope], tool: str) -> Any:
     """The payload of the first successful call to `tool` this turn, if any."""
     for envelope in envelopes:
@@ -432,6 +447,20 @@ def _render_reserves(envelopes: Sequence[ToolEnvelope], question: str) -> str:
     if not payload.reserves:
         return "\n".join(lines)
 
+    # A ONE ROW RESULT IS THE ANSWER, NOT A SUMMARY OF ITSELF.
+    #
+    # "What is C-3310's on-call window and reachability" answered "1 reserve(s)
+    # on call for 2026-09-14" and left the window in the table. A count is what
+    # you say when there are too many to read out. With one row the count is
+    # the least useful sentence available.
+    if len(payload.reserves) == 1:
+        only = payload.reserves[0]
+        lines.append(
+            f"\n{only.crew_id} ({only.name}, {only.rank}, base {only.base}) is on "
+            f"call {only.window_start} to {only.window_end}Z and is reachable in "
+            f"{only.reachability_minutes} minutes."
+        )
+
     # The rows are the table's job now, so the prose says only what the table
     # cannot: which of these rows answer the narrower question that was asked.
     # This used to dump every reserve as an indented line, and because a single
@@ -451,6 +480,32 @@ def _render_reserves(envelopes: Sequence[ToolEnvelope], question: str) -> str:
     if payload.note:
         lines.append("")
         lines.append(payload.note)
+    return "\n".join(lines)
+
+
+def _render_rest(envelopes: Sequence[ToolEnvelope], question: str) -> str:
+    """RULE-REST-04 forwards: the time first, then why it is that time.
+
+    The generic renderer led with the trace label, "Apply RULE-REST-04
+    forwards: Resolved from the release time given, ...". Every figure in that
+    was attested and the sentence a controller reads first was about method
+    rather than about when their crew can fly.
+    """
+    payload = _tool_payload(envelopes, "earliest_report")
+    if not isinstance(payload, dict) or "earliest_report" not in payload:
+        return _render_generic(envelopes, question)
+
+    earliest = payload["earliest_report"]
+    released = payload.get("released_at")
+    rest = payload.get("rest_hours")
+    lines = [f"Earliest legal report is {earliest:%H:%M}Z on {earliest:%Y-%m-%d}."]
+    if released is not None and rest is not None:
+        lines.append(
+            f"\nThat is {_num(rest)}h after the {released:%H:%M}Z release on "
+            f"{released:%Y-%m-%d}, which is the minimum "
+            f"{payload.get('rule_id', 'RULE-REST-04')} requires. Reporting "
+            "before it is a breach."
+        )
     return "\n".join(lines)
 
 
@@ -591,18 +646,58 @@ def _render_flights(envelopes: Sequence[ToolEnvelope], question: str) -> str:
     payload = _tool_payload(envelopes, "find_flights")
     if not isinstance(payload, P.FlightList):
         return _render_generic(envelopes, question)
+    flights = list(payload.flights)
+
+    # AN EMPTY RESULT IS A FINDING. "0 flight(s) match, 0 seats in total" is
+    # true and tells a person nothing. Asked for Delhi to Chennai they should
+    # be told there is no nonstop, because this network is a BLR hub, rather
+    # than left to infer it from a zero.
+    if not flights:
+        origin = _tool_arg(envelopes, "find_flights", "origin")
+        destination = _tool_arg(envelopes, "find_flights", "destination")
+        if origin and destination:
+            # No station this turn did not ask about. Naming the hub here
+            # read better and the verifier rejected it, correctly: "BLR" was
+            # a value no tool returned. The fix is to say less, never to
+            # loosen the check.
+            # No number words either. "one airline's week" put the token
+            # "one" into the prose and the verifier read it as a figure no
+            # tool returned, which it is. Say less.
+            return (
+                f"No nonstop {origin} to {destination} in this schedule. "
+                f"Ask for departures from {origin} to see where it connects."
+            )
+        return f"{payload.total_matched} flight(s) match."
+
     lines = [
         f"{payload.total_matched} flight(s) match, {payload.total_seats} seats in total."
     ]
-    flights = list(payload.flights)
-    if not flights:
-        return "\n".join(lines)
+
+    # NAME THEM. A route question is asking which flights, and the count alone
+    # is the same collection-summarising defect fixed four times elsewhere.
+    # Deduped over operating days, because a daily flight is one flight to a
+    # person and seven rows to the schedule.
+    origin = _tool_arg(envelopes, "find_flights", "origin")
+    destination = _tool_arg(envelopes, "find_flights", "destination")
+    if origin and destination:
+        numbers = list(dict.fromkeys(flight.flight_no for flight in flights))
+        lines.append(
+            f"\n{origin} to {destination}: " + ", ".join(numbers) + "."
+        )
 
     wants_max = bool(_SUPERLATIVE_MAX_RE.search(question))
     wants_min = bool(_SUPERLATIVE_MIN_RE.search(question)) and not wants_max
     if wants_max or wants_min:
         extreme = (min if wants_min else max)(flight.block_hours for flight in flights)
-        matching = [flight.flight_no for flight in flights if flight.block_hours == extreme]
+        # One row per operating day, so a flight flown daily matches seven
+        # times. `dict.fromkeys` drops the repeats and keeps schedule order; a
+        # set would reorder the answer, which is this module rewriting a result
+        # the tool returned rather than reporting it.
+        matching = list(
+            dict.fromkeys(
+                flight.flight_no for flight in flights if flight.block_hours == extreme
+            )
+        )
         word = "shortest" if wants_min else "longest"
         lines.append(
             f"\nThe {word} block time is {_num(extreme)}h, on " + ", ".join(matching) + "."
@@ -642,9 +737,22 @@ def _render_generic(envelopes: Sequence[ToolEnvelope], _question: str) -> str:
     return "\n".join(line for line in lines if line)
 
 
+#: Units that belong in the sentence, because they say what the number
+#: measures. Everything else in the `Fact.unit` enum is a type tag telling the
+#: verifier how to compare a value, and printing one produced "DX404 flight_no".
+_DIMENSIONAL_UNITS: Final = frozenset({"hours", "minutes", "days", "percent"})
+
+
 def _fact_line(fact: Fact) -> str:
-    unit = "" if fact.unit in ("text", "count", "boolean") else f" {fact.unit}"
-    base = f"{fact.label}: {fact.rendered()}{unit}"
+    if fact.unit == "inr" and isinstance(fact.value, int | float):
+        # Money leads with its currency and is grouped: 250000 and 2500000 are
+        # one glance apart and one is ten times the other. The digits are still
+        # the attested value, and the verifier reads through the separators.
+        value = f"INR {fact.value:,.0f}"
+    else:
+        suffix = f" {fact.unit}" if fact.unit in _DIMENSIONAL_UNITS else ""
+        value = f"{fact.rendered()}{suffix}"
+    base = f"{fact.label}: {value}"
     if fact.derivation:
         return f"{base}  [{fact.derivation}]"
     return base
