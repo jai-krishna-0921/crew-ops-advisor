@@ -1,6 +1,6 @@
 # TODO
 
-Working tracker for the Crew Ops Advisor submission. Ticked as each lands.
+Working tracker for the Extroc submission. Ticked as each lands.
 
 ## Landed: the chat surface
 
@@ -215,7 +215,7 @@ request for decoration).
 - [x] Fix: a greeting is no longer dressed as a failure. It was headed "No
       answer given" beside an empty status pill, because the web
       `AbstentionReason` union never learned the `greeting` case the API had
-      started sending. It now reads "Crew Ops Advisor" and "Try asking",
+      started sending. It now reads "Extroc" and "Try asking",
       matching what the CLI already did.
 - [x] Conversation names come from the question, not the answer's headline.
       Five words, identifier first, no model: `agent/titles.py`, checked
@@ -320,15 +320,22 @@ gap, never a rules, tool or arithmetic gap.
 - [ ] Agent-mode Tier 2 is 11 of 14 plus or minus 2. Quote a median of five
       runs, never a single run.
 
-- [ ] 7 golden failures (Q19, Q29, S1, S2, S3, S6, flagship), all traced to
-      intent matching in `resolve/`, not to the tools or the ops engine
-- [ ] Six of the eight Tier 3 questions abstain on one shared cause:
-      `find_cover_options` wants a pairing and the question names a person and
-      a date. Same `resolve/` intent matching, so likely one fix for both.
-- [ ] `docs/SAMPLES.md`, a required deliverable
-- [ ] Presentation deck, a required deliverable
-- [ ] Architecture diagram of the LLM vs deterministic boundary. It is the 20%
-      criterion and the strongest part of the build.
+- [x] 7 golden failures (Q19, Q29, S1, S2, S3, S6, flagship). All fixed. Every
+      one was intent matching or rendering in `resolve/`, never the tools or
+      the ops engine: the engine reproduced each answer key exactly the whole
+      time, and the plumbing between it and the screen threw the answer away.
+- [x] Six of the eight Tier 3 questions abstained on one shared cause:
+      `find_cover_options` wanted a pairing and the question named a person and
+      a date. `for_crew_id` fixed it. Agent mode now answers 6 of 8; the
+      offline resolver still abstains on 5, which is the deliberate narrower
+      path rather than a defect.
+- [x] Sample inputs and outputs, a required deliverable. `make eval` writes the
+      question, answer, tools and grade for all 38 questions and 6 scenarios to
+      `api/.eval/`, and `COMMANDS.md` is the same set as a runnable script.
+- [ ] Presentation deck, a required deliverable. **The only unbuilt one.**
+- [x] Architecture diagram of the LLM vs deterministic boundary, the 20%
+      criterion. `docs/architecture.pdf` (12 pages) plus the interactive
+      version at `/architecture` in the running app.
 
 ## The model layer
 

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { Landing } from "@/components/landing/landing";
 
 export const metadata: Metadata = {
-  title: "Crew Ops Advisor",
+  title: "Extroc",
   description:
     "A crew desk advisor that never guesses. The model plans and explains, deterministic code computes, and a guard checks every figure in the answer against what the tools returned.",
 };

@@ -1,4 +1,4 @@
-# Crew Ops Advisor
+# Extroc
 
 A conversational decision aid for an airline Crew Control desk, built for the
 dCortex "Agentic Crew Ops Advisor" hackathon.
@@ -196,11 +196,16 @@ excluded them. Showing the rejects is what proves the search was real.
 
 ## Sample inputs and outputs
 
-Worked examples, including at least one case the system handles poorly, are in
-`docs/SAMPLES.md`. The honest analysis of what breaks and why is in
-`docs/FAILURE-ANALYSIS.md`, which grades each failure as safe (the system
-declines) or unsafe (the system answers wrongly). Unsafe failures are treated as
-much more serious than safe ones, and are listed first.
+`make eval` runs all 38 shipped questions and all 6 scenarios and writes the
+question, the answer, the tools that ran and the grade for each to
+`api/.eval/`. [`COMMANDS.md`](COMMANDS.md) is the same thing as a demo script:
+every command in the order to run it, with what each one proves.
+
+The honest analysis of what breaks and why is in
+[`docs/FAILURE-ANALYSIS.md`](docs/FAILURE-ANALYSIS.md), which grades each
+failure as safe (the system declines) or unsafe (the system answers wrongly).
+Unsafe failures are treated as much more serious than safe ones, and are listed
+first.
 
 ---
 
@@ -223,8 +228,6 @@ figures needs more room than a README should give it.
 | `docs/CONTRACTS.md` | The seam: tool surface, HTTP and SSE contracts |
 | `docs/DATA-MODEL.md` | The dataset decoded and verified, and 33 traps |
 | `docs/REQUIREMENTS.md` | Every requirement, with where it is satisfied and how it is verified |
-| `docs/TIER-COVERAGE.md` | All 38 questions and 6 scenarios mapped to tools, with the gap analysis |
-| `docs/RUBRIC-MAP.md` | The nine criteria, what addresses each, and where we are weak |
 | `docs/FAILURE-ANALYSIS.md` | What breaks, graded safe against unsafe |
 | `docs/AGENT-DESIGN.md` | The graph, the guards, and how the verifier works |
 

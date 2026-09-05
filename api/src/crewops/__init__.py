@@ -1,4 +1,4 @@
-"""Crew Ops Advisor.
+"""Extroc.
 
 A conversational decision aid for an airline Crew Control desk.
 

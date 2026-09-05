@@ -58,7 +58,7 @@ export function AbstentionCard({
           />
         )}
         <h3 className="text-base font-semibold text-ink">
-          {greeting ? "Crew Ops Advisor" : "No answer given"}
+          {greeting ? "Extroc" : "No answer given"}
         </h3>
         {greeting ? null : (
           <Pill tone="unknown">{ABSTENTION_LABEL[abstention.reason]}</Pill>

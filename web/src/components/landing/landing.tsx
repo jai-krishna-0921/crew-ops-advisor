@@ -302,7 +302,7 @@ function Nav() {
             className="flex items-center gap-2 pr-2 text-base font-semibold text-ink"
           >
             <Mark />
-            <span className="hidden sm:inline">Crew Ops Advisor</span>
+            <span className="hidden sm:inline">Extroc</span>
           </Link>
 
           <span aria-hidden className="mx-1 hidden h-5 w-px bg-line md:block" />
@@ -1034,9 +1034,7 @@ function Footer() {
             <div>
               <div className="flex items-center gap-2.5">
                 <Mark />
-                <p className="text-md font-semibold text-ink">
-                  Crew Ops Advisor
-                </p>
+                <p className="text-md font-semibold text-ink">Extroc</p>
               </div>
               <p className="mt-5 max-w-[34ch] text-base leading-relaxed text-ink-2">
                 A decision aid for the dCortex Air Crew Control desk. One week
@@ -1100,8 +1098,8 @@ function Footer() {
             the word ran a third of a viewport past both edges, which reads as
             text that has escaped its container rather than as a wordmark
             cropped on purpose. The drift is small for the same reason. */}
-        <p className="drift-left macro absolute inset-x-0 -bottom-[2vw] text-center text-[11.5vw] leading-none whitespace-nowrap text-ink opacity-[0.06]">
-          crew ops advisor
+        <p className="drift-left macro absolute inset-x-0 -bottom-[2vw] text-center text-[16vw] leading-none whitespace-nowrap text-ink opacity-[0.06]">
+          extroc
         </p>
       </div>
     </footer>

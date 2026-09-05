@@ -152,7 +152,7 @@ export function SectionRail({ onOpenPalette }: { onOpenPalette?: () => void }) {
  */
 function Mark() {
   return (
-    <Link href="/" aria-label="Crew Ops Advisor, home" className="p-2">
+    <Link href="/" aria-label="Extroc, home" className="p-2">
       <svg width="20" height="20" viewBox="0 0 18 18" fill="none" aria-hidden>
         <circle
           cx="9"

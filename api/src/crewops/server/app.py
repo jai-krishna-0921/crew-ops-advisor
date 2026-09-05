@@ -85,7 +85,7 @@ def create_app(
                 await memory.close()
 
     app = FastAPI(
-        title="Crew Ops Advisor",
+        title="Extroc",
         version="0.1.0",
         summary=(
             "A conversational decision aid for an airline Crew Control desk. The "

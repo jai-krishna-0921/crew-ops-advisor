@@ -1,7 +1,7 @@
 [project]
 name = "crewops"
 version = "0.1.0"
-description = "Crew Ops Advisor: a conversational decision aid for an airline Crew Control desk"
+description = "Extroc: a conversational decision aid for an airline Crew Control desk"
 requires-python = ">=3.12,<3.14"
 license = { text = "MIT" }
 

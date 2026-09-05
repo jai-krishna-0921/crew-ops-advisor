@@ -70,8 +70,8 @@ const mono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Crew Ops Advisor",
-    template: "%s · Crew Ops Advisor",
+    default: "Extroc",
+    template: "%s · Extroc",
   },
   description:
     "Decision aid for the dCortex Air Crew Control desk. The model plans and explains, deterministic tools compute, and a grounding guard checks every figure.",
