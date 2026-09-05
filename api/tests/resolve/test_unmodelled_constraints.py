@@ -111,3 +111,48 @@ def test_a_supported_shape_still_answers(
     reply = _ask(resolver, question)
     assert reply.kind.value == "answer", f"{question}\n  -> {reply.text}"
     assert expected in f"{reply.headline or ''} {reply.text}"
+
+
+# ------------------------------------------------- a premise stated as a fact
+#
+# "Cover P-2291 excluding C-3310" abstains, correctly: no tool takes a negated
+# filter. "Every reserve at BLR is already used. How do I cover P-2291 now?"
+# ANSWERED, and ranked C-3310, a reserve at BLR, first. The controller has just
+# said that option does not exist and the reply opens with it.
+#
+# Same class as the negations already caught, in the mood a desk actually uses:
+# the constraint arrives as a statement about the world rather than as a clause
+# on the request.
+
+EXHAUSTED = [
+    ("all-used", "Every reserve at BLR is already used. How do I cover P-2291 now?"),
+    ("all-gone", "All the reserves are gone. What are my options for P-2291?"),
+    ("none-left", "No reserves left at BLR. How do I cover P-2291?"),
+    ("already-out", "The reserves are all already assigned. Cover P-2291 for C-1042."),
+]
+
+
+@pytest.mark.parametrize(("case_id", "question"), EXHAUSTED, ids=[c[0] for c in EXHAUSTED])
+def test_a_pool_declared_exhausted_is_not_ranked_first(
+    resolver, case_id: str, question: str
+) -> None:
+    reply = resolver.answer(question, thread_id="t-un", turn_id="u-1", asked_at=SNAPSHOT)
+    if reply.kind.value == "abstain":
+        return  # declining a constraint we cannot model is the right answer
+    rec = reply.recommendation
+    assert rec is not None and rec.options, f"{case_id}: answered with nothing ranked"
+    assert rec.options[0].kind.value != "reserve", (
+        f"{case_id}: opened with reserve {rec.options[0].crew_id} after being "
+        "told the reserve pool is exhausted"
+    )
+
+
+def test_an_ordinary_cover_question_still_answers(resolver) -> None:
+    """The check must not read every mention of reserves as an exclusion."""
+    reply = resolver.answer(
+        "Captain C-1042 is out for pairing P-2291. Produce ranked resolution options.",
+        thread_id="t-un",
+        turn_id="u-2",
+        asked_at=SNAPSHOT,
+    )
+    assert reply.kind.value == "answer", reply.text

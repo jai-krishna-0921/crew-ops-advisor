@@ -54,7 +54,20 @@ _NEGATED_FILTER: Final = re.compile(
     r"scheduled|rostered|certified|current)\b"
     r"|\b(?:excluding|other\s+than|apart\s+from|instead\s+of)\b"
     r"|\bwithout\s+(?:a|an|the)?\s*"
-    r"(?:rating|certificate|certification|licence|license|medical)\b",
+    r"(?:rating|certificate|certification|licence|license|medical)\b"
+    # A POOL DECLARED EXHAUSTED IS A FILTER TOO, just in the indicative.
+    # "Every reserve at BLR is already used. How do I cover P-2291 now?"
+    # answered and opened with a reserve at BLR. The controller had just said
+    # that option does not exist. Nothing in the roster records a reserve as
+    # spent, so there is no honest way to answer it: say so.
+    #
+    # An exhaustion quantifier is required on both sides, so "which reserves
+    # are assigned to P-2291" stays an ordinary question rather than becoming
+    # a refusal.
+    r"|(?:\b(?:all|every|no|none)\b[^.?!]{0,60}\breserves?\b"
+    r"|\breserves?\b[^.?!]{0,40}\b(?:all|every|none)\b)"
+    r"[^.?!]{0,40}\b(?:used|gone|taken|assigned|committed|out|unavailable|"
+    r"spent|exhausted|left|remaining)\b",
     re.IGNORECASE,
 )
 

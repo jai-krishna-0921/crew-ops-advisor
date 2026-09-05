@@ -40,14 +40,24 @@ _PAIRING_RE: Final = re.compile(r"\bP-\d{2,6}\b", re.IGNORECASE)
 _FLIGHT_RE: Final = re.compile(r"\bDX\d{2,4}\b", re.IGNORECASE)
 _TAIL_RE: Final = re.compile(r"\bVT-[A-Z]{2,4}\b", re.IGNORECASE)
 _RULE_RE: Final = re.compile(r"\bRULE-[A-Z]{2,8}-\d{1,3}\b", re.IGNORECASE)
-_ISO_DATE_RE: Final = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+#: The trailing boundary was `\\b`, which cannot end on a "T": "T" is a word
+#: character, so `2026-09-15T05:00:00Z` carried no date at all and the plan
+#: quietly fell back to the snapshot. An ops feed writes every instant that
+#: way. `(?![\\d-])` ends the date without demanding what follows it be a
+#: separator, while still refusing to bite into a longer number.
+_ISO_DATE_RE: Final = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})(?![\d-])")
 _LOOSE_DATE_RE: Final = re.compile(
     r"\b(\d{1,2})\s+"
     r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?"
     r"(?:\s+(\d{4}))?\b",
     re.IGNORECASE,
 )
-_TIME_RE: Final = re.compile(r"\b(\d{1,2}):(\d{2})\s*Z?\b")
+#: Not missing, WRONG, which is worse. In `T05:00:00Z` the leading `\\b` fails
+#: at the hour (preceded by "T") and succeeds at the seconds pair, so an
+#: event reported at 05:00 was extracted as 00:00 and nothing flagged it.
+#: Anchor on "not preceded by a digit or a colon", swallow an optional
+#: seconds field, and the whole instant is consumed in one match.
+_TIME_RE: Final = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?::\d{2})?\s*Z?(?![\d:])")
 _AIRCRAFT_RE: Final = re.compile(r"\b(A\d{3}|ATR\s?\d{2})\b", re.IGNORECASE)
 
 _MONTHS: Final[dict[str, int]] = {

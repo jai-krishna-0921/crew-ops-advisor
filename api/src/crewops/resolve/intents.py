@@ -67,6 +67,15 @@ class Intent:
                 gaps.append("a flight number, for example DX412")
             elif requirement == "time" and not entities.times:
                 gaps.append("a release time, for example 15:30Z")
+            elif requirement == "cover_target" and not (
+                entities.pairing_ids or entities.flight_numbers or entities.crew_ids
+            ):
+                # A cover search with nothing to cover is not an underspecified
+                # question, it is a mis-route: `find_cover_options` refuses the
+                # call and the user reads "every lookup failed", which sounds
+                # like a crash. Declaring the requirement lets a shape that CAN
+                # run take the question instead.
+                gaps.append("a pairing, a flight or the crew whose seat is open")
             elif requirement == "time_window" and len(entities.times) < 2:
                 # Both ends, not one. `_closure_bounds` used to default a
                 # missing window to 00:00-23:59, so "BLR is closed" quietly
@@ -258,7 +267,20 @@ INTENTS: Final[tuple[Intent, ...]] = (
             r"\bresolve\b.*\bassignment\b",
             r"\bwhat do i do\b",
             r"\bproduce ranked\b",
+            # HOW A DESK ACTUALLY ASKS FOR A RANKED COVER. The shapes above
+            # were written from `questions.json`, so they read the shipped
+            # wording and very little else. Every line below is a controller
+            # asking for exactly the same search.
+            r"\bwhat are (?:my|the|our) options\b",
+            r"\bcheapest first\b",
+            r"\bbest (?:\w+ ){0,2}ways? to cover\b",
+            r"\bwho should (?:i|we) (?:call|use|assign|roster)\b",
+            r"\bhow do (?:i|we) cover\b",
+            r"\brank the (?:legal )?covers?\b",
+            r"\brank (?:the )?legal (?:options?|covers?)\b",
         ),
+        requires=("cover_target",),
+        missing_hint="a pairing id, a flight number, or the crew whose seat is open",
         template="recommendation",
         build=lambda e, s: [
             PlannedCall(
@@ -357,7 +379,16 @@ INTENTS: Final[tuple[Intent, ...]] = (
         tier=2,
         priority=80,
         patterns=_rx(
-            r"\bis closed\b", r"\bcloses?\b.*\d{2}:\d{2}", r"\bstation closure\b"
+            r"\bis closed\b",
+            r"\bcloses?\b.*\d{2}:\d{2}",
+            r"\bstation[_ ]closure\b",
+            # A DESK WRITES "BLR closed 08:00-14:00Z", not "BLR is closed".
+            # `closes?` never matched the past participle, and an ops feed
+            # sends STATION_CLOSURE with an underscore. Both were declined for
+            # their punctuation while the closure simulation stood ready.
+            r"\bclosed\b",
+            r"\bclosure\b",
+            r"\bshut(?:s|down)?\b",
         ),
         requires=("station", "date", "time_window"),
         missing_hint=(
@@ -387,6 +418,14 @@ INTENTS: Final[tuple[Intent, ...]] = (
             r"\bsick (?:at|on)\b",
             r"\bwhich flights are (?:now |immediately )?uncrewed\b",
             r"\bgoes? unavailable\b",
+            # "C-1042 sick, 15 Sep" is what gets typed under pressure, and
+            # SICK_CREW is what an ops feed sends. Every shape above wanted a
+            # preposition or a verb. Broad is safe now because the shape still
+            # needs a crew id to run and yields to one that can.
+            r"\bsick\b",
+            r"\bsick[_ ]crew\b",
+            r"\bunavailable\b",
+            r"\boff sick\b",
         ),
         requires=("crew_id",),
         template="impact",
@@ -524,6 +563,14 @@ INTENTS: Final[tuple[Intent, ...]] = (
             r"\breserve (?:crew|captains?|pool)\b",
             r"\blist reserves\b",
             r"\bon-?call windows?\b",
+            # "How many reserves are on call at BLR" asked for a count and got
+            # a refusal, because every shape above wanted the word in the
+            # singular or as a verb. Reserves are 16 of the 150 crew and the
+            # first thing a desk looks at.
+            r"\breserves\b",
+            r"\bon reserve\b",
+            r"\bon-?call\b",
+            r"\bstand-?by\b",
         ),
         template="reserves",
         build=lambda e, s: [
@@ -706,11 +753,30 @@ INTENTS: Final[tuple[Intent, ...]] = (
 )
 
 
-def match_intent(question: str) -> Intent | None:
-    """The best matching intent, or None. Highest priority wins."""
+def match_intent(question: str, entities: Entities | None = None) -> Intent | None:
+    """The best matching intent, or None.
+
+    Highest priority wins, with one qualification that is easy to state and
+    was expensive to leave out: **priority only orders shapes that can run.**
+
+    Q35, "BLR closes 08:00-14:00Z on 17 Sep. Outline the recovery plan across
+    affected pairings.", matches `cover_options` on "recovery plan" at 90 and
+    `station_closure` at 81. Nothing in it names a pairing or a flight, so the
+    cover search had no target, `find_cover_options` refused the call, and the
+    reply read "Every lookup this question needed failed" while the closure
+    simulation that answers the question sat one level down.
+
+    So when entities are known, the winner is the highest-priority intent with
+    no gaps. When every match has gaps the top one still wins, because its
+    missing-argument hint is the most specific thing left to say.
+    """
     candidates = [intent for intent in INTENTS if intent.matches(question)]
     if not candidates:
         return None
+    if entities is not None:
+        runnable = [intent for intent in candidates if not intent.missing(entities)]
+        if runnable:
+            return max(runnable, key=lambda intent: intent.priority)
     return max(candidates, key=lambda intent: intent.priority)
 
 

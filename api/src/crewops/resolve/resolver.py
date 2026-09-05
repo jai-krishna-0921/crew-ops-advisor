@@ -110,7 +110,7 @@ class DeterministicResolver:
                 tier=triage.tier,
             )
 
-        intent = match_intent(asked)
+        intent = match_intent(asked, triage.entities)
         if intent is None:
             return self._abstain(
                 question,
