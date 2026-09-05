@@ -12,8 +12,13 @@ from collections.abc import Iterable, Sequence
 from datetime import date as DateType  # noqa: N812
 from datetime import datetime as DateTime  # noqa: N812
 
-from crewops.contracts.ops import ImpactReport, Watchlist
+from crewops.contracts.ops import AlertScan, ImpactReport, Watchlist
 from crewops.domain import WorldOverlay, WorldState
+from crewops.ops.alerting import (
+    DEFAULT_CERT_HORIZON_DAYS,
+    DEFAULT_HORIZON_HOURS,
+    AlertScanner,
+)
 from crewops.ops.candidates import CandidateSearcher, CoverSearch
 from crewops.ops.disruption import ClosureResult, DelayResult, DisruptionSimulator
 from crewops.ops.joint import JointPlan, allocate
@@ -37,6 +42,7 @@ class OpsEngine:
         self.searcher = CandidateSearcher(world, self.rules)
         self.simulator = DisruptionSimulator(world, self.rules)
         self.watchlist = WatchlistBuilder(world, self.rules)
+        self.alerting = AlertScanner(world, self.rules)
 
     # ------------------------------------------------------------ cover search
 
@@ -228,6 +234,22 @@ class OpsEngine:
         self, *, for_date: DateType, as_of: DateTime | None = None
     ) -> Watchlist:
         return self.watchlist.build(for_date=for_date, as_of=as_of)
+
+    # ---------------------------------------------------- proactive alerting
+
+    def scan_alerts(
+        self,
+        *,
+        as_of: DateTime | None = None,
+        horizon_hours: int = DEFAULT_HORIZON_HOURS,
+        cert_horizon_days: int = DEFAULT_CERT_HORIZON_DAYS,
+    ) -> AlertScan:
+        """Which limit gets crossed in the next `horizon_hours`, and by how much."""
+        return self.alerting.scan(
+            as_of=as_of,
+            horizon_hours=horizon_hours,
+            cert_horizon_days=cert_horizon_days,
+        )
 
 
 __all__ = ["OpsEngine"]

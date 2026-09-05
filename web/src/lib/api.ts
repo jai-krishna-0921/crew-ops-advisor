@@ -10,6 +10,7 @@
  */
 
 import type {
+  AlertScan,
   ChatRequest,
   CoverRequest,
   HealthResponse,
@@ -31,6 +32,7 @@ import type {
 } from "@/lib/contracts";
 import { streamChat, type StreamError } from "@/lib/sse";
 
+import { ALERT_SCAN } from "@/mocks/alerts";
 import { WATCHLIST } from "@/mocks/brief";
 import { LEGALITY_BY_CREW } from "@/mocks/legality";
 import { IMPACT, pickReply, RECOMMENDATION, REPLIES } from "@/mocks/replies";
@@ -300,6 +302,18 @@ export const api = {
 
   brief: (date: string) =>
     get<Watchlist>(`/api/brief?date=${encodeURIComponent(date)}`, WATCHLIST, "payload"),
+
+  /**
+   * The proactive scan. Deterministic on the server, so this resolves with no
+   * API key configured, which is what lets the alert card render before a
+   * question has been asked.
+   */
+  alerts: (horizonHours = 48, certHorizonDays = 30) =>
+    get<AlertScan>(
+      `/api/alerts?horizon_hours=${horizonHours}&cert_horizon_days=${certHorizonDays}`,
+      ALERT_SCAN,
+      "payload",
+    ),
 
   simulate: (request: SimulateRequest) =>
     post<ImpactReport>("/api/simulate", request, IMPACT),

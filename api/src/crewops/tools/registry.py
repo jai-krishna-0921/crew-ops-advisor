@@ -2894,6 +2894,107 @@ class Tools:
 
     # ======================================================== cross cutting
 
+    def scan_proactive_alerts(
+        self,
+        *,
+        as_of: DateTime | None = None,
+        horizon_hours: int = 48,
+        cert_horizon_days: int = 30,
+    ) -> ToolEnvelope:
+        timer = ToolTimer()
+        args = {
+            "as_of": as_of,
+            "horizon_hours": horizon_hours,
+            "cert_horizon_days": cert_horizon_days,
+        }
+        if horizon_hours <= 0 or cert_horizon_days <= 0:
+            return error_envelope(
+                "scan_proactive_alerts",
+                args,
+                "The horizons must be positive. A zero length horizon cannot "
+                "distinguish 'nothing found' from 'nothing looked at'.",
+                timer=timer,
+            )
+
+        scan = self.ops.scan_alerts(
+            as_of=as_of, horizon_hours=horizon_hours, cert_horizon_days=cert_horizon_days
+        )
+        every = [*scan.alerts, *scan.closest_approaches]
+        facts = [
+            *[fact for alert in every for fact in alert.facts],
+            computed_fact(
+                "alerts.horizon_hours",
+                "Forward horizon",
+                scan.horizon_hours,
+                "hours",
+                f"limits projected from {format_utc(scan.as_of)} to "
+                f"{format_utc(scan.horizon_end)}",
+                _SOURCE,
+            ),
+            computed_fact(
+                "alerts.cert_horizon_days",
+                "Certification horizon",
+                scan.cert_horizon_days,
+                "days",
+                "a renewal is a booking rather than a swap, so it needs longer warning",
+                _SOURCE,
+            ),
+            computed_fact(
+                "alerts.raised",
+                "Alerts raised",
+                len(scan.alerts),
+                "count",
+                scan.headline,
+                _SOURCE,
+            ),
+            *[
+                computed_fact(
+                    f"alerts.count.{severity}",
+                    f"{severity.capitalize()} alerts",
+                    count,
+                    "count",
+                    f"alerts at {severity} severity in this scan",
+                    _SOURCE,
+                )
+                for severity, count in scan.counts.items()
+            ],
+            *[
+                computed_fact(
+                    f"alerts.scanned.{name}",
+                    f"{name.replace('_', ' ').capitalize()} scanned",
+                    value,
+                    "count",
+                    f"records examined over the {scan.horizon_hours} hour horizon",
+                    _SOURCE,
+                )
+                for name, value in scan.scanned.items()
+            ],
+        ]
+        return ok_envelope(
+            "scan_proactive_alerts",
+            args,
+            scan,
+            facts=facts,
+            trace=[
+                step(
+                    "Project every rostered duty in the horizon",
+                    f"{scan.scanned['duties_in_horizon']} duties across "
+                    f"{scan.scanned['crew_in_horizon']} crew reporting between "
+                    f"{format_utc(scan.as_of)} and {format_utc(scan.horizon_end)}",
+                    ["alerts.scanned.duties_in_horizon", "alerts.horizon_hours"],
+                ),
+                step("Compare against the rulebook", scan.headline, ["alerts.raised"]),
+            ],
+            citations=[
+                cite("duty_clocks.json", "running duty and flight hour accruals"),
+                cite("rosters.json", "the duties inside the horizon"),
+                cite("certifications.json", "expiries inside the certification horizon"),
+                cite("rules.json", "RULE-DUTY-02, RULE-FLT-03 and RULE-CERT-06 limits"),
+                cite("risk_signals.json", "provided disruption scores"),
+            ],
+            timer=timer,
+        )
+
     def get_watchlist(
         self, *, for_date: DateType, as_of: DateTime | None = None
     ) -> ToolEnvelope:

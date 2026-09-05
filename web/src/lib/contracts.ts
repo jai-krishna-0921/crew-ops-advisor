@@ -9,7 +9,8 @@
  *                   VerificationReport, Timings
  *   rules.py     -> RuleId, Verdict, RuleTrace, DayLegality, LegalityReport
  *   ops.py       -> FlightRef, DownstreamRisk, ImpactReport, CostLine,
- *                   CostBreakdown, CoverOption, Recommendation, Alert, Watchlist
+ *                   CostBreakdown, CoverOption, Recommendation, Alert, Watchlist,
+ *                   AlertScan, ProactiveAlert, LimitProjection, CertificationExposure
  *   reply.py     -> Reply, ReplyKind, AnswerMode, Tier
  *   stream.py    -> EventType and the twelve stream events, ChatRequest
  *   tools.py     -> TOOL_NAMES, RETRIEVAL_ONLY
@@ -320,6 +321,98 @@ export interface Watchlist {
   for_date: string;
   alerts: Alert[];
   headline: string;
+  scanned: Record<string, number>;
+}
+
+// -------------------------------------------------------- proactive alerting
+
+export type AlertKind = "duty_limit" | "flight_limit" | "certification";
+
+export interface AlertedFlight {
+  flight_no: string;
+  departure: string;
+  origin: string;
+  destination: string;
+  seats: number;
+  duty_date: string;
+  pairing_id?: string | null;
+}
+
+/**
+ * A rolling window total projected forward, with its arithmetic.
+ *
+ * `banked_hours` is already accrued, `committed_hours` is what the duties in
+ * the horizon add, and `margin_hours` is signed: positive is room to spare,
+ * negative is the size of the breach. Render `arithmetic` verbatim. It is the
+ * line a controller reads to check our working, and paraphrasing it in the UI
+ * defeats the point of computing it deterministically.
+ */
+export interface LimitProjection {
+  rule_id: RuleId;
+  window_days: number;
+  window_start: string;
+  window_end: string;
+  limit_hours: number;
+  banked_hours: number;
+  committed_hours: number;
+  projected_hours: number;
+  margin_hours: number;
+  breaches: boolean;
+  verdict: Verdict;
+  arithmetic: string;
+}
+
+export interface CertificationExposure {
+  cert_type: string;
+  valid_to: string;
+  days_to_expiry: number;
+  /** Set means a duty already on the roster is illegal. Null means book a renewal. */
+  first_invalid_duty?: string | null;
+  invalid_pairings: string[];
+}
+
+export interface ProactiveAlert {
+  alert_id: string;
+  kind: AlertKind;
+  severity: RiskSeverity;
+  rule_id: RuleId;
+  crew_id: string;
+  crew_name: string;
+  rank: string;
+  base: string;
+  effective_date: string;
+  title: string;
+  detail: string;
+  projection?: LimitProjection | null;
+  certification?: CertificationExposure | null;
+  downstream_flights: AlertedFlight[];
+  seats_at_risk: number;
+  /** Read from risk_signals.json. Provided, never computed. */
+  disruption_risk_score?: number | null;
+  risk_drivers: string[];
+  recommended_action: string;
+  suggested_question: string;
+  facts: Fact[];
+  trace: TraceStep[];
+}
+
+/**
+ * One deterministic alerting pass.
+ *
+ * `closest_approaches` are not alerts. They are the tightest margins found on
+ * each limit rule when nothing crossed a threshold, and the UI must render them
+ * even on a clean scan: a screen showing "no alerts" and nothing else is
+ * indistinguishable from a scan that failed to run.
+ */
+export interface AlertScan {
+  as_of: string;
+  horizon_hours: number;
+  horizon_end: string;
+  cert_horizon_days: number;
+  alerts: ProactiveAlert[];
+  closest_approaches: ProactiveAlert[];
+  headline: string;
+  counts: Record<string, number>;
   scanned: Record<string, number>;
 }
 

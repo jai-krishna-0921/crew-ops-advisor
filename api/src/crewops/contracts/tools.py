@@ -491,6 +491,27 @@ class ToolSurface(Protocol):
         """The proactive brief: what is about to go wrong on this date."""
         ...
 
+    def scan_proactive_alerts(
+        self,
+        *,
+        as_of: datetime | None = None,
+        horizon_hours: int = 48,
+        cert_horizon_days: int = 30,
+    ) -> ToolEnvelope:
+        """Which limit a rostered crew member crosses inside a forward horizon.
+
+        Narrower and harder than `get_watchlist`, which asks what is worth
+        looking at on one date. This projects the running accruals forward over
+        every duty reporting inside the horizon and reports the RULE-DUTY-02
+        and RULE-FLT-03 crossings with both operands, the limit and the margin,
+        plus certificates lapsing inside a longer horizon.
+
+        It always returns the tightest margins it found, breach or not, so that
+        "nothing is close to a limit" is a checked statement rather than an
+        empty list.
+        """
+        ...
+
     def get_world_summary(self) -> ToolEnvelope:
         """Dataset shape, snapshot time, stations and fleet.
 
@@ -539,6 +560,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "draft_notification",
     # cross cutting
     "get_watchlist",
+    "scan_proactive_alerts",
     "get_world_summary",
     "explain_rule",
 )

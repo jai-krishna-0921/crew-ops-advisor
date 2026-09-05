@@ -366,6 +366,23 @@ class GetWatchlistArgs(BaseModel):
     as_of: datetime | None = None
 
 
+class ScanProactiveAlertsArgs(BaseModel):
+    as_of: datetime | None = Field(
+        default=None, description="Defaults to the dataset snapshot, 2026-09-14T18:00:00Z"
+    )
+    horizon_hours: int = Field(
+        default=48,
+        description="How far forward to project the duty and flight hour limits. "
+        "Measured against each duty's report time, not its calendar date.",
+    )
+    cert_horizon_days: int = Field(
+        default=30,
+        description="How far ahead to sweep for lapsing licences, medicals and "
+        "recurrent training. Longer than the limit horizon because a renewal is "
+        "a booking rather than a swap.",
+    )
+
+
 class GetWorldSummaryArgs(BaseModel):
     """No arguments. Returns dataset shape, snapshot time and station set."""
 
@@ -663,6 +680,17 @@ TOOL_SPECS: Final[tuple[ToolSpec, ...]] = (
         GetWatchlistArgs,
         lambda tools, a: tools.get_watchlist(**a.model_dump(exclude_none=True)),
         lambda a: f"Building the watchlist for {a.get('for_date')}",
+    ),
+    ToolSpec(
+        "scan_proactive_alerts",
+        "Which crew cross RULE-DUTY-02 or RULE-FLT-03 inside a forward horizon, "
+        "with both operands and the margin, plus certificates lapsing soon. Use "
+        "it for 'what is about to break' rather than looping a per-crew lookup. "
+        "It always returns the tightest margins it found, so a clean result is "
+        "evidence rather than silence.",
+        ScanProactiveAlertsArgs,
+        lambda tools, a: tools.scan_proactive_alerts(**a.model_dump(exclude_none=True)),
+        lambda a: f"Projecting the limits {a.get('horizon_hours', 48)} hours forward",
     ),
     ToolSpec(
         "get_world_summary",

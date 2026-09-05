@@ -59,6 +59,7 @@ import { FactProvider } from "@/components/evidence/fact-context";
 import { SideRail } from "@/components/shell/side-rail";
 import { ResizeHandle, useResizableWidth } from "@/components/ui/resizable";
 import { EmptyState } from "@/components/ui/primitives";
+import { AlertCard } from "@/components/chat/alert-card";
 import { cx } from "@/components/ui/tone";
 
 export function AdvisorConsole() {
@@ -735,7 +736,7 @@ function Welcome({
   );
 
   return (
-    <div className="relative mx-auto w-full max-w-5xl px-6 pt-24 pb-44">
+    <div className="relative mx-auto w-full max-w-5xl px-6 pt-12 pb-20">
       {/* THE LIGHT IS FULL BLEED, THE CONTENT IS NOT. `hero-wash` used to sit
           on this column, which is 768px wide, so three radial gradients were
           clipped to a box narrower than any of them and read as a smudge with
@@ -763,6 +764,16 @@ function Welcome({
         </p>
       </div>
 
+      {/* WHAT IS ALREADY WRONG COMES BEFORE WHAT YOU MIGHT ASK. The six cards
+          below are prompts; this one is a finding. A controller arrives with a
+          roster rather than a question, so the scan that has already run is
+          worth more than six suggestions of what to type. It renders nothing
+          when the scan cannot be reached, so this screen degrades to exactly
+          what it was before. */}
+      <div className="relative mt-7">
+        <AlertCard onAsk={onAsk} />
+      </div>
+
       {/* THE ARROW IS A FILLED BUTTON IN THE CARD'S OWN HUE, and it is always
           there. It was a 13px chevron that faded in on hover, which is two
           mistakes at once: on a touch screen there is no hover so it never
@@ -770,7 +781,7 @@ function Welcome({
           panel until you were already on top of it. A solid disc is what makes
           six cards read as six buttons from across the room, and it is the one
           element of the reference doing the most work. */}
-      <div className="relative mt-10 grid gap-3 sm:grid-cols-2">
+      <div className="relative mt-6 grid gap-3 sm:grid-cols-2">
         {picks.map((question, index) => {
           const tint = (index % 6) + 1;
           const Icon = PROMPT_ICON[question.id] ?? ChatCircleDotsIcon;

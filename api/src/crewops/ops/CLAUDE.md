@@ -178,3 +178,71 @@ between 0.41 and 0.64 in the shipped data, so any threshold in that range
 selects exactly the four engineered scenario crew. `reachability_minutes` is
 surfaced but never gates a legality or cost decision: it appears in no shipped
 computation.
+
+## Proactive alerting
+
+`alerting.py` projects the running accruals forward over a horizon and reports
+which limit gets crossed. It is a different question from `watchlist.py`, which
+asks what is worth looking at on one date, and the two are deliberately allowed
+to surface the same crew member.
+
+### The roster as shipped contains no limit breach
+
+Across every 48 hour horizon from the snapshot, the peak projected 7 day duty
+total is **40.96h against a 60h limit** (C-1694 on 2026-09-16) and the peak
+projected 28 day block total is **71.81h against a 100h limit** (C-2907). The
+global weekly peaks are 56.4h duty and 79.28h block, both legal.
+
+So a scan of the roster **as it stands** correctly finds nothing under
+RULE-DUTY-02 or RULE-FLT-03. Breaches in this dataset come from a *change*:
+a sick call, a cover assignment, a delay. Those go through `candidates.py` and
+`rules.assess_cover`, not here.
+
+Do not retune `MARGIN_THRESHOLDS` to manufacture alerts on the shipped data.
+The thresholds are set against the limits, not against what happens to be in
+the file, and a threshold chosen to make a demo look busy is the exact failure
+mode this system claims to prevent.
+
+### A clean scan still has to show its working
+
+`AlertScan.closest_approaches` carries the tightest margins found on each limit
+rule whether or not anything crossed a threshold, with the same arithmetic a
+real breach would carry. This is not padding. A screen that says "no alerts"
+and shows nothing is indistinguishable from a scan that failed to run, and a
+controller who cannot tell those apart stops trusting the brief.
+
+The headline states the limit position even when every raised alert is
+certification work, for the same reason: reading "6 to raise" and assuming duty
+hours are among them is reading the wrong crisis.
+
+### The horizon filters on report time, not date
+
+A duty reporting at 17:00Z tomorrow is inside a 48 hour horizon and one
+reporting at 19:00Z the day after is not. Rounding either to a calendar date
+puts the wrong duties in the window and inflates every projection built on it.
+
+The **window** the limit is measured over is still inclusive calendar dates,
+`[end - 6, end]` and `[end - 27, end]`, and comes from
+`WorldOverlay.window_hours`. Two different notions of time, both load-bearing.
+
+### banked plus committed
+
+`projected_hours` is `window_hours`, split into what is already accrued
+(`banked_hours`) and what the duties inside the horizon add (`committed_hours`).
+The split is the actionable part: "you will be at 61.33h" tells a controller
+nothing, "48.50h is banked and the next 48 hours add 12.83h" tells them which
+duty to move. The verdict and the `arithmetic` string come from
+`LegalityEngine.check_duty_window` and `check_flight_window`, never from a
+second comparison written here.
+
+### Certifications are swept over 30 days, not 48 hours
+
+A renewal is a booking, not a swap. `DEFAULT_CERT_HORIZON_DAYS` matches
+`watchlist.CERT_HORIZON_DAYS` on purpose: two modules disagreeing about when a
+certificate becomes urgent is a bug a controller finds before we do.
+
+An expiry with a rostered duty after it is CRITICAL and already illegal today.
+An expiry with nothing behind it is a renewal to book, and is never CRITICAL.
+Collapsing the two is how a desk learns to ignore the brief. C-5417 is the
+critical case and the dataset flags it itself, so an alerting module that
+misses it is demonstrably not working.
