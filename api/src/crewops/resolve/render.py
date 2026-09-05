@@ -390,6 +390,50 @@ def _render_watchlist(envelopes: Sequence[ToolEnvelope], question: str) -> str:
 # below comes from a payload field or a `Fact.rendered()` value instead.
 
 
+#: How many people a sentence can name before it stops being a sentence. Above
+#: this the count plus what the rows have in common IS the answer, and reading
+#: out the table is not.
+_NAMES_MAX: Final = 6
+
+#: Ids a tail may list when the detailed rows were capped. Twelve is already
+#: long; forty-four is the roster read aloud.
+_TAIL_MAX: Final = 12
+
+
+def _shared(rows: Sequence[Any], attribute: str) -> str | None:
+    """The value every row agrees on, or None.
+
+    Describing rows is safe in a way that echoing the requested filter is not:
+    a filter is a constraint, and stating one as though it were a finding is
+    how an empty result becomes a confident wrong answer. Everything this
+    returns came back from the tool and is attested by construction.
+    """
+    if not rows:
+        return None
+    values = {getattr(row, attribute, None) for row in rows}
+    if len(values) != 1:
+        return None
+    only = values.pop()
+    return str(only) if only else None
+
+
+def _plural(word: str, count: int) -> str:
+    return word if count == 1 else f"{word}s"
+
+
+def _describe_people(rows: Sequence[Any], count: int) -> str:
+    """"3 Captains based at BLR", from what the rows themselves say."""
+    rank = _shared(rows, "rank")
+    base = _shared(rows, "base")
+    noun = _plural(rank, count) if rank else _plural("crew member", count)
+    return f"{noun} based at {base}" if base else noun
+
+
+def _name_people(rows: Sequence[Any]) -> str:
+    """"C-1042 (A. Nair), C-1694 (S. Iyer)"."""
+    return ", ".join(f"{row.crew_id} ({row.name})" for row in rows)
+
+
 def _tool_arg(envelopes: Sequence[ToolEnvelope], tool: str, name: str) -> str:
     """One argument a tool was called with, as text.
 
@@ -443,9 +487,16 @@ def _render_reserves(envelopes: Sequence[ToolEnvelope], question: str) -> str:
     if not isinstance(payload, P.ReserveList):
         return _render_generic(envelopes, question)
 
-    lines = [f"{payload.total_matched} reserve(s) on call for {payload.on_date}."]
+    total = payload.total_matched
     if not payload.reserves:
-        return "\n".join(lines)
+        return f"No reserves on call for {payload.on_date} under that filter."
+
+    # Say WHICH reserves, in the same breath as how many. A follow-up that
+    # narrows the list ("which of them are captains") changed the rows and
+    # nothing in the sentence, so the answer looked identical to the question
+    # before it.
+    described = _describe_people(payload.reserves, total)
+    lines = [f"{total} {described} on call for {payload.on_date}."]
 
     # A ONE ROW RESULT IS THE ANSWER, NOT A SUMMARY OF ITSELF.
     #
@@ -460,6 +511,9 @@ def _render_reserves(envelopes: Sequence[ToolEnvelope], question: str) -> str:
             f"call {only.window_start} to {only.window_end}Z and is reachable in "
             f"{only.reachability_minutes} minutes."
         )
+    elif len(payload.reserves) <= _NAMES_MAX:
+        lines.append("")
+        lines.append(_name_people(payload.reserves) + ".")
 
     # The rows are the table's job now, so the prose says only what the table
     # cannot: which of these rows answer the narrower question that was asked.
@@ -597,18 +651,36 @@ def _render_crew_list(envelopes: Sequence[ToolEnvelope], question: str) -> str:
     payload = _tool_payload(envelopes, "find_crew")
     if not isinstance(payload, P.CrewList):
         return _render_generic(envelopes, question)
-    lines = [f"{payload.total_matched} crew match the filter."]
+    total = payload.total_matched
     if not payload.crew:
+        # Nothing came back, so there is nothing true to say about the rows.
+        # Describing the filter here would state a constraint as a finding.
+        return "No crew match that. Widen the filter, or check the base and rank."
+
+    # WHO, NOT JUST HOW MANY. "How many captains are based at DEL, and who are
+    # they?" answered "1 crew match the filter." and left the id in the table.
+    # Every fact was on screen and the sentence a person reads first answered
+    # the easier half of the question.
+    lines = [f"{total} {_describe_people(payload.crew, total)}."]
+    if total <= _NAMES_MAX:
+        lines.append("")
+        lines.append(_name_people(payload.crew) + ".")
         return "\n".join(lines)
 
     # The matched rows are in the table. What the table cannot show is the
     # tail: ids that matched but were capped out of the detailed rows. Naming
-    # them keeps the answer complete without printing the whole roster.
+    # them keeps the answer complete without printing the whole roster, which
+    # is what a fifty-four id sentence was doing.
     shown = {member.crew_id for member in payload.crew}
     remaining = [crew_id for crew_id in payload.all_crew_ids if crew_id not in shown]
-    if remaining:
-        lines.append("")
+    lines.append("")
+    if remaining and len(remaining) <= _TAIL_MAX:
         lines.append("Also matching: " + ", ".join(remaining) + ".")
+    elif remaining:
+        lines.append(
+            "The table lists them. Narrow it by rank, base or rating to see a "
+            "shorter set."
+        )
     return "\n".join(lines)
 
 

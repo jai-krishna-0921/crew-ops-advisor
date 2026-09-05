@@ -132,3 +132,110 @@ def test_it_runs_as_part_of_the_guard_suite() -> None:
     failure = run_guards(draft=LED_WITH_PASS, tier=2, envelopes=[envelope(breach=True)])
     assert failure is not None
     assert failure.guard == "breach_agreement"
+
+
+# ---------------------------------------------- the shape the guard could not see
+
+"""A LegalityReport was invisible to it.
+
+The guard reads a `breach` fact and a payload dict's `breach` flag. Those are
+what `simulate_delay` returns. The most common breach in the whole system does
+not look like either: `check_legality` returns a typed `LegalityReport` whose
+`overall` is `Verdict.BREACH`, with the per-rule detail in `per_day`. Neither
+the fact scan nor the dict scan sees it, so `computed_breaches` returned an
+empty list for the exact tool whose job is to compute breaches.
+
+Which is how, on a scorecard run, Q24 came back with a verdict inversion:
+
+    "Is reserve C-3305 legal to cover the full pairing P-2291, both days?"
+
+C-3305 is the day-two breach anchor. `check_legality` said BREACH. Nothing
+between that answer and the screen was looking at it.
+"""
+
+import datetime as dt  # noqa: E402
+
+from crewops.agent.guards import computed_breaches  # noqa: E402
+from crewops.contracts import (  # noqa: E402
+    DayLegality,
+    LegalityReport,
+    RuleTrace,
+    Verdict,
+)
+
+
+def _legality(verdict: Verdict) -> ToolEnvelope:
+    trace = RuleTrace(
+        rule_id="RULE-DUTY-02",
+        title="Maximum 60 duty hours in any 7 consecutive days",
+        verdict=verdict,
+        duty_date=dt.date(2026, 9, 16),
+        observed=61.5,
+        limit=60.0,
+        unit="hours",
+        margin=-1.5,
+        margin_human="1.5 hours over",
+        arithmetic="50.0 prior + 11.5 projected = 61.5 against a 60.0 limit",
+    )
+    return ToolEnvelope(
+        tool="check_legality",
+        ok=True,
+        args={"crew_id": "C-3305", "pairing_id": "P-2291"},
+        payload=LegalityReport(
+            crew_id="C-3305",
+            assignment_ref="P-2291",
+            assignment_kind="pairing",
+            overall=verdict,
+            per_day=[
+                DayLegality(
+                    duty_date=dt.date(2026, 9, 16),
+                    verdict=verdict,
+                    traces=[trace],
+                )
+            ],
+            rules_checked=["RULE-DUTY-02"],
+        ),
+    )
+
+
+def test_a_legality_report_breach_is_seen() -> None:
+    assert computed_breaches([_legality(Verdict.BREACH)]), (
+        "check_legality is the tool that computes breaches and the guard was blind to it"
+    )
+
+
+def test_a_legality_report_pass_is_not_a_breach() -> None:
+    assert computed_breaches([_legality(Verdict.PASS)]) == []
+
+
+def test_a_failed_legality_call_establishes_nothing() -> None:
+    envelope = _legality(Verdict.BREACH).model_copy(update={"ok": False})
+    assert computed_breaches([envelope]) == []
+
+
+LEADS_THAT_INVERT = [
+    "Yes, C-3305 is legal to cover the full pairing P-2291 on both days.",
+    "C-3305 is legal for P-2291.",
+    "C-3305 can legally cover both days of P-2291.",
+    "C-3305 may cover P-2291; no rule is breached.",
+    "Both days are within limits.",
+]
+
+
+@pytest.mark.parametrize("lead", LEADS_THAT_INVERT)
+def test_an_inverted_verdict_is_refused(lead: str) -> None:
+    failure = breach_agreement_guard(lead, [_legality(Verdict.BREACH)])
+    assert failure is not None, lead
+
+
+def test_leading_with_the_breach_is_still_accepted() -> None:
+    good = (
+        "C-3305 breaches RULE-DUTY-02 on 2026-09-16, 61.5 hours against a 60.0 "
+        "limit. Day one is legal; the second day is not."
+    )
+    assert breach_agreement_guard(good, [_legality(Verdict.BREACH)]) is None
+
+
+def test_a_clean_pass_is_still_accepted() -> None:
+    good = "C-3310 is legal to cover P-2291 on both days. All seven rules pass."
+    assert breach_agreement_guard(good, [_legality(Verdict.PASS)]) is None

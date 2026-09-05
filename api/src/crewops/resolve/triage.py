@@ -26,7 +26,9 @@ __all__ = [
     "Entities",
     "Triage",
     "canonical_question",
+    "day_shift",
     "extract_entities",
+    "reads_as_followup",
     "triage_question",
 ]
 
@@ -398,6 +400,71 @@ _CAPABILITY_RE: Final[re.Pattern[str]] = re.compile(
 def is_capability_question(question: str) -> bool:
     """Is the user asking what this system is for?"""
     return bool(_CAPABILITY_RE.search(question))
+
+
+#: A question that continues the one before it rather than starting something.
+#:
+#: Two families, and both have to be present in the pattern or half of a normal
+#: conversation is refused.
+#:
+#: ONE, AN EXPLICIT CONTINUATION. "And what about the next day", "how about
+#: DEL", "same for 17 Sep". The opener carries the whole meaning: the subject
+#: is whatever was just discussed.
+#:
+#: TWO, A BARE PRONOUN SUBJECT. "Which of them are captains", "and them",
+#: "who are they". There is no noun in the sentence at all, which is exactly
+#: why triage found nothing in the dataset and declined.
+#:
+#: Deliberately anchored at the start for the first family. "What about" in the
+#: middle of a full question ("Cover P-2291, and what about the cost?") names
+#: its own subject and does not need the previous turn.
+_FOLLOW_UP_RE: Final = re.compile(
+    r"^\s*(?:and\s+|but\s+|ok(?:ay)?[,\s]+|so\s+)?"
+    r"(?:what|how)\s+about\b"
+    r"|^\s*(?:and\s+)?same\s+(?:for|on|at)\b"
+    r"|^\s*(?:and\s+)?(?:what|how)\s+if\b"
+    r"|\bwhich\s+of\s+(?:them|those|these)\b"
+    r"|^\s*(?:and\s+)?(?:them|those|they)\b"
+    r"|^\s*(?:and\s+)?who\s+are\s+they\b"
+    r"|^\s*(?:and\s+)?the\s+(?:next|previous|following|day\s+before|day\s+after)\b",
+    re.IGNORECASE,
+)
+
+#: Words that move the previous turn's date. `_DAY_FORWARD` and `_DAY_BACK` are
+#: the only arithmetic a follow-up is allowed to do, because they are the only
+#: two a controller means unambiguously.
+_DAY_FORWARD: Final = re.compile(
+    r"\bnext day\b|\bfollowing day\b|\bday after\b|\btomorrow\b", re.IGNORECASE
+)
+_DAY_BACK: Final = re.compile(
+    r"\bprevious day\b|\bday before\b|\bprior day\b|\byesterday\b", re.IGNORECASE
+)
+
+
+def reads_as_followup(question: str) -> bool:
+    """True when the question only makes sense after another one.
+
+    Turn 2 of every real conversation. "And what about the next day?" names no
+    crew, pairing, flight, station or rule, so scope triage declined it before
+    the graph reached the history that would have resolved it. That refusal was
+    correct about the words and wrong about the situation.
+    """
+    return bool(_FOLLOW_UP_RE.search(question))
+
+
+def day_shift(question: str) -> int:
+    """How far a follow-up moves the previous turn's date: +1, -1 or 0.
+
+    The only arithmetic a follow-up is allowed to do, because these are the
+    only two moves a controller means unambiguously. "The week after" and
+    "later" are not here on purpose: guessing a span is how a carried-forward
+    date becomes a wrong answer nobody typed.
+    """
+    if _DAY_FORWARD.search(question):
+        return 1
+    if _DAY_BACK.search(question):
+        return -1
+    return 0
 
 
 def _is_greeting(question: str) -> bool:

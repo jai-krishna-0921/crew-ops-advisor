@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
 from crewops.contracts import REQUIRED_FOR, RETRIEVAL_ONLY, AbstentionReason, ToolEnvelope
 
@@ -217,6 +217,17 @@ _ALL_CLEAR_RE: Final = re.compile(
     r"|within\s+(?:all\s+)?(?:the\s+)?limits?\b"
     r"|is\s+legal\s+to\s+(?:operate|fly)\b"
     r"|no\s+limit\s+is\s+breached\b"
+    # THE PLAIN VERDICT, which is how a legality question is actually
+    # answered. Q24 asks "is C-3305 legal to cover the full pairing" and the
+    # inversion reads "Yes, C-3305 is legal to cover the full pairing". None
+    # of the shapes above matched a single word of it.
+    r"|(?:is|are)\s+legal\b"
+    r"|(?:can|may)\s+(?:legally\s+)?(?:cover|operate|fly|take|work)\b"
+    r"|(?:is|are)\s+(?:cleared|fine|ok(?:ay)?)\s+to\b"
+    # A bare "yes" is deliberately absent. It means whatever the question
+    # meant, and "Yes. RULE-FDP-01 is breached" is a correct answer that opens
+    # with one. Only phrases that assert legality on their own belong here.
+    r"|within\s+limits\b"
     r")",
     re.IGNORECASE,
 )
@@ -252,6 +263,41 @@ def computed_breaches(envelopes: Sequence[ToolEnvelope]) -> list[str]:
             detail = payload.get("breach_detail")
             if isinstance(detail, str) and detail and detail not in found:
                 found.append(detail)
+            continue
+        # THE SHAPE THIS GUARD COULD NOT SEE, and the most common one in the
+        # system. `simulate_delay` returns a dict with a `breach` flag, which
+        # is what the two scans above were written for. `check_legality`
+        # returns a typed `LegalityReport` whose `overall` is a Verdict and
+        # whose detail lives in `per_day`. It is the tool whose entire job is
+        # computing breaches, and `computed_breaches` returned nothing for it,
+        # so an answer was free to say "legal" over the top of a BREACH.
+        found.extend(_report_breaches(payload, found))
+    return found
+
+
+def _report_breaches(payload: Any, already: Sequence[str]) -> list[str]:
+    """Breaches carried by a typed report, from any payload shaped like one.
+
+    Duck typed on purpose. `LegalityReport` and the per-option `legality` on a
+    `CoverOption` both expose `overall` and `breaches`, and a guard that
+    imported either would tie the agent package to the shape of one tool's
+    return value.
+    """
+    overall = getattr(payload, "overall", None)
+    if overall is None or getattr(overall, "value", overall) != "breach":
+        return []
+
+    found: list[str] = []
+    traces = getattr(payload, "breaches", None) or ()
+    for trace in traces:
+        detail = getattr(trace, "arithmetic", "") or getattr(trace, "rule_id", "")
+        line = f"{getattr(trace, 'rule_id', 'a rule')}: {detail}"
+        if line not in already and line not in found:
+            found.append(line)
+    if not found:
+        subject = getattr(payload, "crew_id", "") or "the candidate"
+        reference = getattr(payload, "assignment_ref", "") or "this assignment"
+        found.append(f"{subject} breaches on {reference}.")
     return found
 
 

@@ -89,7 +89,7 @@ from crewops.contracts import (
 )
 from crewops.resolve.completeness import unmodelled_constraints
 from crewops.resolve.intents import match_intent
-from crewops.resolve.triage import triage_question
+from crewops.resolve.triage import reads_as_followup, triage_question
 from crewops.verify import Verifier
 
 __all__ = ["TurnPlan", "bind_tool_specs", "build_graph"]
@@ -289,12 +289,25 @@ def build_graph(
     def route_node(state: TurnState) -> dict[str, Any]:
         """Deterministic triage. No model call, no tool call, no spend."""
         verdict = triage_question(state["question"])
+
+        # A FOLLOW-UP IS NOT AN OPENING LINE. "And what about the next day?"
+        # names no crew, pairing, flight, station or rule, so triage declined
+        # it before the graph reached the history that would have resolved it.
+        # The checkpointer has that history in `messages`; the model reads it
+        # and answers, as it already does for "which of them are captains".
+        # With nothing behind it on this thread, the refusal stands.
+        continues = bool(state.get("messages")) and reads_as_followup(state["question"])
+        in_scope = verdict.in_scope or continues
         update: dict[str, Any] = {
-            "in_scope": verdict.in_scope,
+            "in_scope": in_scope,
             "tier": verdict.tier,
-            "triage_reason": verdict.reason,
+            "triage_reason": (
+                "Continues the previous turn on this thread."
+                if continues and not verdict.in_scope
+                else verdict.reason
+            ),
         }
-        if not verdict.in_scope:
+        if not in_scope:
             # A greeting is answered, not refused. Nothing is missing: the
             # controller has not asked for anything yet. Same treatment as the
             # offline resolver, so both paths greet identically.

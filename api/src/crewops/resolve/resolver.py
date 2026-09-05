@@ -30,9 +30,14 @@ from crewops.contracts import (
     VerificationStatus,
 )
 from crewops.resolve.completeness import unmodelled_constraints
+from crewops.resolve.conversation import PriorTurn, ThreadContext, merge_entities
 from crewops.resolve.intents import Intent, PlannedCall, match_intent
 from crewops.resolve.render import render
-from crewops.resolve.triage import canonical_question, triage_question
+from crewops.resolve.triage import (
+    canonical_question,
+    reads_as_followup,
+    triage_question,
+)
 from crewops.verify import Verifier
 
 __all__ = ["SUPPORTED_SHAPES", "DeterministicResolver"]
@@ -62,10 +67,16 @@ class DeterministicResolver:
         *,
         snapshot: datetime | None = None,
         verifier: Verifier | None = None,
+        context: ThreadContext | None = None,
     ) -> None:
         self.tools = tools
         self.snapshot = snapshot or datetime(2026, 9, 14, 18, 0, 0)
         self.verifier = verifier or Verifier()
+        #: What the previous answered turn on each thread established, so a
+        #: follow-up that names nothing can still be understood. Offline
+        #: there is no model to resolve a reference, and offline is the mode
+        #: that has to work with no API key.
+        self.threads = context or ThreadContext()
 
     def answer(
         self,
@@ -86,7 +97,18 @@ class DeterministicResolver:
         asked = canonical_question(question)
         triage = triage_question(asked)
 
-        if not triage.in_scope:
+        # A FOLLOW-UP IS NOT AN OPENING LINE. "And what about the next day?"
+        # names no crew, pairing, flight, station or rule, so triage declined
+        # it as out of scope, which was correct about the words and wrong about
+        # the situation. When the same thread has an answered turn behind it,
+        # that turn supplies the subject and this one supplies the change.
+        prior = self.threads.recall(thread_id)
+        follow_up = prior is not None and reads_as_followup(asked)
+        entities = triage.entities
+        if follow_up and prior is not None:
+            entities = merge_entities(prior.entities, triage.entities, asked)
+
+        if not triage.in_scope and not follow_up:
             # A greeting is answered, not refused. It carries no "I cannot" and
             # nothing under "what was missing", because nothing is missing: the
             # controller has not asked for anything yet.
@@ -110,7 +132,13 @@ class DeterministicResolver:
                 tier=triage.tier,
             )
 
-        intent = match_intent(asked, triage.entities)
+        # The follow-up runs the SHAPE the thread was already in. "What about
+        # DEL" after a flights question is a flights question; re-matching it
+        # on its own words would pick whatever shape happens to read a bare
+        # station, which is how a conversation changes subject by accident.
+        intent = prior.intent if (follow_up and prior is not None) else None
+        if intent is None:
+            intent = match_intent(asked, entities)
         if intent is None:
             return self._abstain(
                 question,
@@ -133,7 +161,7 @@ class DeterministicResolver:
                 tier=triage.tier,
             )
 
-        gaps = intent.missing(triage.entities)
+        gaps = intent.missing(entities)
         if gaps:
             return self._abstain(
                 question,
@@ -160,7 +188,7 @@ class DeterministicResolver:
                 tier=intent.tier,
             )
 
-        plan = intent.build(triage.entities, snapshot)
+        plan = intent.build(entities, snapshot)
 
         # MATCHING A SHAPE IS NOT ANSWERING THE QUESTION. A shape has a fixed
         # argument list, and a constraint the question carries that the shape
@@ -286,6 +314,12 @@ class DeterministicResolver:
                 ),
                 tier=tier,
             )
+
+        # Only an ANSWERED turn is remembered. A refusal established nothing,
+        # so a follow-up to one has nothing to carry and is refused in turn.
+        self.threads.remember(
+            thread_id, PriorTurn(intent=intent, entities=entities, question=asked)
+        )
 
         state: dict[str, Any] = {
             "envelopes": envelopes,
