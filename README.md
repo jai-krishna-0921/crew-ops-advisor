@@ -9,6 +9,34 @@ ranked. When it cannot answer reliably it says so, and says what was missing.
 
 ---
 
+## Quick start
+
+Needs Python 3.12 or 3.13, Node 20+, [uv](https://docs.astral.sh/uv/) and
+[pnpm](https://pnpm.io/).
+
+```bash
+make install     # Python env via uv, web deps via pnpm
+make dev         # API on :8000, web on :3000
+```
+
+Open <http://localhost:3000>. The console is at `/ask`.
+
+**No API key is needed.** Without one the deterministic resolver answers,
+through the same tools, the same rules engine and the same grounding check.
+Setting `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `OLLAMA_API_KEY` turns on the
+LangGraph agent, which adds planning and language, not truth.
+
+```bash
+make check       # ruff, mypy, the boundary test, the full suite
+make eval        # scorecard across all 38 questions, every tier
+cd api && uv run crewops ask "Who is on reserve at BLR on 2026-09-15?"
+```
+
+Running the halves separately, every environment variable, what each route is,
+and what to do when it does not work: [`docs/SETUP.md`](docs/SETUP.md).
+
+---
+
 ## The one design decision
 
 The problem statement asks one question directly:
@@ -109,36 +137,6 @@ fix is to add the missing fact to the tool. It is never to relax the check.
 
 ---
 
-## Setup
-
-Requires Python 3.12 or 3.13, Node 20+, [uv](https://docs.astral.sh/uv/) and
-pnpm.
-
-```bash
-make install     # Python env via uv, web deps via pnpm
-make dev         # API on :8000 and web on :3000
-```
-
-Then open http://localhost:3000.
-
-**Everything runs with no API key.** Without one the deterministic core, the
-rules engine, the simulations and the ranked options all still work and are
-still explainable. Set `ANTHROPIC_API_KEY` to turn on the agent, which adds
-language and planning, not truth.
-
-```bash
-make test          # full Python suite
-make golden        # parity against the shipped answer keys
-make eval          # scorecard across all 38 questions, every tier
-make check         # ruff, mypy, and the boundary test
-make validate-data # the dataset's own validator, read only
-
-cd api && uv run crewops ask "Who is on reserve at BLR tomorrow?"
-cd api && uv run crewops brief 2026-09-15
-```
-
----
-
 ## The dataset is read only
 
 `data/` is the provided pack and the single source of truth. It is never
@@ -206,81 +204,12 @@ much more serious than safe ones, and are listed first.
 
 ---
 
-## Crew PII in a production system
+## Production questions
 
-No real personal data is involved here: the dataset is synthetic. A real
-deployment would carry licence numbers, medical certificate status, home base
-and contact details, which is regulated personal data in most jurisdictions and
-medical data in some.
-
-What this architecture already does well is unusual and worth naming: the model
-never sees the dataset. It sees tool results. That means the set of fields
-crossing the boundary to a third-party inference provider is enumerable, and it
-is enumerated, in `crewops.tools.payloads`.
-
-For production we would:
-
-- Pseudonymise at the tool boundary. Crew ids are already opaque; names,
-  contact details and certificate numbers would not enter a payload at all. The
-  agent can reason about `C-1042` perfectly well without knowing who that is,
-  and the UI can rehydrate the name locally for display.
-- Keep medical certificate detail out of the model's half entirely. The rules
-  engine needs to know whether a certificate is valid on a date. It does not
-  need to say why one is not, and neither does the model.
-- Log the evidence ledger, not the prompt. The `Fact` list is the audit record
-  a regulator would want, and it is already structured. Prompts and completions
-  would be retained only briefly, for debugging, with crew identifiers redacted.
-- Apply purpose limitation to reachability data. Knowing a crew member is
-  reachable in 45 minutes is operationally necessary and also location
-  adjacent, so it should not outlive the disruption it was fetched for.
-
----
-
-## Scaling this approach
-
-The dataset is deliberately small, so retrieval strategy here is a design
-choice rather than a scaling necessity. What would and would not hold at real
-airline scale:
-
-**Holds.** The boundary itself gets stronger, not weaker, with scale: the more
-data there is, the worse an idea it is to put it in a prompt. The tool surface
-is already a query interface rather than a file reader, and `WorldState` is
-already backed by a SQLite projection, so the same tools run against a real
-database by changing the store, not the engine.
-
-**Needs work.** Candidate enumeration is currently a scan over eligible crew.
-At 150 crew that is instant. At 15,000 it wants an index on the filters that
-actually discriminate (base, rank, rating, duty headroom) and an early cutoff,
-because a controller needs the top five options, not a complete ordering.
-Cover search across simultaneous disruptions is a joint allocation problem, and
-the current implementation solves the small case exactly; the large case would
-need a proper solver, or an honest statement that it is producing a good plan
-rather than the optimal one.
-
-**Would change.** The seven-day and 28-day clock windows are recomputed per
-candidate per day. That is correct and cheap here, and at scale it becomes an
-incrementally maintained running total, which is what a real rostering system
-does.
-
----
-
-## Business impact
-
-The bottleneck on a Crew Control desk is not detecting that something broke.
-It is working out the consequences, correctly, from data spread across rosters,
-duty clocks, reserve lists and a rulebook, while more disruptions arrive.
-
-What this changes:
-
-- **The downstream break is found.** The uncovered flight is obvious. The crew
-  member who moves into a duty-limit breach three days later is not, and that is
-  the one that turns a single disruption into four.
-- **The reasoning is reviewable.** Every verdict carries its arithmetic, so a
-  decision can be checked, handed over at shift change, and learned from. Today
-  that reasoning lives in one experienced controller's head.
-- **The refusals are trustworthy.** A tool that is confidently wrong once stops
-  being used. One that declines clearly, and says what it was missing, keeps
-  being used, which is the only way any of the above value is realised.
+Crew PII, scaling to a real airline, and what this is worth are answered in
+[`docs/PRODUCTION.md`](docs/PRODUCTION.md). They are grouped there because none
+of the three describes this repository, and the arithmetic behind the impact
+figures needs more room than a README should give it.
 
 ---
 
@@ -288,6 +217,9 @@ What this changes:
 
 | Path | What is in it |
 |---|---|
+| `docs/SETUP.md` | Install, run, configure, and what to do when it does not work |
+| `docs/PRODUCTION.md` | Crew PII, scaling to a real airline, and business impact |
+| `COMMANDS.md` | The demo script: every command in order, with what each proves |
 | `docs/CONTRACTS.md` | The seam: tool surface, HTTP and SSE contracts |
 | `docs/DATA-MODEL.md` | The dataset decoded and verified, and 33 traps |
 | `docs/REQUIREMENTS.md` | Every requirement, with where it is satisfied and how it is verified |
