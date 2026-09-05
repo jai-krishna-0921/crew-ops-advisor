@@ -138,6 +138,7 @@ system that looks honest and one that is.
 | `GET`  | `/api/health`                | `{status, dataset_loaded, snapshot, llm_configured, mode}` |
 | `GET`  | `/api/world/summary`         | counts, snapshot time, base, date range                      |
 | `GET`  | `/api/brief?date=YYYY-MM-DD` | `Watchlist`                                                |
+| `GET`  | `/api/alerts?horizon_hours=48&cert_horizon_days=30` | `AlertScan`                           |
 | `POST` | `/api/simulate`              | `ImpactReport`, deterministic, no model                    |
 | `POST` | `/api/legality`              | `LegalityReport`, deterministic, no model                  |
 | `POST` | `/api/cover`                 | `Recommendation`, deterministic, no model                  |
@@ -157,7 +158,7 @@ implemented something reasonable and they disagreed. So, precisely:
 | `/api/rules`                                                       | `{rules, count}`, and each entry is itself an envelope with the rule under `payload`                      |
 | `/api/questions`                                                   | `{questions, count}`, records in the dataset's own vocabulary: `question_id`, `tier`, `prompt`        |
 | `/api/threads`                                                     | `{threads, count}`, records in the memory layer's vocabulary: `first_question`, `turns`, `started_at` |
-| `/api/brief`, `/api/simulate`, `/api/legality`, `/api/cover` | a full`ToolEnvelope`, result under `payload`, with `facts` alongside                                    |
+| `/api/brief`, `/api/alerts`, `/api/simulate`, `/api/legality`, `/api/cover` | a full`ToolEnvelope`, result under `payload`, with `facts` alongside                      |
 
 The envelope is deliberate on the tool-backed routes: its `facts` are what let
 the console trace a figure on screen back to the arithmetic that produced it.

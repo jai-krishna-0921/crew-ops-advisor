@@ -5,6 +5,13 @@ directory before editing: the enumeration order, the cumulative duty add and
 the two delay models are load-bearing against the shipped answer keys.
 """
 
+from crewops.ops.alerting import (
+    CLOSEST_APPROACH_LIMIT,
+    DEFAULT_CERT_HORIZON_DAYS,
+    DEFAULT_HORIZON_HOURS,
+    MARGIN_THRESHOLDS,
+    AlertScanner,
+)
 from crewops.ops.candidates import (
     RANKING_BASIS,
     RULES_CHECKED,
@@ -31,6 +38,7 @@ from crewops.ops.positioning import (
     plan_positioning,
     positioning_options,
 )
+from crewops.ops.recommend import RANKING_HEURISTIC, build_ranked_recommendation
 from crewops.ops.watchlist import (
     CERT_HORIZON_DAYS,
     CRITICAL_HEADROOM_HOURS,
@@ -41,15 +49,21 @@ from crewops.ops.watchlist import (
 
 __all__ = [
     "CERT_HORIZON_DAYS",
+    "CLOSEST_APPROACH_LIMIT",
     "CLOSURE_ACTION_INFEASIBLE",
     "CLOSURE_ACTION_LEGAL",
     "CRITICAL_HEADROOM_HOURS",
+    "DEFAULT_CERT_HORIZON_DAYS",
+    "DEFAULT_HORIZON_HOURS",
     "HIGH_RISK_THRESHOLD",
+    "MARGIN_THRESHOLDS",
     "POSITIONING_LEAD_MINUTES",
     "RANKING_BASIS",
+    "RANKING_HEURISTIC",
     "REOPEN_TURNAROUND_MINUTES",
     "RULES_CHECKED",
     "TIGHT_HEADROOM_HOURS",
+    "AlertScanner",
     "Assignment",
     "CandidateSearcher",
     "ClosureAssessment",
@@ -63,6 +77,7 @@ __all__ = [
     "RankedOption",
     "WatchlistBuilder",
     "allocate",
+    "build_ranked_recommendation",
     "option_to_cover_option",
     "plan_positioning",
     "positioning_options",

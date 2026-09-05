@@ -10,6 +10,7 @@ Commands:
     crewops ask "..."          one question
     crewops chat               interactive, with thread memory
     crewops brief 2026-09-15   the proactive watchlist
+    crewops alerts             limits crossing in the next 48 hours
     crewops serve              the web interface
     crewops health             what is configured and what is not
 
@@ -40,9 +41,12 @@ from crewops.agent.memory import Memory
 from crewops.agent.toolspecs import call_tool
 from crewops.contracts import (
     AbstentionReason,
+    AlertKind,
+    AlertScan,
     Recommendation,
     Reply,
     ReplyKind,
+    RiskSeverity,
     RuleTrace,
     ToolSurface,
     Verdict,
@@ -70,6 +74,13 @@ _VERDICT_STYLE = {
     Verdict.BREACH: "bold red",
     Verdict.NOT_APPLICABLE: "dim",
     Verdict.INSUFFICIENT_DATA: "yellow",
+}
+
+_SEVERITY_STYLE = {
+    RiskSeverity.CRITICAL: "bold red",
+    RiskSeverity.HIGH: "red",
+    RiskSeverity.MEDIUM: "yellow",
+    RiskSeverity.LOW: "dim",
 }
 
 _STATUS_STYLE = {
@@ -467,6 +478,105 @@ def brief(
     if watchlist.scanned:
         scanned = ", ".join(f"{v} {k}" for k, v in watchlist.scanned.items())
         console.print(Text(f"Scanned: {scanned}.", style="dim"))
+
+
+@app.command()
+def alerts(
+    horizon_hours: Annotated[
+        int, typer.Option("--hours", help="How far forward to project the limits")
+    ] = 48,
+    cert_horizon_days: Annotated[
+        int, typer.Option("--cert-days", help="How far ahead to sweep for expiries")
+    ] = 30,
+    data_dir: Annotated[
+        Path | None, typer.Option("--data-dir", help="Dataset directory")
+    ] = None,
+) -> None:
+    """Proactive alerting. Deterministic: no model call on this path.
+
+    The margins table is printed even when nothing crossed a threshold. A clean
+    scan and a scan that did not run must not look the same.
+    """
+    tools = _load_tools(data_dir)
+    envelope = call_tool(
+        tools,
+        "scan_proactive_alerts",
+        {"horizon_hours": horizon_hours, "cert_horizon_days": cert_horizon_days},
+    )
+    if not envelope.ok:
+        console.print(Text(envelope.error or "The scan could not be built", style="red"))
+        raise typer.Exit(code=1)
+
+    scan = envelope.payload
+    if not isinstance(scan, AlertScan):
+        console.print(Text("The alerting tool returned an unexpected payload", style="red"))
+        raise typer.Exit(code=1)
+
+    console.print(
+        Panel(
+            Text(scan.headline, style="bold"),
+            title=f"Alerts to {scan.horizon_end:%Y-%m-%d %H:%M}Z",
+            border_style="cyan",
+        )
+    )
+
+    if scan.alerts:
+        table = Table(header_style="bold")
+        table.add_column("Severity")
+        table.add_column("Rule")
+        table.add_column("Who")
+        table.add_column("Bites")
+        table.add_column("Working", overflow="fold")
+        table.add_column("Action", overflow="fold", style="cyan")
+        for alert in scan.alerts:
+            working = (
+                alert.projection.arithmetic
+                if alert.projection is not None
+                else alert.detail
+            )
+            table.add_row(
+                Text(alert.severity.value, style=_SEVERITY_STYLE.get(alert.severity, "")),
+                alert.rule_id,
+                f"{alert.crew_id} ({alert.rank})",
+                alert.effective_date.isoformat(),
+                working,
+                alert.recommended_action,
+            )
+        console.print(table)
+
+    if scan.closest_approaches:
+        margins = Table(
+            header_style="bold", title="Closest approaches (no threshold crossed)"
+        )
+        margins.add_column("Rule")
+        margins.add_column("Who")
+        margins.add_column("Date")
+        margins.add_column("Projected", justify="right")
+        margins.add_column("Limit", justify="right")
+        margins.add_column("Margin", justify="right")
+        for alert in scan.closest_approaches:
+            projection = alert.projection
+            if projection is None:
+                continue
+            margins.add_row(
+                projection.rule_id,
+                alert.crew_id,
+                projection.window_end.isoformat(),
+                f"{projection.projected_hours:.2f}h",
+                f"{projection.limit_hours:.0f}h",
+                f"{projection.margin_hours:.2f}h",
+            )
+        console.print(margins)
+
+    certs = sum(1 for a in scan.alerts if a.kind is AlertKind.CERTIFICATION)
+    scanned = ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in scan.scanned.items())
+    console.print(
+        Text(
+            f"Scanned: {scanned}. {certs} of {len(scan.alerts)} alerts are "
+            f"certification work.",
+            style="dim",
+        )
+    )
 
 
 @app.command()

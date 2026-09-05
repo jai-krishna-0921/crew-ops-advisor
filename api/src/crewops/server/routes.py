@@ -302,6 +302,23 @@ async def brief(
     return _envelope_response(_run(state, "get_watchlist", {"for_date": date_}))
 
 
+@router.get("/alerts")
+async def alerts(
+    request: Request,
+    horizon_hours: Annotated[int, Query()] = 48,
+    cert_horizon_days: Annotated[int, Query()] = 30,
+) -> dict[str, Any]:
+    """Proactive alerting: which limit crosses inside the horizon. No model call."""
+    state = _state(request)
+    return _envelope_response(
+        _run(
+            state,
+            "scan_proactive_alerts",
+            {"horizon_hours": horizon_hours, "cert_horizon_days": cert_horizon_days},
+        )
+    )
+
+
 @router.get("/rules")
 async def rules(request: Request) -> dict[str, Any]:
     """The seven rules as shipped, straight out of the rulebook."""

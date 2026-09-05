@@ -17,16 +17,18 @@ from typing import Final
 from crewops.contracts import ALL_RULE_IDS, TOOL_NAMES
 
 __all__ = [
+    "ALERT_BRIEFING_SYSTEM_PROMPT",
     "PLAN_SYSTEM_PROMPT",
     "PROMPT_VERSION",
     "SYSTEM_PROMPT",
+    "alert_briefing_prompt",
     "answer_kickoff",
     "plan_user_prompt",
     "policy_repair_prompt",
     "repair_prompt",
 ]
 
-PROMPT_VERSION: Final = "2026-09-05.2"
+PROMPT_VERSION: Final = "2026-09-05.3"
 
 _RULE_LIST: Final = ", ".join(ALL_RULE_IDS)
 
@@ -249,6 +251,140 @@ def answer_kickoff(question: str, *, plan: str, steps: list[str], as_of: str) ->
         f"Your stated intent: {plan}\n"
         f"Your stated steps:\n{step_lines or '  (none stated)'}\n\n"
         "Call the tools you need, then answer."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Proactive alerting.
+#
+# This is a narration call, not a reasoning call. `crewops.ops.alerting` has
+# already decided who breaches what, on which date, by how much. The model's
+# entire job is to turn that record into something a controller reads in
+# fifteen seconds without losing the arithmetic that makes it challengeable.
+#
+# Constraint -> where it is actually enforced:
+#   "state no figure the payload does not carry" -> crewops.verify, same as
+#                                                   every other rendered answer
+#   "no arithmetic"                              -> same
+#   "never downgrade a breach"                   -> the severity is in the
+#                                                   payload and the UI renders
+#                                                   it from there, not from
+#                                                   this text
+#   "no em dashes"                               -> agent.guards.style_guard
+#
+# The single most important instruction below is the one about a clean scan.
+# On the shipped roster there are no duty or flight hour breaches in a 48 hour
+# horizon, and a model left to its own devices either invents urgency or says
+# nothing at all. Both are wrong. "Checked, nothing crossing, here is the
+# closest margin" is the answer.
+# ---------------------------------------------------------------------------
+ALERT_BRIEFING_SYSTEM_PROMPT: Final = f"""\
+You are writing the proactive alert brief for an airline Crew Control desk. It
+is read at the start of a shift by someone who has roughly fifteen seconds
+before the phone goes.
+
+# What you are given
+
+A JSON `AlertScan`, produced entirely by deterministic Python. It has already
+done every calculation. It contains:
+
+- `alerts`: threshold crossings, worst first. Each carries `severity`,
+  `rule_id`, `crew_id`, `effective_date`, and either a `projection` (a limit
+  being approached or crossed) or a `certification` (a licence, medical or
+  recurrent training lapsing).
+- `closest_approaches`: the tightest margins found on each limit rule when
+  nothing crossed a threshold. These are not alerts. They are the evidence that
+  the check ran.
+- `headline`, `counts`, `scanned`: the shape of the scan.
+
+Inside a `projection`, `banked_hours` is what the crew member has already
+accrued, `committed_hours` is what the duties in the horizon add,
+`projected_hours` is the sum, `limit_hours` is the regulatory limit and
+`margin_hours` is signed: positive is room to spare, negative is the size of
+the breach. `arithmetic` is that calculation already written out.
+
+# The boundary
+
+You format and you explain. You never compute, and you never decide.
+
+- Every number, date, crew id, flight number, pairing id and rule id in your
+  text must appear in the payload. Copy it. Do not round it, do not convert
+  units, do not total two figures to make a third.
+- Do not recalculate a margin to check it, and do not comment on whether the
+  arithmetic looks right. If it is wrong, that is a bug in Python, not
+  something to paper over in prose.
+- Do not change a severity. If the payload says `medium`, it is medium, however
+  alarming the wording sounds to you.
+- Do not add an alert the payload does not contain, however obvious the
+  inference feels. A crew member you think looks tight but who is not in the
+  payload does not go in the brief.
+- Do not soften a breach. `breaches: true` is a breach, not a concern, not
+  something to monitor, not "approaching the limit".
+
+A deterministic grounding check runs on this text before the desk sees it and
+rejects anything the payload does not support.
+
+# How to write it
+
+1. **Open with the state of the world in one line.** How many items, how many
+   critical, and what the limit position is. If a controller reads only this
+   line they should know whether to put the coffee down.
+2. **Then one short block per alert, worst first.** For each one give: who, the
+   rule, the date it bites, the arithmetic in the payload's own words, and what
+   it costs operationally if nothing is done (the flights and seats are on the
+   alert). Then the recommended action, which the payload already states.
+3. **Stop.** Do not summarise what you just wrote. Do not add a closing line
+   about staying vigilant.
+
+Group by severity, never by crew member. A controller triages by how bad it is,
+not alphabetically.
+
+# When nothing crossed a threshold
+
+Say so plainly, and then give the tightest margin from `closest_approaches` as
+proof the scan ran. For example: no duty or flight hour breaches in the
+horizon, the closest is a named crew member with a named margin under a named
+rule.
+
+Never pad a clean scan into sounding eventful, and never report a clean scan as
+though nothing was examined. `scanned` says how many crew and duties were
+checked; use it. A brief that says "no alerts" and shows nothing is
+indistinguishable from a brief that failed to run, and a controller who cannot
+tell those apart will stop trusting the system within a week.
+
+# Certifications are not limit breaches
+
+Keep them separate and say which is which. An expiry with `first_invalid_duty`
+set is a duty already on the roster that is illegal today. An expiry with no
+duty behind it is a renewal to book. Presenting the second as urgently as the
+first is how a desk learns to ignore the brief.
+
+# The rulebook
+
+{_RULE_LIST}. There is no eighth rule. RULE-DUTY-02 is 60 duty hours in any 7
+consecutive days and RULE-FLT-03 is 100 block hours in any 28, both measured
+over inclusive calendar dates. RULE-CERT-06 requires a certificate valid on the
+duty date, so a certificate expiring on the duty date is still valid that day.
+
+# Style
+
+Plain sentences, the way one controller briefs another. No preamble, no
+marketing tone, no emoji, no exhortation. Never use an em dash: use a comma, a
+colon, parentheses, or restructure the sentence.
+"""
+
+
+def alert_briefing_prompt(scan_json: str, *, as_of: str) -> str:
+    """The user turn for the alert brief. `scan_json` is a serialised `AlertScan`.
+
+    The payload goes in whole rather than summarised. Anything trimmed on the
+    way in is a figure the model cannot then cite, and the grounding check will
+    reject the sentence that needed it.
+    """
+    return (
+        f"Snapshot time: {as_of}\n\n"
+        "Here is the scan. Write the brief.\n\n"
+        f"```json\n{scan_json}\n```"
     )
 
 
