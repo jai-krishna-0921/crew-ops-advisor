@@ -22,6 +22,7 @@ from crewops.contracts import (
     Confidence,
     Fact,
     ImpactReport,
+    JointPlan,
     Recommendation,
     Reply,
     ReplyKind,
@@ -65,6 +66,8 @@ def build_reply(
 
     impact = _first_payload(envelopes, ImpactReport)
     recommendation = _first_payload(envelopes, Recommendation)
+    if recommendation is None:
+        recommendation = _recommendation_from_joint_plan(envelopes)
     headline = headline_of(text, abstention=abstention)
 
     return Reply(
@@ -330,6 +333,45 @@ def _walk_for(node: object, wanted: type[Any], depth: int = 0) -> Iterable[Any]:
     if fields:
         for name in fields:
             yield from _walk_for(getattr(node, name, None), wanted, depth + 1)
+
+
+def _recommendation_from_joint_plan(
+    envelopes: Sequence[ToolEnvelope],
+) -> Recommendation | None:
+    """A joint plan, presented the way every other ranked answer is.
+
+    `plan_joint_cover` returns a bare `JointPlan` and this function only ever
+    lifted a `Recommendation`, so the simultaneous-disruption answer arrived
+    with `reply.recommendation` unset: two full `CoverOption` records, each
+    with its legality report, cost breakdown and reasoning, plus the
+    contention list, dropped on the floor. The controller read a sentence.
+
+    A wrap rather than a new shape. `Recommendation` already declares
+    `joint_plan` and `JointPlan.assignments` is already a `list[CoverOption]`,
+    so nothing is recomputed and no figure moves.
+
+    An infeasible plan contributes no options on purpose. Offering the best
+    independent pair when no joint allocation exists is how one person ends up
+    on two aircraft, which is the reason the joint search exists at all.
+    """
+    plan = _first_payload(envelopes, JointPlan)
+    if plan is None:
+        return None
+    covered = ", ".join(plan.gaps_covered) or "the simultaneous gaps"
+    return Recommendation(
+        situation=(
+            f"Joint cover for {covered}"
+            if plan.feasible
+            else (plan.why_infeasible or "No joint allocation covers these gaps.")
+        ),
+        options=list(plan.assignments) if plan.feasible else [],
+        ranking_basis=(
+            f"Allocated together to {plan.objective.replace('_', ' ')}, so no "
+            "crew member is assigned to two aircraft."
+        ),
+        joint_plan=plan,
+        facts=list(plan.facts),
+    )
 
 
 def _first_payload(envelopes: Sequence[ToolEnvelope], wanted: type[Any]) -> Any:
