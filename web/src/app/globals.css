@@ -1,5 +1,50 @@
 @import "tailwindcss";
 
+.voice-panel {
+  background: color-mix(in oklch, var(--surface) 92%, var(--accent) 8%);
+  box-shadow: var(--shadow-panel);
+  transition: background-color 200ms ease;
+}
+.voice-panel-inline {
+  border-radius: 0.75rem 0.75rem 0 0;
+  box-shadow: none;
+}
+.voice-panel-inline ~ textarea {
+  border-top: 1px solid var(--line-soft);
+}
+.voice-panel-expanded {
+  background: radial-gradient(ellipse at 50% 50%, oklch(87% 0.045 262 / 0.3), transparent 70%), var(--surface);
+  box-shadow: var(--shadow-float);
+}
+.voice-panel-inline.voice-panel-expanded {
+  background: var(--surface);
+  box-shadow: none;
+}
+.voice-panel-inline .voice-inline-details {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.voice-panel-inline .voice-control {
+  padding: 5px 9px;
+  font-size: 11px;
+}
+.voice-panel-inline .voice-control svg {
+  width: 13px;
+  height: 13px;
+}
+.voice-start { background: var(--grad-accent); color: white; }
+.voice-start:hover { filter: brightness(1.12); }
+.voice-control {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: 999px; background: var(--inset);
+  color: var(--ink-2); font-size: 12px; cursor: pointer;
+}
+.voice-control:hover { background: var(--hover); color: var(--ink); }
+.voice-interrupt { color: var(--accent-ink); background: var(--accent-tint); }
+.voice-panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .voice-panel { transition: none; } }
+
 /* ==========================================================================
    Crew Ops Advisor, design tokens.
 

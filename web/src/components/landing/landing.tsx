@@ -43,9 +43,6 @@ import {
   ArrowRightIcon,
   ArrowUpRightIcon,
   CheckCircleIcon,
-  DatabaseIcon,
-  ScalesIcon,
-  TreeStructureIcon,
 } from "@phosphor-icons/react/dist/ssr";
 
 import { Reveal, revealClasses, useInView } from "@/components/landing/reveal";
@@ -55,7 +52,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { ButtonLink } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ content */
@@ -70,6 +67,7 @@ const TICKER = [
   "6 worked scenarios",
   "38 questions with answer keys",
   "zero unattested figures",
+  "cheapest legal option found in <2s",
   "one week, all times UTC",
 ];
 
@@ -141,35 +139,123 @@ const RULES = [
   },
 ];
 
-const TIERS = [
+type CapabilityValues = Record<string, string>;
+
+type Capability = {
+  id: string;
+  label: string;
+  description: string;
+  fields: readonly {
+    key: string;
+    label: string;
+    placeholder: string;
+    type?: "text" | "date";
+  }[];
+  buildQuestion: (values: CapabilityValues) => string;
+};
+
+/** Generic entry points. The user supplies the operational facts before chat. */
+const TIER_LADDER: readonly {
+  n: string;
+  name: string;
+  definition: string;
+  tint: number;
+  capabilities: readonly Capability[];
+}[] = [
   {
     n: "01",
-    name: "Look it up",
+    name: "Lookup",
+    definition: "Retrieves a fact directly from the supplied dataset.",
     tint: 1,
-    icon: DatabaseIcon,
-    blurb:
-      "Who is on reserve at BLR. What a crew member's duty clocks read. Which flights leave DEL on Tuesday. Straight out of the dataset, with the file and the record named underneath so you can go and check.",
-    example: "Who is on reserve at BLR on 2026-09-15?",
+    capabilities: [
+      {
+        id: "find-reserves",
+        label: "Find available reserves",
+        description: "See who is on call at a base on a given date.",
+        fields: [
+          { key: "station", label: "Base", placeholder: "Station code" },
+          { key: "date", label: "Date", placeholder: "", type: "date" },
+        ],
+        buildQuestion: ({ station, date }) =>
+          `Who is on reserve at ${station} on ${date}, and what are their on-call windows?`,
+      },
+      {
+        id: "duty-headroom",
+        label: "Check duty headroom",
+        description: "Check accrued duty and remaining seven-day headroom.",
+        fields: [
+          { key: "crew", label: "Crew ID", placeholder: "Crew ID" },
+          { key: "date", label: "As of date", placeholder: "", type: "date" },
+        ],
+        buildQuestion: ({ crew, date }) =>
+          `As of ${date}, how many duty hours has ${crew} accrued in the previous 7 calendar days, and how much headroom remains under RULE-DUTY-02?`,
+      },
+    ],
   },
   {
     n: "02",
-    name: "Work out what breaks",
+    name: "Consequence",
+    definition: "Computes what changes, what breaks, and which rule binds.",
     tint: 2,
-    icon: TreeStructureIcon,
-    blurb:
-      "A captain calls in sick at five in the morning. A station shuts for six hours. An aircraft is ninety minutes late. Which legs lose their crew, what that reaches next, and which limit the delay quietly pushes somebody over.",
-    example: "Captain C-1042 calls in sick on 15 Sep. Which flights are uncrewed?",
+    capabilities: [
+      {
+        id: "sick-call",
+        label: "Simulate a sick call",
+        description: "See which flights lose cover when a crew member is unavailable.",
+        fields: [
+          { key: "crew", label: "Crew ID", placeholder: "Crew ID" },
+          { key: "date", label: "Date", placeholder: "", type: "date" },
+        ],
+        buildQuestion: ({ crew, date }) =>
+          `${crew} calls in sick on ${date}. Which flights are immediately uncrewed?`,
+      },
+      {
+        id: "cover-legality",
+        label: "Check cover legality",
+        description: "Test a crew assignment against all seven rules.",
+        fields: [
+          { key: "crew", label: "Crew ID", placeholder: "Crew ID" },
+          { key: "pairing", label: "Pairing ID", placeholder: "Pairing ID" },
+          { key: "date", label: "Start date", placeholder: "", type: "date" },
+        ],
+        buildQuestion: ({ crew, pairing, date }) =>
+          `If ${crew} is assigned to cover ${pairing} from ${date}, does any rule breach? Give the detail.`,
+      },
+    ],
   },
   {
     n: "03",
-    name: "Argue for an option",
+    name: "Recommendation",
+    definition: "Ranks legal options by their explicit operational trade-offs.",
     tint: 4,
-    icon: ScalesIcon,
-    blurb:
-      "Every candidate found, checked against all seven rules on every day of the cover, priced, ranked. The ones that did not make it are shown too, each with the rule that knocked it out, because a search you cannot see the shape of is indistinguishable from a guess.",
-    example: "C-1042 is out for P-2291. Produce ranked options with costs.",
+    capabilities: [
+      {
+        id: "rank-cover",
+        label: "Rank cover options",
+        description: "Compare legal cover choices by cost and operational impact.",
+        fields: [
+          { key: "crew", label: "Unavailable crew ID", placeholder: "Crew ID" },
+          { key: "pairing", label: "Pairing ID", placeholder: "Pairing ID" },
+          { key: "date", label: "Start date", placeholder: "", type: "date" },
+        ],
+        buildQuestion: ({ crew, pairing, date }) =>
+          `${crew} is out for ${pairing} from ${date}. Produce ranked resolution options with costs and reasoning.`,
+      },
+      {
+        id: "joint-cover",
+        label: "Resolve multiple absences",
+        description: "Build one crewing plan for two unavailable crew members.",
+        fields: [
+          { key: "firstCrew", label: "First crew ID", placeholder: "Crew ID" },
+          { key: "secondCrew", label: "Second crew ID", placeholder: "Crew ID" },
+          { key: "date", label: "Date", placeholder: "", type: "date" },
+        ],
+        buildQuestion: ({ firstCrew, secondCrew, date }) =>
+          `${firstCrew} and ${secondCrew} are both unavailable on ${date}. Give the optimal joint crewing plan.`,
+      },
+    ],
   },
-] as const;
+];
 
 const NAV = [
   { href: "#boundary", label: "The boundary" },
@@ -264,10 +350,10 @@ export function Landing() {
       </div>
 
       <Nav />
+      <TierLadder />
       <Hero />
       <Ticker />
       <Boundary />
-      <Work />
       <Rules />
       <Close />
       <Footer />
@@ -427,16 +513,20 @@ function Hero() {
         </Reveal>
 
         <Reveal delay={150}>
-          <p className="mt-7 max-w-[52ch] text-md leading-relaxed text-ink-2">
-            The model plans the work and writes the explanation, which is what
-            a language model is genuinely good at. The arithmetic belongs to
-            deterministic code, and a guard reads the draft back against the
-            tool results before anybody sees it. Click any number in an answer
-            and it will show you the file, the record and the subtraction.
+          <p className="mt-7 max-w-[58ch] text-lg leading-relaxed font-medium text-ink">
+            The model plans and explains. The rules engine computes. A guard
+            validates every figure before you see it.
           </p>
         </Reveal>
 
-        <Reveal delay={220}>
+        <Reveal delay={210}>
+          <p className="mt-4 max-w-[52ch] text-md leading-relaxed text-ink-2">
+            Click any underlined number to see the deterministic trace behind
+            it.
+          </p>
+        </Reveal>
+
+        <Reveal delay={270}>
           <p className="mt-5 max-w-[52ch] text-md leading-relaxed text-ink-2">
             The useful consequence is that it will{" "}
             <span className="scribble font-semibold text-ink">
@@ -446,7 +536,7 @@ function Hero() {
           </p>
         </Reveal>
 
-        <Reveal delay={290}>
+        <Reveal delay={330}>
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <ButtonLink
               href="/ask"
@@ -466,12 +556,16 @@ function Hero() {
           it, the refusal behind that, each drifting at its own rate as the
           page moves. A single hero screenshot centred under a headline is the
           thing every one of these pages does. */}
-      <div className="relative min-h-[26rem] lg:min-h-[34rem]">
+      <div className="relative min-h-[38rem] lg:min-h-[39rem]">
         <div className="parallax-slow absolute inset-x-0 top-4 lg:top-0">
           <AnswerCard />
         </div>
-        <div className="parallax-tilt absolute -right-2 bottom-8 w-[62%] max-w-[19rem] sm:right-4 lg:-right-10">
+        <div className="parallax-tilt absolute -right-2 bottom-10 w-[68%] max-w-[21rem] sm:right-4 lg:-right-10">
           <RefusalCard />
+          <p className="mt-3 ml-auto max-w-[10rem] pr-3 text-right text-2xs leading-relaxed text-ink-3 sm:max-w-[18rem] sm:text-left">
+            Ranks options heuristically, not a global optimizer: says so when
+            trade-offs are close.
+          </p>
         </div>
         <div className="parallax-fast absolute bottom-0 -left-2 w-[54%] max-w-[16rem] sm:left-2 lg:-left-8">
           <TraceCard />
@@ -490,34 +584,150 @@ function Hero() {
  * attested would be a joke at its own expense.
  */
 function AnswerCard() {
+  const [mode, setMode] = useState<"lookup" | "recommendation">("lookup");
+
   return (
     <div className="bezel rotate-[0.6deg]">
       <div className="bezel-core overflow-hidden">
-        <div className="flex items-center gap-1.5 px-4 pt-3.5 pb-2">
-          <span className="size-2 rounded-full bg-line-strong" />
-          <span className="size-2 rounded-full bg-line-strong" />
-          <span className="size-2 rounded-full bg-line-strong" />
-        </div>
-        <div className="px-5 pb-5">
-          <div className="flex justify-end">
-            <p
-              className="max-w-[30ch] rounded-2xl px-3.5 py-2 text-base text-[var(--voice-ink)]"
-              style={{ backgroundImage: "var(--grad-voice)" }}
-            >
-              How much duty headroom does C-1042 have?
-            </p>
+        <div className="flex items-center justify-between gap-3 px-4 pt-3.5 pb-2">
+          <div className="flex items-center gap-1.5" aria-hidden>
+            <span className="size-2 rounded-full bg-line-strong" />
+            <span className="size-2 rounded-full bg-line-strong" />
+            <span className="size-2 rounded-full bg-line-strong" />
           </div>
-          <p className="mt-4 text-base leading-relaxed text-ink">
-            C-1042 has accrued <Atom>20.93</Atom> duty hours in the 7 calendar
-            days ending 2026-09-14, leaving <Atom>39.07h</Atom> of headroom
-            under <Atom>RULE-DUTY-02</Atom>, whose limit is <Atom>60h</Atom>.
-          </p>
-          <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-pass-tint px-2.5 py-1 text-2xs font-semibold text-pass">
-            <CheckCircleIcon size={11} weight="fill" aria-hidden />
-            12 of 12 figures attested
-          </span>
+          <div
+            className="flex rounded-full bg-inset p-1"
+            aria-label="Answer depth"
+            role="tablist"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "lookup"}
+              onClick={() => setMode("lookup")}
+              className={cn(
+                "cursor-pointer rounded-full px-3 py-1 text-2xs font-semibold transition-[background-color,color,box-shadow] duration-300 ease-out-quint",
+                mode === "lookup"
+                  ? "bg-surface text-ink shadow-panel"
+                  : "text-ink-3 hover:text-ink",
+              )}
+            >
+              Lookup
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "recommendation"}
+              onClick={() => setMode("recommendation")}
+              className={cn(
+                "cursor-pointer rounded-full px-3 py-1 text-2xs font-semibold transition-[background-color,color,box-shadow] duration-300 ease-out-quint",
+                mode === "recommendation"
+                  ? "bg-surface text-ink shadow-panel"
+                  : "text-ink-3 hover:text-ink",
+              )}
+            >
+              Recommendation
+            </button>
+          </div>
+        </div>
+        <div role="tabpanel" aria-label={`${mode} answer`}>
+          {mode === "lookup" ? <LookupAnswer /> : <RecommendationAnswer />}
         </div>
       </div>
+    </div>
+  );
+}
+
+function LookupAnswer() {
+  return (
+    <div className="px-5 pb-5">
+      <div className="flex justify-end">
+        <p
+          className="max-w-[30ch] rounded-2xl px-3.5 py-2 text-base text-[var(--voice-ink)]"
+          style={{ backgroundImage: "var(--grad-voice)" }}
+        >
+          How much duty headroom does C-1042 have?
+        </p>
+      </div>
+      <p className="mt-4 text-base leading-relaxed text-ink">
+        C-1042 has accrued <Atom trace="get_duty_clocks">20.93</Atom> duty
+        hours in the 7 calendar days ending 2026-09-14, leaving{" "}
+        <Atom trace="get_duty_clocks → explain_rule">39.07h</Atom> of headroom
+        under <Atom trace="explain_rule">RULE-DUTY-02</Atom>, whose limit is{" "}
+        <Atom trace="explain_rule">60h</Atom>.
+      </p>
+      <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-pass-tint px-2.5 py-1 text-2xs font-semibold text-pass">
+        <CheckCircleIcon size={11} weight="fill" aria-hidden />
+        12 of 12 figures attested
+      </span>
+    </div>
+  );
+}
+
+const HERO_OPTIONS = [
+  {
+    rank: "01",
+    crew: "C-3310",
+    cost: "INR 18,500",
+    reason: "Reserve callout, covers both days with no delay.",
+  },
+  {
+    rank: "02",
+    crew: "C-1526",
+    cost: "INR 24,000",
+    reason: "Day-off callout, covers both days with no delay.",
+  },
+  {
+    rank: "03",
+    crew: "C-3983",
+    cost: "INR 24,000",
+    reason: "Day-off callout, covers both days with no delay.",
+  },
+] as const;
+
+function RecommendationAnswer() {
+  return (
+    <div className="px-5 pb-5">
+      <div className="flex justify-end">
+        <p
+          className="max-w-[34ch] rounded-2xl px-3.5 py-2 text-base text-[var(--voice-ink)]"
+          style={{ backgroundImage: "var(--grad-voice)" }}
+        >
+          Best way to cover P-2291?
+        </p>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <p className="text-base font-semibold text-ink">Ranked legal options</p>
+        <p className="text-2xs text-ink-3">All 7 rules checked</p>
+      </div>
+      <ol className="mt-2 grid gap-1.5">
+        {HERO_OPTIONS.map((option) => (
+          <li
+            key={option.crew}
+            className="grid grid-cols-[1.5rem_1fr_auto] items-start gap-x-2 rounded-xl bg-inset px-3 py-2.5"
+          >
+            <span className="num pt-0.5 text-2xs text-ink-3">
+              {option.rank}
+            </span>
+            <span className="min-w-0">
+              <span className="num text-xs font-semibold text-ink">
+                {option.crew}
+              </span>
+              <span className="mt-0.5 block text-2xs leading-snug text-ink-2">
+                {option.reason}
+              </span>
+            </span>
+            <span className="text-right">
+              <span className="num block text-2xs font-semibold text-ink">
+                {option.cost}
+              </span>
+              <span className="mt-1 inline-flex rounded-full bg-pass-tint px-2 py-0.5 text-[10px] font-semibold text-pass">
+                Legal
+              </span>
+            </span>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
@@ -567,10 +777,36 @@ function RefusalCard() {
   );
 }
 
-function Atom({ children }: { children: React.ReactNode }) {
+function Atom({
+  children,
+  trace,
+}: {
+  children: React.ReactNode;
+  trace: string;
+}) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <span className="num rounded-xs bg-accent-tint px-0.5 text-accent underline decoration-dotted decoration-1 underline-offset-[3px]">
-      {children}
+    <span className="group/atom relative inline-block">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="num cursor-pointer rounded-xs bg-accent-tint px-0.5 text-accent underline decoration-dotted decoration-1 underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        {children}
+      </button>
+      <span
+        role="tooltip"
+        className={cn(
+          "pointer-events-none absolute bottom-[calc(100%+0.45rem)] left-1/2 z-10 w-max max-w-[14rem] -translate-x-1/2 rounded-lg bg-ink px-2.5 py-1.5 text-center font-mono text-[10px] leading-snug text-page shadow-pop transition-[opacity,transform] duration-200",
+          open
+            ? "translate-y-0 opacity-100"
+            : "translate-y-1 opacity-0 group-hover/atom:translate-y-0 group-hover/atom:opacity-100 group-focus-within/atom:translate-y-0 group-focus-within/atom:opacity-100",
+        )}
+      >
+        {trace}
+      </span>
     </span>
   );
 }
@@ -602,9 +838,224 @@ function Ticker() {
       </div>
       <span className="sr-only">
         The dataset: 147 flights, 150 crew, 39 pairings, 16 reserves, 7 rules, 6
-        worked scenarios and 38 questions with answer keys, over one week, all
-        times UTC.
+        worked scenarios and 38 questions with answer keys. The cheapest legal
+        option is found in under 2 seconds. The data covers one week, all times
+        UTC.
       </span>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------- tier ladder */
+
+function TierLadder() {
+  const [selected, setSelected] = useState<Capability | null>(null);
+
+  return (
+    <>
+      <section
+        id="work"
+        className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 pt-16 pb-24 sm:px-8 sm:pt-20 sm:pb-32"
+      >
+        <Reveal>
+          <p className="text-2xs font-semibold tracking-[0.2em] text-ink-3 uppercase">
+            Three levels of answer
+          </p>
+          <h2 className="macro mt-4 text-[clamp(2rem,4vw,3.25rem)] text-ink">
+            Lookup <span className="text-accent">→</span> Consequence{" "}
+            <span className="text-accent">→</span> Recommendation
+          </h2>
+        </Reveal>
+
+        <div className="mt-12 grid gap-4 lg:grid-cols-3 lg:items-start">
+          {TIER_LADDER.map((tier, index) => (
+            <Reveal
+              key={tier.name}
+              delay={index * 90}
+              className={cn(index === 1 && "lg:mt-8", index === 2 && "lg:mt-16")}
+            >
+              <article
+                className="rounded-[2rem] p-6 shadow-panel sm:p-7"
+                style={{ background: `var(--tint-${tier.tint})` }}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <p
+                    className="num text-2xs font-semibold tracking-[0.16em] uppercase"
+                    style={{ color: `var(--tint-${tier.tint}-ink)` }}
+                  >
+                    Tier {tier.n}
+                  </p>
+                  <span
+                    aria-hidden
+                    className="grid size-8 place-items-center rounded-full text-page"
+                    style={{ background: `var(--tint-${tier.tint}-ink)` }}
+                  >
+                    {index + 1}
+                  </span>
+                </div>
+                <h3 className="macro mt-5 text-2xl text-ink">{tier.name}</h3>
+                <p className="mt-2 text-base leading-relaxed text-ink-2">
+                  {tier.definition}
+                </p>
+                <div className="mt-6 grid gap-2">
+                  {tier.capabilities.map((capability) => (
+                    <button
+                      key={capability.id}
+                      type="button"
+                      onClick={() => setSelected(capability)}
+                      data-testid="capability-card"
+                      className="group flex min-h-24 cursor-pointer items-center gap-3 rounded-2xl bg-surface/75 px-4 py-3 text-left text-sm leading-snug text-ink shadow-[var(--ring-faint)] transition-[transform,box-shadow,background-color] duration-300 ease-out-quint hover:-translate-y-0.5 hover:bg-surface hover:shadow-panel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-base font-semibold text-ink">
+                          {capability.label}
+                        </span>
+                        <span className="mt-1 block text-xs leading-snug text-ink-2">
+                          {capability.description}
+                        </span>
+                      </span>
+                      <ArrowUpRightIcon
+                        size={13}
+                        weight="bold"
+                        aria-hidden
+                        className="shrink-0 text-ink-3 transition-transform duration-300 ease-out-quint group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                      />
+                    </button>
+                  ))}
+                </div>
+              </article>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      {selected ? (
+        <CapabilityLauncher
+          key={selected.id}
+          capability={selected}
+          onClose={() => setSelected(null)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function CapabilityLauncher({
+  capability,
+  onClose,
+}: {
+  capability: Capability;
+  onClose: () => void;
+}) {
+  const [values, setValues] = useState<CapabilityValues>({});
+  const complete = capability.fields.every((field) => values[field.key]?.trim());
+  const question = complete ? capability.buildQuestion(values) : "";
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center px-4 py-8">
+      <button
+        type="button"
+        aria-label="Close task details"
+        onClick={onClose}
+        className="absolute inset-0 cursor-default bg-ink/25 backdrop-blur-sm"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`capability-${capability.id}`}
+        className="relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-[2rem] bg-surface p-6 shadow-pop sm:p-8"
+      >
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <p className="text-2xs font-semibold tracking-[0.18em] text-accent uppercase">
+              Start with the facts
+            </p>
+            <h3
+              id={`capability-${capability.id}`}
+              className="macro mt-2 text-2xl text-ink"
+            >
+              {capability.label}
+            </h3>
+            <p className="mt-2 text-base leading-relaxed text-ink-2">
+              {capability.description}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close task details"
+            onClick={onClose}
+            className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-inset text-lg text-ink-2 transition-colors duration-200 hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            <span aria-hidden>×</span>
+          </button>
+        </div>
+
+        <form action="/ask" method="get" className="mt-7">
+          <input type="hidden" name="q" value={question} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            {capability.fields.map((field, index) => (
+              <label
+                key={field.key}
+                className={cn(
+                  "grid gap-1.5 text-xs font-semibold text-ink-2",
+                  capability.fields.length % 2 === 1 &&
+                    index === capability.fields.length - 1 &&
+                    "sm:col-span-2",
+                )}
+              >
+                {field.label}
+                <input
+                  autoFocus={index === 0}
+                  required
+                  type={field.type ?? "text"}
+                  placeholder={field.placeholder}
+                  value={values[field.key] ?? ""}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      [field.key]: event.target.value,
+                    }))
+                  }
+                  className="h-12 min-w-0 rounded-xl bg-inset px-3.5 text-base font-medium text-ink shadow-[inset_0_0_0_1px_var(--line-soft)] outline-none transition-[background-color,box-shadow] duration-200 placeholder:text-ink-3 focus:bg-surface focus:shadow-[inset_0_0_0_2px_var(--accent-line)]"
+                />
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-6 rounded-2xl bg-inset px-4 py-3">
+            <p className="text-2xs font-semibold tracking-[0.14em] text-ink-3 uppercase">
+              Opens chat with
+            </p>
+            <p className="mt-1.5 min-h-[2.5rem] text-sm leading-relaxed text-ink-2">
+              {question || "Enter the details above to build the question."}
+            </p>
+          </div>
+
+          <div className="mt-6 flex justify-end">
+            <Button
+              type="submit"
+              size="md"
+              disabled={!complete}
+              trailing={<ArrowRightIcon size={13} weight="bold" />}
+            >
+              Continue to chat
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -704,138 +1155,6 @@ function List({
             </li>
           ))}
         </ul>
-      </div>
-    </div>
-  );
-}
-
-/* --------------------------------------------------------------------- work */
-
-/**
- * The horizontal section.
- *
- * The reader scrolls down and the cards walk left. It is a CSS scroll
- * timeline, so the whole thing runs on the compositor and there is no scroll
- * handler anywhere; where scroll timelines are not supported the same markup
- * degrades to a row you swipe, which is the reason the track is a real
- * overflow container in the base stylesheet rather than a transform.
- */
-function Work() {
-  return (
-    <section id="work" className="scroll-mt-0">
-      <div className="hscroll">
-        <div className="hscroll-pin relative">
-          {/* THE HEADING LIVES INSIDE THE PIN. It used to sit above the
-              section, which meant it had scrolled off the top before the
-              cards started moving: the reader arrived at a screen of cards
-              with no label, scrolled, and could not tell whether the sideways
-              movement was the page doing something or a rendering glitch.
-              Kept on screen for the whole pin, the horizontal walk is
-              obviously the answer to the scroll. */}
-          <div className="mx-auto w-full max-w-6xl shrink-0 px-4 pt-24 pb-8 sm:px-8">
-            <div>
-              <p className="text-2xs font-semibold tracking-[0.2em] text-ink-3 uppercase">
-                Three kinds of question
-              </p>
-              <h2 className="macro mt-4 max-w-[16ch] text-[clamp(1.75rem,3.4vw,2.75rem)] text-ink">
-                <Words text="It goes as far as the question does" />
-              </h2>
-            </div>
-          </div>
-
-          <div className="hscroll-scroller flex min-h-0 flex-1 items-center">
-            <div className="hscroll-track">
-              {TIERS.map((tier) => (
-                <WorkCard key={tier.n} {...tier} />
-              ))}
-              <FourthCard />
-            </div>
-          </div>
-
-          <div className="mx-auto w-full max-w-6xl shrink-0 px-4 pt-6 pb-12 sm:px-8">
-            <div aria-hidden className="h-px bg-line">
-              <div className="hscroll-progress h-px w-full bg-[image:var(--grad-accent)]" />
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function WorkCard({
-  n,
-  name,
-  tint,
-  icon: Icon,
-  blurb,
-  example,
-}: (typeof TIERS)[number]) {
-  return (
-    <Link
-      href={`/ask?q=${encodeURIComponent(example)}`}
-      style={{ background: `var(--tint-${tint})` }}
-      className="group flex min-h-[24rem] w-[82vw] max-w-[30rem] shrink-0 flex-col rounded-[2rem] p-8 transition-[transform,box-shadow] duration-500 ease-out-quint hover:-translate-y-1 hover:shadow-pop sm:min-h-[30rem] sm:w-[62vw] sm:p-10"
-    >
-      <div className="flex items-center justify-between">
-        <span
-          className="macro text-5xl opacity-30"
-          style={{ color: `var(--tint-${tint}-ink)` }}
-        >
-          {n}
-        </span>
-        <span
-          className="grid size-11 place-items-center rounded-2xl"
-          style={{
-            background: `var(--tint-${tint}-tile)`,
-            color: `var(--tint-${tint}-ink)`,
-          }}
-        >
-          <Icon size={20} weight="regular" />
-        </span>
-      </div>
-
-      <h3 className="macro mt-8 text-3xl text-ink">{name}</h3>
-      <p className="mt-4 max-w-[42ch] text-md leading-relaxed text-ink-2">
-        {blurb}
-      </p>
-
-      <p className="mt-auto flex items-center gap-3 pt-8 text-base font-medium text-ink">
-        <span className="min-w-0 flex-1">{example}</span>
-        <span
-          aria-hidden
-          className="grid size-9 shrink-0 place-items-center rounded-full text-page transition-transform duration-500 ease-out-quint group-hover:translate-x-1"
-          style={{ background: `var(--tint-${tint}-ink)` }}
-        >
-          <ArrowRightIcon size={14} weight="bold" />
-        </span>
-      </p>
-    </Link>
-  );
-}
-
-/** The one at the end of the track, which is the point of the other three. */
-function FourthCard() {
-  return (
-    <div className="flex min-h-[24rem] w-[82vw] max-w-[30rem] shrink-0 flex-col justify-center rounded-[2rem] bg-ink p-8 text-page sm:min-h-[30rem] sm:w-[52vw] sm:p-10">
-      <p className="text-2xs font-semibold tracking-[0.2em] uppercase opacity-60">
-        And the fourth kind
-      </p>
-      <h3 className="macro mt-5 text-3xl">The one it refuses</h3>
-      <p className="mt-4 max-w-[38ch] text-md leading-relaxed opacity-80">
-        Ask it about the weather, or about a crew member who is not in the
-        dataset, or about a rule nobody wrote down. It will tell you what it was
-        missing instead of finding you something that sounds right.
-      </p>
-      <div className="mt-8">
-        <ButtonLink
-          href="/ask?q=Is%20the%20weather%20going%20to%20delay%20DX401%20on%2016%20Sep%3F"
-          variant="secondary"
-          size="md"
-          trailing={<ArrowRightIcon size={13} weight="bold" />}
-        >
-          Try to break it
-        </ButtonLink>
       </div>
     </div>
   );
@@ -1078,7 +1397,10 @@ function Footer() {
           </div>
         </div>
 
-        <p className="mt-16 flex flex-wrap items-center gap-x-2 gap-y-1 pb-6 text-xs text-ink-3">
+        <p className="macro mt-16 max-w-[52ch] text-base text-ink-2">
+          The advisor a controller wants beside them at 6am on a bad day.
+        </p>
+        <p className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 pb-6 text-xs text-ink-3">
           Built for the dCortex Agentic Crew Ops Advisor problem statement.
           <span aria-hidden>&middot;</span>
           <span>

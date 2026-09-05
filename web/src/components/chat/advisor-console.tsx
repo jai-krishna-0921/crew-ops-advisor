@@ -50,9 +50,11 @@ import type {
 import { api } from "@/lib/api";
 import { collectFacts } from "@/lib/fact-link";
 import { useConversation } from "@/lib/use-conversation";
+import { useVoice } from "@/lib/voice/use-voice";
 import { useStickToBottom } from "@/components/ai/elements";
 import { TurnView } from "@/components/chat/turn";
 import { Composer } from "@/components/chat/composer";
+import { VoicePanel } from "@/components/chat/voice-panel";
 import { EvidenceDrawer } from "@/components/evidence/evidence-drawer";
 import { FactProvider } from "@/components/evidence/fact-context";
 import { SideRail } from "@/components/shell/side-rail";
@@ -102,11 +104,25 @@ export function AdvisorConsole() {
     loadError,
     hydrated,
     stranded,
-    ask,
-    stop,
-    newThread,
-    openThread,
+    stop: stopConversation,
+    newThread: resetConversation,
+    openThread: loadConversation,
   } = conversation;
+  const voice = useVoice(conversation);
+  const voiceController = voice.controller;
+  const ask = voiceController.submit;
+  const newThread = useCallback(() => { voiceController.end(); resetConversation(); }, [voiceController, resetConversation]);
+  const openThread = useCallback((id: string) => { voiceController.end(); loadConversation(id); }, [voiceController, loadConversation]);
+  const stop = useCallback(() => { stopConversation(); voiceController.interrupt(); }, [stopConversation, voiceController]);
+  const composerArea = useRef<HTMLDivElement>(null);
+  const [composerHeight, setComposerHeight] = useState(190);
+  useEffect(() => {
+    const node = composerArea.current;
+    if (!node) return;
+    const observer = new ResizeObserver(() => setComposerHeight(node.getBoundingClientRect().height + 24));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
   const busy = status === "streaming";
 
   // Sticks to the bottom only while the reader is already there. Yanking
@@ -442,6 +458,7 @@ export function AdvisorConsole() {
             </div>
           ) : turns.length === 0 ? (
             <Welcome
+              bottomSpacing={composerHeight}
               questions={questions}
               onAsk={ask}
               catalogueError={catalogueError}
@@ -449,13 +466,15 @@ export function AdvisorConsole() {
           ) : (
             /* The bottom padding clears the floating composer, so the last
                answer can be scrolled fully clear of it. */
-            <div className="mx-auto w-full max-w-3xl px-4 pt-4 pb-44 sm:px-6">
+            <div className="mx-auto w-full max-w-3xl px-4 pt-4 sm:px-6" style={{ paddingBottom: composerHeight }}>
               {turns.map((turn) => (
                 <TurnView
                   key={turn.localId}
                   turn={turn}
                   onAsk={ask}
                   onRetry={ask}
+                  onReadAloud={turn.reply ? () => { void voiceController.read(turn.reply!, turn.localId); } : undefined}
+                  speaking={voice.state.speakingTurn === turn.localId}
                   onFocus={() => setActiveId(turn.localId)}
                   isActive={turn.localId === activeTurn?.localId}
                   onOpenEvidence={() => {
@@ -472,10 +491,13 @@ export function AdvisorConsole() {
             strip below it, so the conversation stays the whole page. The veil
             is the page colour drawn back up, which is what makes the last
             answer dissolve under the field instead of ending at a rule. */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
+        <div ref={composerArea} className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
           <div className="veil pt-12">
             <div className="pointer-events-auto mx-auto w-full max-w-3xl">
-              <Composer onSubmit={ask} onStop={stop} busy={busy} />
+              <Composer onSubmit={ask} onStop={stop} busy={busy}
+                voicePanel={<VoicePanel controller={voiceController} state={voice.state} status={voice.status}
+                  statusError={voice.statusError} onRefresh={voice.refreshStatus} onProvider={voice.selectProvider}
+                  disabled={busy || !hydrated || status === "loading"} />} />
             </div>
           </div>
           </div>
@@ -696,10 +718,12 @@ const LANDING_QUESTIONS = ["Q01", "Q02", "Q17", "Q18", "Q31", "Q32"];
  * on the architecture page.
  */
 function Welcome({
+  bottomSpacing,
   questions,
   onAsk,
   catalogueError,
 }: {
+  bottomSpacing: number;
   questions: SampleQuestion[];
   onAsk: (question: string) => void;
   catalogueError: string | null;
@@ -713,7 +737,7 @@ function Welcome({
   );
 
   return (
-    <div className="relative mx-auto w-full max-w-3xl px-6 pt-24 pb-44">
+    <div className="relative mx-auto w-full max-w-3xl px-6 pt-24" style={{ paddingBottom: bottomSpacing }}>
       {/* THE LIGHT IS FULL BLEED, THE CONTENT IS NOT. `hero-wash` used to sit
           on this column, which is 768px wide, so three radial gradients were
           clipped to a box narrower than any of them and read as a smudge with

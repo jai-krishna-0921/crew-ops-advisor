@@ -43,7 +43,7 @@ export interface Conversation extends ConversationState {
   hydrated: boolean;
   /** Increments when a superseded run settles into the log anyway. */
   stranded: number;
-  ask: (question: string) => void;
+  ask: (question: string) => string | null;
   stop: () => void;
   newThread: () => void;
   openThread: (threadId: string) => void;
@@ -172,7 +172,7 @@ export function useConversation(mode: AnswerMode | "auto"): Conversation {
   const ask = useCallback(
     (question: string) => {
       const trimmed = question.trim();
-      if (!trimmed) return;
+      if (!trimmed) return null;
 
       // Asking continues the current conversation, so the generation only
       // advances far enough to cancel a previous in-flight answer.
@@ -278,6 +278,7 @@ export function useConversation(mode: AnswerMode | "auto"): Conversation {
               ),
         }));
       });
+      return localId;
     },
     [mode],
   );

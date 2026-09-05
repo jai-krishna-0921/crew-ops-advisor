@@ -19,10 +19,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from crewops.agent.config import AgentConfig
 from crewops.agent.memory import Memory
+from crewops.agent.voice.config import VoiceConfig
 from crewops.contracts import ToolSurface
 from crewops.env import REPO_ROOT, load_env
 from crewops.server.deps import AppState, build_state
 from crewops.server.routes import router
+from crewops.server.voice import voice_router
 
 __all__ = ["ALLOWED_METHODS", "ALLOWED_ORIGINS", "create_app"]
 
@@ -102,6 +104,8 @@ def create_app(
         allow_headers=["*"],
     )
     app.include_router(router)
+    app.state.voice_config = VoiceConfig.from_env()
+    app.include_router(voice_router)
     return app
 
 
