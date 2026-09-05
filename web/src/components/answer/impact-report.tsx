@@ -1,11 +1,17 @@
 "use client";
 
 /**
- * Tier 2: what breaks, and what breaks next.
+ * BLAST RADIUS: what breaks, and what breaks next.
  *
  * The uncrewed legs are the obvious part and are shown as a flight strip. The
  * downstream risks are the reason the system exists, so they are given equal
  * weight and sorted by severity rather than by discovery order.
+ *
+ * The name is load bearing. Everything here was already computed and rendered,
+ * and nothing on screen said what it was, so a reader had to infer "this is
+ * the full extent of the damage" from four metric tiles. "Consequence
+ * blindness" is the second pain point the problem statement names, and this
+ * block is the answer to it: it should say so.
  */
 
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr";
@@ -30,7 +36,14 @@ export function ImpactReportView({ impact }: { impact: ImpactReport }) {
   );
 
   return (
-    <section className="space-y-3" aria-label="Impact report">
+    <section className="space-y-3" aria-label="Blast radius">
+      {/* NAMING THE BLOCK IS NOT DECORATION. A tier 3 answer renders this
+          immediately above the ranked options, and unlabelled the two read as
+          one long card: the reader cannot tell where "what broke" ends and
+          "what to do about it" begins. The trigger sits in the meta line
+          because the first question anyone asks of a blast radius is what set
+          it off. */}
+      <SectionHead title="Blast radius" meta={impact.trigger} />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Metric
           label="Uncrewed legs"
@@ -56,7 +69,10 @@ export function ImpactReportView({ impact }: { impact: ImpactReport }) {
 
       {impact.uncrewed_flights.length > 0 ? (
         <div className="space-y-1.5">
-          <SectionHead title="Uncrewed" meta={impact.trigger} />
+          <SectionHead
+            title="Uncrewed"
+            meta="Legs the trigger leaves with no crew assigned"
+          />
           {/* The same flights twice, on purpose, and not as decoration. The
               timeline answers "when is the hole in the day", which the rows
               underneath can only answer by reading six pairs of times and
