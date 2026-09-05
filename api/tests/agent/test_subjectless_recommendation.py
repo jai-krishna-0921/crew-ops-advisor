@@ -80,3 +80,99 @@ def test_the_refusal_says_what_to_add() -> None:
     hint = subjectless_ask("What are my options, cheapest first?", has_history=False)
     assert hint is not None
     assert "pairing" in hint.lower(), hint
+
+
+# ------------------------------------------------- an unknown station, in both modes
+
+"""Same question, same refusal, whichever engine answers.
+
+With `list_reserves` now refusing an unknown station, the agent relayed the
+failure and dropped the reason:
+
+    "The reserve lookup for that station on that date failed, so I could not
+     retrieve any reserve crew or on-call windows."
+
+The tool said exactly why: "IDR is not a station in this dataset ... This
+network serves BLR, BOM, CCU, COK, DEL, GOI, HYD, MAA." The offline path says
+that. The agent said "it failed", which tells a controller nothing they can act
+on and reads like an outage rather than a typo.
+
+Asking the model more nicely is the weaker fix. There is nothing clever to do
+with a station that does not exist, so the refusal is structural and both
+modes give the same answer for the same reason. It also costs a round trip
+less, because the turn ends before the model is called at all.
+"""
+
+
+def test_an_unknown_station_is_refused_before_any_spend() -> None:
+    from crewops.agent.graph import unknown_station_ask
+
+    hint = unknown_station_ask("Who is on reserve at IDR on 2026-09-17?")
+    assert hint is not None
+    assert "IDR" in hint
+    assert "BLR" in hint, "name the stations that do exist"
+
+
+def test_a_real_station_is_untouched() -> None:
+    from crewops.agent.graph import unknown_station_ask
+
+    assert unknown_station_ask("Who is on reserve at BLR on 2026-09-17?") is None
+
+
+def test_money_is_not_a_station() -> None:
+    from crewops.agent.graph import unknown_station_ask
+
+    assert unknown_station_ask("What does the cover cost in INR 18,500 terms?") is None
+
+
+def test_a_refused_turn_still_joins_the_conversation() -> None:
+    """Refusing before the model is right, and it cannot cost the thread.
+
+    Route-node refusals never reach the model, so nothing about them entered
+    the checkpointer, so the thread looked empty to the next turn. The reported
+    session then went:
+
+        "at IDR"             refused, IDR is not a station
+        "SOrry i mean INR"   refused, nor is INR
+        "sorry, I meant BLR" -> "Dataset confirmed. Snapshot is 2026-09-14..."
+
+    The model had no history to correct against and answered about the
+    dataset. Offline gets this right because the resolver keeps a recognised
+    turn even when it refuses it. A refused turn is still part of the
+    conversation, so the question and the refusal go into `messages` and the
+    next turn sees both.
+
+    Driven through the compiled graph and read back out of the checkpointer,
+    because that is where the defect was: not in what the node returned, but
+    in what survived the turn.
+    """
+    import asyncio
+    import datetime as dt
+
+    from langchain_core.messages import HumanMessage
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from crewops.agent.graph import build_graph
+    from crewops.agent.state import new_turn_state
+    from tests.fakes.model import script
+    from tests.fakes.tools import FakeTools
+
+    graph = build_graph(
+        tools=FakeTools(), model=script(), checkpointer=InMemorySaver()
+    )
+    config = {"configurable": {"thread_id": "t-refused"}}
+    state = new_turn_state(
+        question="Who is on reserve at IDR on 2026-09-17?",
+        thread_id="t-refused",
+        turn_id="u-1",
+        asked_at=dt.datetime(2026, 9, 14, 18, 0, 0),
+        as_of=None,
+        started_at=0.0,
+    )
+    asyncio.run(graph.ainvoke(state, config=config))
+
+    kept = graph.get_state(config).values.get("messages") or []
+    assert any(isinstance(m, HumanMessage) for m in kept), (
+        "the thread has to remember what was asked, or a correction has "
+        "nothing to correct"
+    )

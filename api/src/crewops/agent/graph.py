@@ -93,7 +93,13 @@ from crewops.resolve.intents import match_intent
 from crewops.resolve.triage import reads_as_followup, triage_question
 from crewops.verify import Verifier
 
-__all__ = ["TurnPlan", "bind_tool_specs", "build_graph", "subjectless_ask"]
+__all__ = [
+    "TurnPlan",
+    "bind_tool_specs",
+    "build_graph",
+    "subjectless_ask",
+    "unknown_station_ask",
+]
 
 #: How much of a tool payload is handed back to the model, when the payload is
 #: a shape nothing knows how to compact. The full envelope always reaches the
@@ -178,6 +184,33 @@ def _summarise_payload(envelope: ToolEnvelope) -> str:
 _SUBJECT_REQUIREMENTS: Final = frozenset({"cover_target", "assignment"})
 
 
+def unknown_station_ask(question: str) -> str | None:
+    """The refusal for a station this network does not serve, or None.
+
+    `list_reserves` and friends already refuse an unknown station, and the
+    model relayed that as "the reserve lookup for that station failed", which
+    reads like an outage rather than a typo and tells a controller nothing.
+    There is nothing clever to do with a station that does not exist, so this
+    is settled before the model is called: both modes then give the same
+    answer for the same reason, and the turn costs a round trip less.
+
+    Position-anchored, in `unknown_stations`, because INR is the currency on
+    every cost line in this dataset.
+    """
+    from crewops.resolve.triage import STATIONS, canonical_question, unknown_stations
+
+    strangers = unknown_stations(canonical_question(question))
+    if not strangers:
+        return None
+    named = ", ".join(strangers)
+    verb = "is" if len(strangers) == 1 else "are"
+    them = "it" if len(strangers) == 1 else "them"
+    return (
+        f"{named} {verb} not in this dataset, so there is nothing to report "
+        f"about {them}. This network serves " + ", ".join(sorted(STATIONS)) + "."
+    )
+
+
 def subjectless_ask(question: str, *, has_history: bool) -> str | None:
     """The hint to refuse with when a recommendation is about nothing.
 
@@ -256,7 +289,10 @@ def _tool_message_content(envelope: ToolEnvelope) -> tuple[str, bool]:
                     "error": envelope.error or "the lookup failed",
                     "note": (
                         "A failed lookup is not a negative finding. Do not report "
-                        "this as 'none found'."
+                        "this as 'none found'. Tell the user what `error` says: "
+                        "it names what was wrong and usually what to ask "
+                        "instead, and 'the lookup failed' on its own reads like "
+                        "an outage and is nothing they can act on."
                     ),
                 }
             ),
@@ -358,7 +394,12 @@ def build_graph(
         history = bool(state.get("messages"))
         continues = history and reads_as_followup(state["question"])
         no_subject = subjectless_ask(state["question"], has_history=history)
-        in_scope = (verdict.in_scope or continues) and no_subject is None
+        no_station = unknown_station_ask(state["question"])
+        in_scope = (
+            (verdict.in_scope or continues)
+            and no_subject is None
+            and no_station is None
+        )
         update: dict[str, Any] = {
             "in_scope": in_scope,
             "tier": verdict.tier,
@@ -369,9 +410,29 @@ def build_graph(
             ),
         }
         if not in_scope:
+            # A REFUSED TURN IS STILL PART OF THE CONVERSATION. These refusals
+            # happen before the model is called, so nothing about them reached
+            # the checkpointer and the thread looked empty to the next turn:
+            # "at IDR", refused, "sorry I mean INR", refused, "sorry I meant
+            # BLR" and the model, with no history to correct against, answered
+            # about the dataset. The question and the refusal go in, so the
+            # correction has something to correct.
+            update["messages"] = [
+                HumanMessage(content=state["question"]),
+                AIMessage(content=""),
+            ]
             # A greeting is answered, not refused. Nothing is missing: the
             # controller has not asked for anything yet. Same treatment as the
             # offline resolver, so both paths greet identically.
+            if no_station is not None:
+                update["abstention"] = Abstention(
+                    reason=AbstentionReason.NOT_IN_DATASET,
+                    message="I cannot answer that reliably. " + no_station,
+                    missing=[no_station],
+                    did_establish=[],
+                    suggestions=_scope_suggestions(),
+                )
+                return update
             if no_subject is not None:
                 update["abstention"] = Abstention(
                     reason=AbstentionReason.UNDERSPECIFIED,
