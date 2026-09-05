@@ -219,57 +219,6 @@ export function Segmented<T extends string>({
   );
 }
 
-/* ----------------------------------------------------------------- gauge */
-
-/**
- * Margin against a limit, drawn as a signed bar around a zero line.
- *
- * This is not a progress bar and deliberately does not look like one. The
- * question a controller asks is "how much room is left, or how far over am I",
- * and the sign is the thing they read first.
- */
-export function MarginGauge({
-  margin,
-  limit,
-  tone,
-  label,
-}: {
-  margin: number;
-  limit: number | null | undefined;
-  tone: Tone;
-  label: string;
-}) {
-  const span = limit && limit > 0 ? limit : Math.abs(margin) * 2 || 1;
-  const ratio = Math.min(1, Math.abs(margin) / span);
-  const width = `${Math.max(2, ratio * 50)}%`;
-  const over = margin < 0;
-  return (
-    <div
-      className="flex h-1.5 w-full items-stretch overflow-hidden rounded-full bg-inset"
-      role="img"
-      aria-label={label}
-    >
-      <div className="flex w-1/2 justify-end">
-        {over ? (
-          <span
-            className={cx("block h-full rounded-l-full", TONE[tone].fill)}
-            style={{ width }}
-          />
-        ) : null}
-      </div>
-      <span className="w-px shrink-0 bg-line-strong" aria-hidden />
-      <div className="flex w-1/2 justify-start">
-        {!over ? (
-          <span
-            className={cx("block h-full rounded-r-full", TONE[tone].fill)}
-            style={{ width }}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ misc */
 
 export function Kbd({ children }: { children: ReactNode }) {

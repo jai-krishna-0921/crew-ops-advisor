@@ -16,6 +16,7 @@ import { useMemo } from "react";
 import type { Citation, Reply } from "@/lib/contracts";
 import { collectFacts } from "@/lib/fact-link";
 import { AbstentionCard } from "@/components/answer/abstention";
+import { FigureTiles } from "@/components/answer/charts";
 import { RecommendationView } from "@/components/answer/cover-options";
 import { DataTable } from "@/components/answer/data-table";
 import { Markdown } from "@/components/answer/markdown";
@@ -31,6 +32,9 @@ const TRACE_WALL = 8;
 
 /** Beyond this many chips, provenance stops being readable and becomes noise. */
 const SOURCE_CAP = 6;
+
+/** Beyond this many tiles the strip is a wall, and the prose reads better. */
+const TILE_CAP = 6;
 
 function TraceList({ traces }: { traces: Reply["rule_traces"] }) {
   return (
@@ -87,6 +91,15 @@ export function AnswerBody({
   // way forward, so the card is the one that stays.
   const declined = reply.abstention != null;
 
+  // Tiles stand in for a structured block, so they yield to every real one.
+  const showTiles =
+    !declined &&
+    reply.facts.length > 0 &&
+    reply.tables.length === 0 &&
+    traces.length === 0 &&
+    !reply.impact &&
+    !reply.recommendation;
+
   // `_follow_ups` sets `follow_ups` to the abstention's own suggestions, which
   // the card has already rendered. Left alone that is the same three buttons
   // twice, once inside the card and once under it.
@@ -141,6 +154,20 @@ export function AnswerBody({
   return (
     <div className="space-y-4">
       {prose ? <Markdown text={prose} facts={facts} /> : null}
+
+      {/* THE FIGURES, AS FIGURES. A Tier 1 lookup answers in two sentences
+          with the numbers inside them, and a controller scanning for "how
+          much is left" had to read prose to find a quantity. The tiles put
+          the same attested values where the eye lands, without restating
+          anything: each tile is one `Fact` the reply already carried, and
+          nothing pairs or divides them. See the header of `charts.tsx` for
+          why this is tiles and not a chart.
+
+          Only when the reply has no structured block of its own. A ranked
+          recommendation or a legality report already renders its figures in
+          context, and a tile strip above those would be the same numbers
+          twice, the second time with less meaning. */}
+      {showTiles ? <FigureTiles facts={reply.facts.slice(0, TILE_CAP)} /> : null}
 
       {reply.abstention ? (
         <AbstentionCard

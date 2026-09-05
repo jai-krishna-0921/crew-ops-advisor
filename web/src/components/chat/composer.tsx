@@ -6,14 +6,22 @@
  * One field, one control. Enter sends, shift-enter breaks a line, and the
  * field grows to about five lines before it scrolls.
  *
- * IT FLOATS, and that is the difference between this and the version it
- * replaces. The old one sat in a fixed strip with a rule along the top, so
- * the conversation ended at a line and the composer was a separate region of
- * the page. Here the scroll area runs to the bottom of the window and the
- * composer sits over it on a shadow, with the page colour drawn back up
- * behind it: the last answer dissolves under the field instead of stopping at
- * an edge. Every chat worth copying does it this way, and the reason is that
- * it keeps the conversation the whole page.
+ * IT FLOATS, so the scroll area runs to the bottom of the window and the last
+ * answer dissolves under the field instead of stopping at an edge. That much
+ * is worth keeping from every chat product: it makes the conversation the
+ * whole page rather than a panel above a toolbar.
+ *
+ * WHAT IS NOT WORTH KEEPING is the shape they all share. A rounded pill with
+ * a sparkle on the left and a circular gradient arrow on the right is the
+ * single most recognisable object in consumer AI, and copying it told a crew
+ * controller they were using a chatbot. This is a command line on an
+ * operations desk: a squared field on a ruled bar, with a prompt caret in
+ * front of the cursor and a labelled control rather than a glyph. The
+ * affordance is identical and the association is gone.
+ *
+ * The button says what it does. An icon-only circle is fine when the whole
+ * world already knows the icon, and worse than a word when the product is
+ * asking somebody to commit a decision to a log.
  *
  * While a turn is running the send control becomes a stop control. A
  * controller who has read enough should not have to wait for the agent to
@@ -40,7 +48,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, SparkleIcon, StopIcon } from "@phosphor-icons/react/dist/ssr";
+import { ArrowUpIcon, StopIcon } from "@phosphor-icons/react/dist/ssr";
 
 import { cx } from "@/components/ui/tone";
 
@@ -82,20 +90,21 @@ export function Composer({
 
   return (
     <div className="px-4 pb-5 sm:px-6">
-      <div className="relative rounded-xl bg-surface shadow-float transition-shadow duration-200 ease-out-quint focus-within:shadow-pop">
-        {/* A mark, in the product's own gradient. The rule this composer was
-            built on was that plumbing and unverifiable claims do not go in
-            front of a controller: a mode switch is a decision they should not
-            have to make, and "every figure is checked" printed under an empty
-            field is a claim with nothing to check it against. Neither argument
-            reaches a decorative glyph. It says nothing, asks nothing, and is
-            aria-hidden. */}
-        <SparkleIcon
-          size={17}
-          weight="fill"
+      <div
+        className={cx(
+          "relative flex items-end gap-2.5 rounded-sm bg-surface py-2.5 pr-2.5 pl-3",
+          "shadow-float transition-shadow duration-200 ease-out-quint focus-within:shadow-pop",
+        )}
+      >
+        {/* The prompt caret. It marks where typing begins the way a terminal
+            does, which is the association this bar wants, and unlike the
+            sparkle it stood in for it makes no claim about intelligence. */}
+        <span
           aria-hidden
-          className="pointer-events-none absolute top-4 left-4 text-accent"
-        />
+          className="mono pointer-events-none shrink-0 py-0.5 text-md leading-relaxed font-semibold text-ink-3 select-none"
+        >
+          &rsaquo;
+        </span>
 
         <textarea
           ref={ref}
@@ -110,29 +119,34 @@ export function Composer({
           }}
           placeholder={placeholder}
           aria-label="Ask the advisor"
-          className="block max-h-42 w-full resize-none bg-transparent py-3.5 pr-14 pl-11 text-md leading-relaxed text-ink placeholder:text-ink-3 focus:outline-none"
+          className="block max-h-42 min-w-0 flex-1 resize-none bg-transparent py-0.5 text-md leading-relaxed text-ink placeholder:text-ink-3 focus:outline-none"
         />
 
         <button
           type="button"
           onClick={busy ? onStop : send}
           disabled={!busy && !canSend}
-          aria-label={busy ? "Stop generating" : "Send"}
           className={cx(
-            "absolute right-2.5 bottom-2.5 inline-flex size-9 items-center justify-center rounded-full",
-            "transition-[background-color,color,transform] duration-200 ease-out-quint",
+            "inline-flex shrink-0 items-center gap-1.5 rounded-xs px-3 py-1.5 text-base font-semibold",
+            "transition-[background-color,color,box-shadow] duration-200 ease-out-quint",
             "disabled:cursor-not-allowed",
             busy
               ? "bg-ink text-page"
               : canSend
-                ? "bg-[image:var(--grad-accent)] text-page shadow-panel hover:scale-105"
+                ? "bg-[image:var(--grad-accent)] text-page shadow-panel"
                 : "bg-inset text-ink-3",
           )}
         >
           {busy ? (
-            <StopIcon size={13} weight="fill" aria-hidden />
+            <>
+              <StopIcon size={11} weight="fill" aria-hidden />
+              Stop
+            </>
           ) : (
-            <ArrowUpIcon size={16} weight="bold" aria-hidden />
+            <>
+              Ask
+              <ArrowUpIcon size={12} weight="bold" aria-hidden />
+            </>
           )}
         </button>
       </div>

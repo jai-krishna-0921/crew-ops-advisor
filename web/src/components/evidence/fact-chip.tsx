@@ -16,8 +16,20 @@
  * local, because that is about the cursor.
  *
  * Rendered as a real button so it is reachable by keyboard and announced as
- * interactive. The underline is dotted rather than solid so a linked figure
- * reads as citable rather than as a hyperlink to somewhere else.
+ * interactive.
+ *
+ * WEIGHT, NOT A RULE UNDER THE WORD. Every attested figure used to carry a
+ * dotted underline, which was chosen to read as "citable" rather than as a
+ * link. At the density this product actually hits, a sentence naming two
+ * crew, a pairing, three figures and a rule id, that is six dotted rules in
+ * one line and the paragraph turns into a page of struck-through text.
+ * Setting the figure in semibold does the same job better: a controller
+ * scanning for a quantity finds it faster, because weight is what the eye
+ * picks out of prose, and nothing is drawn through the words.
+ *
+ * The underline is kept for hover and for the lit state, where it stops
+ * being decoration and becomes feedback: it appears exactly when the figure
+ * is the one being interrogated.
  */
 
 import { useState } from "react";
@@ -79,9 +91,10 @@ export function FactChip({
         onClick={() => context.pin(factKey)}
         aria-label={`${fact.label}: ${factValue(fact.value, fact.unit)}. ${PROVENANCE_LABEL[fact.provenance]}. Show in evidence.`}
         className={cx(
-          "num rounded-xs px-0.5 underline decoration-dotted decoration-1 underline-offset-[3px] transition-colors duration-100",
+          "num rounded-xs px-0.5 font-semibold transition-colors duration-100",
+          "decoration-dotted decoration-1 underline-offset-[3px] hover:underline",
           lit
-            ? "bg-accent-tint text-accent decoration-accent"
+            ? "bg-accent-tint text-accent underline decoration-accent"
             : "text-ink decoration-ink-3 hover:bg-hover",
         )}
       >

@@ -28,7 +28,8 @@ import {
   withUnit,
 } from "@/lib/format";
 import { GroundedText } from "@/components/answer/grounded-prose";
-import { MarginGauge, Pill, Token } from "@/components/ui/primitives";
+import { LimitBar } from "@/components/answer/charts";
+import { Pill, Token } from "@/components/ui/primitives";
 import { cx } from "@/components/ui/tone";
 
 const VERDICT_ICON: Record<Verdict, typeof CheckCircleIcon> = {
@@ -81,39 +82,35 @@ export function RuleTraceCard({
         </span>
       </div>
 
+      {/* THE BAR REPLACES THE THREE COLUMNS IT USED TO SIT UNDER. Limit,
+          Observed and Margin were three numbers a reader had to hold in their
+          head and compare; a bar with the ceiling marked on it is the same
+          three numbers already compared. The figures are still printed, on
+          the bar's own caption, so nothing became less checkable. Where the
+          observed value is missing there is nothing to plot, and the pair of
+          figures is stated plainly instead of drawing a bar against an
+          absence. */}
       {trace.limit !== null && trace.limit !== undefined ? (
-        <div className="mt-3 grid grid-cols-3 gap-4">
-          <Figure label="Limit" value={withUnit(trace.limit, trace.unit)} />
-          <Figure
-            label="Observed"
-            value={
-              trace.observed !== null && trace.observed !== undefined
-                ? withUnit(trace.observed, trace.unit)
-                : "not established"
-            }
-            tone={breach ? "breach" : undefined}
-          />
-          <Figure
-            label="Margin"
-            value={
+        trace.observed !== null && trace.observed !== undefined ? (
+          <LimitBar
+            observed={trace.observed}
+            limit={trace.limit}
+            unit={trace.unit}
+            tone={tone}
+            marginHuman={
               trace.margin_human ??
               (trace.margin !== null && trace.margin !== undefined
                 ? `${trace.margin > 0 ? "+" : ""}${decimal(trace.margin)}`
-                : "not established")
+                : null)
             }
-            tone={breach ? "breach" : trace.verdict === "pass" ? "pass" : undefined}
+            label={`${trace.rule_id}, ${trace.title}`}
           />
-          {trace.margin !== null && trace.margin !== undefined ? (
-            <div className="col-span-3">
-              <MarginGauge
-                margin={trace.margin}
-                limit={trace.limit}
-                tone={tone}
-                label={`${trace.rule_id}: ${trace.margin_human ?? decimal(trace.margin)}`}
-              />
-            </div>
-          ) : null}
-        </div>
+        ) : (
+          <div className="mt-3 grid grid-cols-2 gap-4">
+            <Figure label="Limit" value={withUnit(trace.limit, trace.unit)} />
+            <Figure label="Observed" value="not established" />
+          </div>
+        )
       ) : null}
 
       <div className="mt-2.5">

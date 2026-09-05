@@ -450,10 +450,11 @@ export function AdvisorConsole() {
             /* The bottom padding clears the floating composer, so the last
                answer can be scrolled fully clear of it. */
             <div className="mx-auto w-full max-w-3xl px-4 pt-4 pb-44 sm:px-6">
-              {turns.map((turn) => (
+              {turns.map((turn, index) => (
                 <TurnView
                   key={turn.localId}
                   turn={turn}
+                  index={index}
                   onAsk={ask}
                   onRetry={ask}
                   onFocus={() => setActiveId(turn.localId)}
