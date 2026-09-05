@@ -39,11 +39,29 @@ __all__ = ["ALLOWED_METHODS", "ALLOWED_ORIGINS", "create_app"]
 #: forgotten here.
 ALLOWED_METHODS = ("GET", "POST", "PATCH", "DELETE", "OPTIONS")
 
-#: The dev web app. Widen this deliberately, never with a wildcard plus
-#: credentials.
-ALLOWED_ORIGINS: tuple[str, ...] = (
+#: Where the browser is allowed to be. Widen this deliberately, never with a
+#: wildcard plus credentials.
+#:
+#: THE DEV ORIGINS ARE NOT THE ONLY ORIGINS. These two were the whole list,
+#: which is correct on a laptop and silently wrong anywhere the app is
+#: actually served from: `voice.py` refuses a WebSocket whose Origin is not
+#: here, and a browser always sends one. Deployed, that made voice the only
+#: broken feature, because same-origin HTTP never engages CORS at all, and it
+#: could not be reproduced with curl, which sends no Origin.
+#:
+#: CREWOPS_ALLOWED_ORIGINS adds to this list rather than replacing it, so
+#: configuring a deployment cannot take `make dev` away from anybody. Comma
+#: separated, scheme and host, no trailing slash:
+#:     CREWOPS_ALLOWED_ORIGINS=https://extroc-xxxx-uc.a.run.app
+_DEV_ORIGINS: tuple[str, ...] = (
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+)
+
+ALLOWED_ORIGINS: tuple[str, ...] = _DEV_ORIGINS + tuple(
+    origin
+    for raw in os.environ.get("CREWOPS_ALLOWED_ORIGINS", "").split(",")
+    if (origin := raw.strip().rstrip("/")) and origin not in _DEV_ORIGINS
 )
 
 

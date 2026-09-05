@@ -338,3 +338,32 @@ def test_prefetch_orders_long_speech_and_cancels_queued_work():
         assert set(stopped) == {"one", "two"}
 
     asyncio.run(run())
+
+
+def test_a_deployed_origin_can_be_allowed_without_a_code_change(monkeypatch):
+    """The desk does not only run on a laptop.
+
+    ALLOWED_ORIGINS was two hardcoded localhost entries, so every browser
+    WebSocket from a deployed origin was refused with 1008 while the same
+    handshake succeeded under curl, which sends no Origin at all. That is the
+    shape of a bug nobody finds from the terminal: HTTP kept working, because
+    same-origin requests never engage CORS, and only voice broke.
+
+    Widening this is deliberate configuration rather than a wildcard, and the
+    check itself stays: an origin nobody named is still refused below.
+    """
+    import importlib
+
+    from crewops.server import app as app_module
+
+    monkeypatch.setenv("CREWOPS_ALLOWED_ORIGINS", "https://extroc.example.run.app")
+    reloaded = importlib.reload(app_module)
+    try:
+        assert "https://extroc.example.run.app" in reloaded.ALLOWED_ORIGINS
+        # The laptop origins survive, so configuring a deployment does not
+        # break `make dev` for everybody else.
+        assert "http://localhost:3000" in reloaded.ALLOWED_ORIGINS
+        assert "https://untrusted.example" not in reloaded.ALLOWED_ORIGINS
+    finally:
+        monkeypatch.delenv("CREWOPS_ALLOWED_ORIGINS", raising=False)
+        importlib.reload(app_module)

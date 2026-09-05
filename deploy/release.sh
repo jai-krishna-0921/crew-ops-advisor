@@ -23,6 +23,26 @@ else
 Build it, or pass TAG=<a tag that was built>."
 fi
 
+# WHERE THE BROWSER WILL BE, which the API has to be told or voice does not
+# work. voice.py refuses a WebSocket whose Origin is not in ALLOWED_ORIGINS,
+# and a browser always sends one, so a deployment that never names itself
+# breaks voice and nothing else: same-origin HTTP does not engage CORS, and
+# curl sends no Origin, so it looks fine from a terminal.
+#
+# Cloud Run answers on BOTH hostnames, and which one a person has open is not
+# knowable from here, so both are allowed. The project-number form is
+# derivable; the hash form has to be read back off the service, and does not
+# exist yet on the very first deploy, which is what the update below is for.
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+ORIGIN_NUMBER="https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app"
+ORIGIN_HASH="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" \
+  --region "$REGION" --format='value(status.url)' 2>/dev/null || true)"
+ORIGINS="$ORIGIN_NUMBER"
+if [ -n "$ORIGIN_HASH" ] && [ "$ORIGIN_HASH" != "$ORIGIN_NUMBER" ]; then
+  ORIGINS="${ORIGINS},${ORIGIN_HASH}"
+fi
+say "allowed browser origins: ${ORIGINS}"
+
 # COST CONTROLS, READ BEFORE RAISING ANY OF THESE:
 #   --min-instances 0   the whole saving. Nobody using the demo, nothing billed.
 #   --max-instances 2   a hard ceiling on the worst case, not a capacity plan.
@@ -60,9 +80,26 @@ gcloud run deploy "$SERVICE" \
   --port 8080 \
   --cpu 1 --memory 1Gi \
   --min-instances 0 --max-instances 2 --concurrency 20 --timeout 3600 \
-  --set-env-vars "OLLAMA_HOST=https://ollama.com,CREWOPS_VOICE_PROVIDER=sarvam,CREWOPS_SARVAM_STT_MODEL=saaras:v3-realtime,CREWOPS_SARVAM_TTS_MODEL=bulbul:v3,CREWOPS_SARVAM_VOICE=shubh" \
+  `# ^@^ is gcloud's alternative delimiter. CREWOPS_ALLOWED_ORIGINS is itself
+   # a comma separated list, and under the default delimiter it would arrive
+   # as several half parsed variables.` \
+  --set-env-vars "^@^OLLAMA_HOST=https://ollama.com@CREWOPS_ALLOWED_ORIGINS=${ORIGINS}@CREWOPS_VOICE_PROVIDER=sarvam@CREWOPS_SARVAM_STT_MODEL=saaras:v3-realtime@CREWOPS_SARVAM_TTS_MODEL=bulbul:v3@CREWOPS_SARVAM_VOICE=shubh" \
   --set-secrets "OLLAMA_API_KEY=${SECRET_OLLAMA_KEY}:latest,SARVAM_API_KEY=${SECRET_SARVAM_KEY}:latest" \
   --quiet
 
 URL="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+
+# The first deploy of a brand new service could not know its own hostname,
+# because the hostname did not exist until the deploy finished. Told now, in
+# the only revision that ever needs it, so voice works on the first URL
+# anybody is given rather than on the second deploy.
+case ",${ORIGINS}," in
+  *",${URL},"*) ;;
+  *)
+    say "first deploy: telling the service about ${URL}"
+    gcloud run services update "$SERVICE" --project "$PROJECT_ID" --region "$REGION" \
+      --update-env-vars "^@^CREWOPS_ALLOWED_ORIGINS=${ORIGINS},${URL}" --quiet >/dev/null
+    ;;
+esac
+
 say "live at ${URL}"
