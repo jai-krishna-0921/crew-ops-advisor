@@ -39,7 +39,7 @@ export function AbstentionCard({
   return (
     <section
       aria-label={greeting ? "Welcome" : "The advisor declined to answer"}
-      className="rounded-md bg-surface hairline"
+      className="rounded-md pl-3.5 brand-edge"
     >
       <header className="flex flex-wrap items-center gap-2 px-3 py-2">
         {greeting ? (

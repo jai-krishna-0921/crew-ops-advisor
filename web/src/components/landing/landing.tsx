@@ -38,7 +38,7 @@
  */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   ArrowRightIcon,
   ArrowUpRightIcon,
@@ -380,8 +380,15 @@ function Nav() {
 }
 
 function Mark() {
+  const gradientId = useId();
   return (
     <svg width="20" height="20" viewBox="0 0 18 18" fill="none" aria-hidden>
+      <defs>
+        <linearGradient id={gradientId} x1="4" y1="3" x2="14" y2="15">
+          <stop offset="0%" style={{ stopColor: "var(--brand-from)" }} />
+          <stop offset="100%" style={{ stopColor: "var(--brand-to)" }} />
+        </linearGradient>
+      </defs>
       <circle
         cx="9"
         cy="9"
@@ -392,7 +399,7 @@ function Mark() {
       />
       <path
         d="M9 4.6V9l3.1 2.2"
-        stroke="var(--accent)"
+        stroke={`url(#${gradientId})`}
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -414,15 +421,18 @@ function Hero() {
         </Reveal>
 
         <Reveal delay={80}>
-          {/* WHAT IT DOES, NOT WHAT IT IS STOPPED FROM DOING. The headline
-              was "The model isn't allowed to do the maths", which is the same
-              claim phrased as a prohibition, and a prohibition asks the reader
-              to picture the failure before the product. Every figure on the
-              screen can be traced to the tool that produced it, and a receipt
-              is what anybody would call that. */}
-          <h1 className="macro mt-5 max-w-[13ch] text-[clamp(2.75rem,6.4vw,4.75rem)] text-ink">
-            Every figure comes with{" "}
-            <span className="ink-gradient">a receipt</span>
+          {/* NAMES THE PRODUCT BEFORE IT ARGUES FOR IT. The two headlines
+              before this one, "The model isn't allowed to do the maths" and
+              "Every figure comes with a receipt", both opened with the claim
+              and never said what the product was called: a reader could sit
+              through the whole hero and leave not knowing its name. A first
+              screen has one job before it has any other: say who this is.
+              The receipt claim survives as the second half of the sentence,
+              which is what it was allowed to be replaced by, not something to
+              lose. */}
+          <h1 className="macro mt-5 max-w-[16ch] text-[clamp(2.5rem,5.6vw,4.25rem)] text-ink">
+            Welcome to <span className="ink-gradient">Extroc</span>, where
+            every figure comes with a receipt
           </h1>
         </Reveal>
 
@@ -1089,17 +1099,20 @@ function Footer() {
       {/* THE WORDMARK IS THE FLOOR OF THE PAGE. Cropped by the bottom edge on
           purpose, drifting sideways against the scroll, and `aria-hidden`
           because it is a piece of furniture rather than a heading: the
-          accessible name of this page is set four times above it already. */}
+          accessible name of this page is set four times above it already.
+          `overflow-hidden` on this wrapper is load bearing rather than tidy:
+          the type size was raised for the shorter name (six letters against
+          "crew ops advisor"'s sixteen) without raising the box that holds it,
+          so the glyphs stood taller than their container and spilled upward
+          into the link columns and the credit line above. Clipping to the
+          wrapper is what turns "escaped text" back into "a wordmark cropped
+          on purpose", regardless of how the two numbers are tuned. */}
       <div
         aria-hidden
-        className="pointer-events-none relative h-[8.5vw] min-h-[3.25rem] select-none"
+        className="pointer-events-none relative h-[11vw] min-h-[4rem] overflow-hidden select-none"
       >
-        {/* Sized to just fill the window rather than to overflow it. At 17vw
-            the word ran a third of a viewport past both edges, which reads as
-            text that has escaped its container rather than as a wordmark
-            cropped on purpose. The drift is small for the same reason. */}
         <p className="drift-left macro absolute inset-x-0 -bottom-[2vw] text-center text-[16vw] leading-none whitespace-nowrap text-ink opacity-[0.06]">
-          extroc
+          Extroc
         </p>
       </div>
     </footer>
