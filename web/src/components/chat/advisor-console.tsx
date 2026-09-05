@@ -468,7 +468,7 @@ export function AdvisorConsole() {
             /* The bottom padding clears the floating composer, so the last
                answer can be scrolled fully clear of it. */
             <div className="mx-auto w-full max-w-3xl px-4 pt-4 sm:px-6" style={{ paddingBottom: composerHeight }}>
-              {turns.map((turn) => (
+              {turns.map((turn, index) => (
                 <TurnView
                   key={turn.localId}
                   turn={turn}
@@ -497,10 +497,14 @@ export function AdvisorConsole() {
         <div ref={composerArea} className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
           <div className="veil pt-12">
             <div className="pointer-events-auto mx-auto w-full max-w-3xl">
+              {/* Voice does not need the persisted text-session restore to
+                  render. Keeping this tied only to stable render state
+                  avoids changing the button's disabled attribute during
+                  hydration when `hydrated` flips in an effect. */}
               <Composer onSubmit={ask} onStop={stop} busy={busy}
                 voicePanel={<VoicePanel controller={voiceController} state={voice.state} status={voice.status}
                   statusError={voice.statusError} onRefresh={voice.refreshStatus} onProvider={voice.selectProvider}
-                  disabled={busy || !hydrated || status === "loading"} />} />
+                  disabled={busy || status === "loading"} />} />
             </div>
           </div>
           </div>
