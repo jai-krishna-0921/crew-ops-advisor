@@ -45,9 +45,7 @@ def provider_error(status: int | str) -> SpeechError:
         return SpeechError(
             "The voice model or audio settings are unavailable. Check configuration."
         )
-    return SpeechError(
-        "The voice provider could not complete the request. Retry or change provider."
-    )
+    return SpeechError("The voice provider could not complete the request. Please try again.")
 
 
 class SpeechProvider(Protocol):
@@ -153,6 +151,9 @@ class Provider:
                         )
                     )
                 await ws.send(json.dumps({"event": "speech_end"}))
+                # Manual endpointing normally finalizes on speech_end. Flush as
+                # well so buffered audio cannot wait until the session timeout.
+                await ws.send(json.dumps({"event": "flush"}))
 
             sender = asyncio.create_task(send())
             try:

@@ -1,6 +1,7 @@
 import type { Reply } from "@/lib/contracts";
 
 export type VoiceProvider = "local" | "sarvam" | "gemini";
+export type SpeechDetailLevel = "full" | "summary" | "details";
 export type VoicePhase = "off" | "preparing" | "listening" | "transcribing" | "thinking" | "speaking" | "muted" | "error";
 export interface VoiceState {
   provider: VoiceProvider;
@@ -15,12 +16,13 @@ export type SpeechReply = Pick<Reply, "headline" | "text" | "caveats" | "abstent
 export type VoiceCommand =
   | { type: "listen" | "finish" | "cancel"; request_id: string }
   | { type: "audio"; request_id: string; data: string }
-  | { type: "speak"; request_id: string; reply: SpeechReply };
+  | { type: "speak"; request_id: string; reply: SpeechReply; detail_level?: SpeechDetailLevel };
 export type VoiceEvent =
   | { type: "ready"; provider: VoiceProvider }
   | { type: "partial" | "final"; request_id: string; text: string }
   | { type: "audio"; request_id: string; data: string; sample_rate: number }
-  | { type: "complete" | "cancelled"; request_id: string }
+  | { type: "complete"; request_id: string; has_more?: boolean }
+  | { type: "cancelled"; request_id: string }
   | { type: "error"; request_id: string; message: string };
 export interface VoiceStatus {
   default_provider: VoiceProvider;

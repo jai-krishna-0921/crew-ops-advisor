@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Conversation } from "@/lib/use-conversation";
 import { VoiceController } from "./controller";
 import { connectVoice, createVoiceAudio, voiceStatus } from "./browser";
-import type { VoiceProvider, VoiceStatus } from "./types";
+import type { VoiceStatus } from "./types";
 
 export function useVoice(conversation: Conversation) {
   const [controller] = useState(() => new VoiceController({
@@ -18,14 +18,10 @@ export function useVoice(conversation: Conversation) {
 
   useEffect(() => {
     const abort = new AbortController();
-    let saved: string | null = null;
-    try { saved = localStorage.getItem("crewops.voice.provider.v1"); } catch { /* Optional preference. */ }
     void voiceStatus(abort.signal).then((value) => {
       setStatus(value); setStatusError(false);
       if (controller.snapshot().phase === "off") {
-        const selection = ["sarvam", "gemini"].includes(saved ?? "")
-          ? saved as VoiceProvider : value.default_provider;
-        controller.selectProvider(selection);
+        controller.selectProvider(value.default_provider);
       }
     }).catch(() => { if (!abort.signal.aborted) setStatusError(true); });
     return () => abort.abort();
@@ -45,10 +41,6 @@ export function useVoice(conversation: Conversation) {
     return () => { document.removeEventListener("visibilitychange", hidden); controller.end(); };
   }, [controller]);
 
-  const selectProvider = (provider: VoiceProvider) => {
-    controller.selectProvider(provider);
-    try { localStorage.setItem("crewops.voice.provider.v1", provider); } catch { /* Optional preference. */ }
-  };
-  return { controller, state, status, statusError, selectProvider,
+  return { controller, state, status, statusError,
     refreshStatus: () => setRefresh((value) => value + 1) };
 }

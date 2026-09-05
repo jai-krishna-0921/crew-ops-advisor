@@ -83,6 +83,7 @@ def test_streaming_transcription_wire_contract(monkeypatch, name):
             assert "endpointing=manual" in calls[0][0]
             assert socket.sent[0] == {"event": "speech_start"}
             assert base64.b64decode(socket.sent[1]["audio"]) == b"\x01\x00" * 1600
+            assert socket.sent[-1] == {"event": "flush"}
 
     asyncio.run(run())
 

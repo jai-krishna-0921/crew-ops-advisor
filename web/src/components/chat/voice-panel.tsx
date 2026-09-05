@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { ArrowUpIcon, MicrophoneIcon, MicrophoneSlashIcon, WaveformIcon, XIcon, HandPalmIcon } from "@phosphor-icons/react/dist/ssr";
 import type { VoiceController } from "@/lib/voice/controller";
-import type { VoicePhase, VoiceProvider, VoiceState, VoiceStatus } from "@/lib/voice/types";
+import type { VoicePhase, VoiceState, VoiceStatus } from "@/lib/voice/types";
 import { cx } from "@/components/ui/tone";
 
 const LABELS: Record<VoicePhase, string> = {
@@ -14,12 +14,12 @@ const HINTS: Record<VoicePhase, string> = {
   off: "Speak naturally. Keep the conversation going.", preparing: "Getting your voice ready…",
   listening: "I'm listening. Pause when you're ready to send.", transcribing: "Turning your words into a question…",
   thinking: "Your advisor is working on the answer…", speaking: "Tap interrupt when you want to speak.",
-  muted: "Unmute whenever you're ready to continue.", error: "You can retry, switch providers, or keep typing.",
+  muted: "Unmute whenever you're ready to continue.", error: "You can retry or keep typing.",
 };
 
-export function VoicePanel({ controller, state, status, statusError, onRefresh, onProvider, disabled }: {
+export function VoicePanel({ controller, state, status, statusError, onRefresh, disabled }: {
   controller: VoiceController; state: VoiceState; status: VoiceStatus | null;
-  statusError: boolean; onRefresh: () => void; onProvider: (provider: VoiceProvider) => void; disabled: boolean;
+  statusError: boolean; onRefresh: () => void; disabled: boolean;
 }) {
   const expanded = state.phase !== "off";
   const selected = status?.providers.find((provider) => provider.id === state.provider);
@@ -31,12 +31,6 @@ export function VoicePanel({ controller, state, status, statusError, onRefresh, 
         <WaveformIcon size={18} weight="bold" aria-hidden className="text-accent" />
         <span role="status" aria-live="polite" className="text-base font-semibold text-ink">{LABELS[state.phase]}</span>
         <div className="ml-auto flex items-center gap-2">
-          <select aria-label="Voice provider" value={state.provider}
-            onChange={(event) => onProvider(event.target.value as VoiceProvider)}
-            className="max-w-40 cursor-pointer rounded-full bg-inset px-2 py-1 text-xs text-ink-2 focus-visible:outline-2 focus-visible:outline-accent">
-            <option value="sarvam">Sarvam · Cloud</option>
-            <option value="gemini">Gemini · Cloud</option>
-          </select>
           {inactive ? (
             <button type="button" disabled={disabled} onClick={() => { onRefresh(); void controller.start(); }}
               aria-label={state.phase === "error" ? "Retry voice conversation" : "Start voice conversation"}

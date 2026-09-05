@@ -5,6 +5,8 @@ import type { VoiceAudio, VoiceEvent } from "./types";
 
 const reply = { text: "C-1042 is at BLR.", verification: { status: "verified" },
   caveats: [], headline: null, abstention: null } as unknown as Reply;
+const detailedReply = { ...reply, headline: "C-1042 has 39.07h remaining",
+  text: "Check P-2291 on 2026-09-15.", caveats: ["Times are UTC."] } as Reply;
 
 function setup() {
   let receive: (event: VoiceEvent) => void = () => {};
@@ -47,17 +49,76 @@ describe("voice conversation lifecycle", () => {
     expect(s.audio.play).toHaveBeenCalledOnce();
   });
 
+  it("speaks the summary first and reads details after an affirmative answer", async () => {
+    const s = setup();
+    await s.controller.start();
+    s.controller.submit("Check C-1042");
+    s.controller.settle("turn-1", detailedReply);
+    const summary = s.send.mock.calls.find(([c]) => c.type === "speak")![0];
+    expect(summary.detail_level).toBe("summary");
+    expect(summary.reply.headline).toBe("C-1042 has 39.07h remaining");
+    s.receive({ type: "complete", request_id: summary.request_id, has_more: true });
+    await vi.waitFor(() => expect(s.controller.snapshot().phase).toBe("listening"));
+
+    for (let i = 0; i < 4; i++) s.frame(0.15);
+    for (let i = 0; i < 13; i++) s.frame(0);
+    const listen = s.send.mock.calls.filter(([c]) => c.type === "listen").at(-1)![0];
+    s.receive({ type: "final", request_id: listen.request_id, text: "Yes, tell me more" });
+
+    const speeches = s.send.mock.calls.filter(([c]) => c.type === "speak");
+    expect(speeches).toHaveLength(2);
+    expect(speeches[1][0].detail_level).toBe("details");
+    expect(s.ask).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a response other than yes as a new advisor question", async () => {
+    const s = setup();
+    await s.controller.start();
+    s.controller.submit("Check C-1042");
+    s.controller.settle("turn-1", detailedReply);
+    const summary = s.send.mock.calls.find(([c]) => c.type === "speak")![0];
+    s.receive({ type: "complete", request_id: summary.request_id, has_more: true });
+    await vi.waitFor(() => expect(s.controller.snapshot().phase).toBe("listening"));
+
+    for (let i = 0; i < 4; i++) s.frame(0.15);
+    for (let i = 0; i < 13; i++) s.frame(0);
+    const listen = s.send.mock.calls.filter(([c]) => c.type === "listen").at(-1)![0];
+    s.receive({ type: "final", request_id: listen.request_id, text: "Who is on reserve?" });
+
+    expect(s.ask).toHaveBeenLastCalledWith("Who is on reserve?");
+    expect(s.send.mock.calls.filter(([c]) => c.type === "speak")).toHaveLength(1);
+  });
+
+  it("skips the offered details after a negative answer", async () => {
+    const s = setup();
+    await s.controller.start();
+    s.controller.submit("Check C-1042");
+    s.controller.settle("turn-1", detailedReply);
+    const summary = s.send.mock.calls.find(([c]) => c.type === "speak")![0];
+    s.receive({ type: "complete", request_id: summary.request_id, has_more: true });
+    await vi.waitFor(() => expect(s.controller.snapshot().phase).toBe("listening"));
+
+    for (let i = 0; i < 4; i++) s.frame(0.15);
+    for (let i = 0; i < 13; i++) s.frame(0);
+    const listen = s.send.mock.calls.filter(([c]) => c.type === "listen").at(-1)![0];
+    s.receive({ type: "final", request_id: listen.request_id, text: "No thanks" });
+
+    expect(s.ask).toHaveBeenCalledTimes(1);
+    expect(s.send.mock.calls.filter(([c]) => c.type === "speak")).toHaveLength(1);
+    expect(s.controller.snapshot().phase).toBe("listening");
+  });
+
   it("ignores empty and stale transcripts after ending or changing providers", async () => {
     const s = setup();
     await s.controller.start();
     for (let i = 0; i < 4; i++) s.frame(0.1);
     const id = s.send.mock.calls[0][0].request_id;
-    s.controller.selectProvider("sarvam");
+    s.controller.selectProvider("gemini");
     s.receive({ type: "final", request_id: id, text: "stale question" });
     expect(s.ask).not.toHaveBeenCalled();
     expect(s.close).toHaveBeenCalled();
     expect(s.audio.close).toHaveBeenCalled();
-    expect(s.controller.snapshot().provider).toBe("sarvam");
+    expect(s.controller.snapshot().provider).toBe("gemini");
   });
 
   it("interrupts speech without replaying a late completion", async () => {

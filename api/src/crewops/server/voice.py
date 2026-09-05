@@ -21,6 +21,12 @@ ProviderFactory = Callable[[VoiceProvider, VoiceConfig], SpeechProvider]
 MAX_AUDIO = 16000 * 2 * 60
 
 
+def _timeout_message(kind: str) -> str:
+    if kind == "listen":
+        return "Transcription timed out. Please try speaking again."
+    return "Speech playback timed out. Please try again."
+
+
 def _settings(connection: Request | WebSocket) -> VoiceConfig:
     config: VoiceConfig = getattr(connection.app.state, "voice_config", VoiceConfig())
     return config
@@ -148,7 +154,7 @@ async def voice_session(ws: WebSocket, provider: VoiceProvider = "sarvam") -> No
         request_id: str, command: dict[str, Any], audio_queue: asyncio.Queue[bytes | None] | None
     ) -> None:
         try:
-            async with asyncio.timeout(config.timeout + 60):
+            async with asyncio.timeout(config.timeout):
                 if command["type"] == "listen":
 
                     async def audio() -> AsyncIterator[bytes]:
@@ -162,7 +168,11 @@ async def voice_session(ws: WebSocket, provider: VoiceProvider = "sarvam") -> No
                     result = await adapter.transcribe(audio(), transcript)
                     await emit("final", request_id, text=result)
                 else:
-                    prose = speech_text(SpokenReply.model_validate(command.get("reply")))
+                    reply = SpokenReply.model_validate(command.get("reply"))
+                    detail_level = command.get("detail_level", "full")
+                    if detail_level not in {"full", "summary", "details"}:
+                        raise ValueError
+                    prose = speech_text(reply, detail_level=detail_level)
                     if not prose:
                         raise SpeechError("This answer has no verified prose to read aloud.")
                     received = False
@@ -183,15 +193,16 @@ async def voice_session(ws: WebSocket, provider: VoiceProvider = "sarvam") -> No
                         raise SpeechError(
                             "The voice provider returned incomplete audio. Try again."
                         )
-                    await emit("complete", request_id)
+                    complete: dict[str, Any] = {}
+                    if detail_level == "summary":
+                        complete["has_more"] = bool(speech_text(reply, detail_level="details"))
+                    await emit("complete", request_id, **complete)
         except SpeechError as exc:
             await emit("error", request_id, message=str(exc))
         except InvalidStatus as exc:
             await emit("error", request_id, message=str(provider_error(exc.response.status_code)))
         except TimeoutError:
-            await emit(
-                "error", request_id, message="Voice processing timed out. Retry or change provider."
-            )
+            await emit("error", request_id, message=_timeout_message(command["type"]))
         except Exception:
             # Never serialize upstream bodies or exceptions: URLs and headers
             # can carry API keys. Operational details stay out of voice errors.

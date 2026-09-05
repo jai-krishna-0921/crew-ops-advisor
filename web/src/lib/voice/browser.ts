@@ -17,7 +17,7 @@ export function connectVoice(provider: VoiceProvider, event: (event: VoiceEvent)
     let ready = false;
     let intentional = false;
     const timer = setTimeout(() => {
-      close(); reject(new Error("Voice connection timed out. Check the provider and try again."));
+      close(); reject(new Error("Voice connection timed out. Check voice configuration and try again."));
     }, 15000);
     const close = () => { intentional = true; clearTimeout(timer); socket.close(); };
     const abort = () => { close(); reject(new DOMException("Voice cancelled", "AbortError")); };

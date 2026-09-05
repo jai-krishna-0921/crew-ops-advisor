@@ -503,7 +503,7 @@ export function AdvisorConsole() {
                   hydration when `hydrated` flips in an effect. */}
               <Composer onSubmit={ask} onStop={stop} busy={busy}
                 voicePanel={<VoicePanel controller={voiceController} state={voice.state} status={voice.status}
-                  statusError={voice.statusError} onRefresh={voice.refreshStatus} onProvider={voice.selectProvider}
+                  statusError={voice.statusError} onRefresh={voice.refreshStatus}
                   disabled={busy || status === "loading"} />} />
             </div>
           </div>

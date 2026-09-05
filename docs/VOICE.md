@@ -1,10 +1,16 @@
 # Voice conversation
 
-Open `/ask`, choose Sarvam or Gemini above the composer, and press Start
-or the microphone button. Speak normally and pause to send. The advisor reads
-its completed answer, then listens for your next question in the same thread.
+Open `/ask` and press Start or the microphone button. The server-configured
+default provider is used automatically. Speak normally and pause to send. The advisor reads
+the answer summary, then listens for your response in the same thread.
 The spectrum follows microphone input and playback. Partial cloud transcripts
 are previews; only the finalized utterance is sent as a question.
+
+In hands-free mode, the advisor reads the verified headline first and asks if
+you want more information. Say yes, continue, or ask for details to hear the
+remaining verified prose and caveats. Say no to skip it, or ask another question
+to move on immediately. The existing Read aloud control still reads the full
+answer because it does not request microphone access.
 
 Mute pauses the microphone. Interrupt stops playback and resumes listening.
 End releases the microphone and connection. Switching providers or conversations,
@@ -22,8 +28,7 @@ CREWOPS_VOICE_PROVIDER=sarvam
 ```
 
 `CREWOPS_VOICE_PROVIDER` accepts `sarvam` or `gemini`; the default is `sarvam`.
-The browser remembers an explicit selection. Each session uses one
-provider for both transcription and speech. There is no automatic provider
+Each session uses the configured provider for both transcription and speech. There is no automatic provider
 fallback. Cloud providers work without installing or running VoiceKit.
 
 Keys stay on the server. No key is placed in `NEXT_PUBLIC_*`, browser storage,
@@ -100,8 +105,9 @@ seconds of silence or at the 60-second limit. Capture is disabled during
 transcription completion, thinking, and playback, avoiding self-transcription.
 
 Final transcripts call the existing `/api/chat`. No voice provider receives the
-operational dataset or produces an answer. Speech selects the existing verified
-or repaired answer prose and caveats; refusals use the abstention explanation.
+operational dataset or produces an answer. Hands-free speech selects the existing
+verified or repaired headline first, then selects the remaining prose and caveats
+only after an affirmative response. Refusals use the abstention explanation.
 Rejected drafts are not spoken. Tables, evidence, and tool traces remain visible.
 Long replies are split without changing identifiers, values, or dates.
 

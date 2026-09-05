@@ -30,6 +30,23 @@ def test_speech_preserves_values_and_caveats():
     assert text == "C-1042 has 39.07h remaining.\n\nCheck P-2291 on 2026-09-15.\n\nTimes are UTC."
 
 
+def test_summary_speech_reads_headline_then_offers_verified_details():
+    text = speech_text(reply(), detail_level="summary")
+    assert text == "C-1042 has 39.07h remaining.\n\nWould you like more information?"
+
+
+def test_detail_speech_continues_without_repeating_summary():
+    text = speech_text(reply(), detail_level="details")
+    assert text == "Check P-2291 on 2026-09-15.\n\nTimes are UTC."
+    assert "39.07h remaining" not in text
+
+
+def test_summary_without_more_information_does_not_offer_it():
+    concise = reply(headline=None, text="C-1042 is at BLR.", caveats=[])
+    assert speech_text(concise, detail_level="summary") == "C-1042 is at BLR."
+    assert speech_text(concise, detail_level="details") == ""
+
+
 def test_markdown_cleanup_preserves_comparisons_and_omits_tables():
     text = speech_text(
         reply(
@@ -152,6 +169,26 @@ def test_socket_transcription_and_speech_share_provider():
         assert ws.receive_json() == {"type": "complete", "request_id": "r1"}
 
 
+def test_socket_summary_reports_when_detail_is_available():
+    client, _ = client_for()
+    with client, client.websocket_connect("/api/voice/session?provider=sarvam") as ws:
+        ws.receive_json()
+        ws.send_json(
+            {
+                "type": "speak",
+                "request_id": "r1",
+                "detail_level": "summary",
+                "reply": reply().model_dump(),
+            }
+        )
+        assert ws.receive_json()["type"] == "audio"
+        assert ws.receive_json() == {
+            "type": "complete",
+            "request_id": "r1",
+            "has_more": True,
+        }
+
+
 def test_cancel_discards_inflight_speech_and_allows_next_turn():
     client, fake = client_for()
     with client, client.websocket_connect("/api/voice/session?provider=local") as ws:
@@ -176,6 +213,19 @@ def test_bad_audio_is_recoverable_and_does_not_echo_payload():
         error = ws.receive_json()
         assert error["type"] == "error"
         assert "secret" not in str(error)
+
+
+@pytest.mark.parametrize(
+    "command, expected",
+    [
+        ({"type": "listen"}, "Transcription timed out. Please try speaking again."),
+        ({"type": "speak"}, "Speech playback timed out. Please try again."),
+    ],
+)
+def test_voice_timeout_message_names_the_failed_stage(command, expected):
+    from crewops.server.voice import _timeout_message
+
+    assert _timeout_message(command["type"]) == expected
 
 
 def test_status_never_exposes_keys_or_assumes_cloud_connectivity():
