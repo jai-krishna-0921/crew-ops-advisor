@@ -519,6 +519,19 @@ def health(
     table.add_row("Mode", "agent" if key else "deterministic")
     table.add_row("Model", cfg.model if key else "not used on the deterministic path")
 
+    # WHY, not just what. "Mode: deterministic" is the symptom a teammate is
+    # already looking at; what they need is which files were read and which
+    # value was ignored. Never prints a key.
+    from crewops.agent import providers as _providers
+
+    report = _providers.diagnose()
+    table.add_row("Why", Text(report.detail, style="" if report.provider else "yellow"))
+    if report.skipped:
+        table.add_row(
+            "Placeholders ignored",
+            Text(", ".join(report.skipped), style="red"),
+        )
+
     try:
         tools = load_tools(data_dir)
         summary = tools.get_world_summary()

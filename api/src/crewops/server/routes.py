@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
+from crewops.agent import providers
 from crewops.agent.toolspecs import call_tool
 from crewops.contracts import ALL_RULE_IDS, ChatRequest, ToolEnvelope
 from crewops.server.deps import AppState
@@ -88,10 +89,21 @@ class Health(BaseModel):
     mode: str
     detail: str | None = None
 
+    #: WHY the mode is what it is, in words a teammate can act on.
+    #:
+    #: This endpoint used to answer `llm_configured: false, detail: null`, which
+    #: is the truth and none of the explanation. Someone who has put a key in a
+    #: file and is watching the console answer offline needs to be told which
+    #: files were read and which value was ignored. Never contains a key.
+    llm_detail: str = ""
+    env_files_searched: list[str] = Field(default_factory=list)
+    ignored_placeholders: list[str] = Field(default_factory=list)
+
 
 @router.get("/health")
 async def health(request: Request) -> Health:
     state = _state(request)
+    report = providers.diagnose()
     return Health(
         status="ok" if state.dataset_loaded else "degraded",
         dataset_loaded=state.dataset_loaded,
@@ -99,6 +111,9 @@ async def health(request: Request) -> Health:
         llm_configured=state.llm_configured,
         mode=state.mode,
         detail=state.dataset_error,
+        llm_detail=report.detail,
+        env_files_searched=list(report.searched),
+        ignored_placeholders=list(report.skipped),
     )
 
 
