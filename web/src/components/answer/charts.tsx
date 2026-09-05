@@ -37,9 +37,9 @@
  * each value on its own and claims no relationship between them.
  */
 
-import type { CostBreakdown, Fact, RuleUnit } from "@/lib/contracts";
+import type { CostBreakdown, Fact, FlightRef, RuleUnit } from "@/lib/contracts";
 import type { Tone } from "@/lib/format";
-import { factValue, inr, withUnit } from "@/lib/format";
+import { clock, factValue, inr, plural, withUnit } from "@/lib/format";
 import { FactChip } from "@/components/evidence/fact-chip";
 import { cx, TONE } from "@/components/ui/tone";
 
@@ -221,6 +221,134 @@ export function CostBars({ cost }: { cost: CostBreakdown }) {
       )}
       {cost.note ? <p className="mt-1.5 text-xs text-ink-3">{cost.note}</p> : null}
     </div>
+  );
+}
+
+/* --------------------------------------------------- option comparison */
+
+/**
+ * The ranked options, side by side on cost.
+ *
+ * A controller choosing between four legal options is answering "what does
+ * each of these cost me", and until now that meant opening four cards and
+ * holding four rupee figures in their head. One row per option, scaled
+ * against the dearest, answers it in a glance and still names every figure.
+ *
+ * Cost is the only axis drawn. It is the one quantity every option carries
+ * in the same unit, and the ranking is not a function of it: the engine
+ * ranks on `ranking_basis`, which weighs legality, reachability, coverage
+ * and disruption too. So the rows stay in rank order and the bars describe
+ * cost alone, rather than implying the cheapest is the recommendation.
+ */
+export function OptionCostCompare({
+  options,
+}: {
+  options: { rank: number; crew_id: string; crew_name: string; cost: CostBreakdown }[];
+}) {
+  // One option is not a comparison.
+  if (options.length < 2) return null;
+
+  const dearest = Math.max(...options.map((option) => option.cost.total_inr));
+
+  return (
+    <figure className="rounded-md bg-surface px-4 py-3.5 hairline">
+      <figcaption className="label-micro">Cost, option by option</figcaption>
+      <ul className="mt-2.5 space-y-2">
+        {options.map((option) => {
+          const width = dearest > 0 ? (option.cost.total_inr / dearest) * 100 : 0;
+          return (
+            <li key={option.crew_id} className="flex items-center gap-3">
+              <span className="num w-12 shrink-0 text-xs text-ink-3">
+                #{option.rank} {option.crew_id}
+              </span>
+              <span className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-inset">
+                <span
+                  aria-hidden
+                  className={cx(
+                    "block h-full rounded-full transition-[width] duration-500 ease-out-quint",
+                    option.rank === 1
+                      ? "bg-[image:var(--grad-brand)]"
+                      : "bg-na",
+                  )}
+                  style={{ width: `${Math.max(3, width)}%` }}
+                />
+              </span>
+              <span className="num w-24 shrink-0 text-right text-base font-semibold text-ink">
+                {inr(option.cost.total_inr)}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </figure>
+  );
+}
+
+/* ------------------------------------------------------ flight timeline */
+
+/**
+ * Flights on a shared clock.
+ *
+ * A list of uncrewed flights with departure and arrival times printed on it
+ * is a list of times; laid on one axis it is a picture of a hole in the day,
+ * and where the hole is happens to be the whole question. Left edge is the
+ * earliest departure in the set, right edge the latest arrival, both taken
+ * from the flights themselves rather than from a day boundary, so the axis
+ * is exactly as wide as the disruption.
+ *
+ * Positions are computed from the supplied timestamps and the times are
+ * printed from the same ones. No duration is displayed: a "3h 40m" label
+ * would be this component subtracting two figures and putting the result on
+ * screen, and nothing in the payload attests it.
+ */
+export function FlightTimeline({ flights }: { flights: FlightRef[] }) {
+  const spans = flights
+    .map((flight) => ({
+      flight,
+      from: Date.parse(flight.departure),
+      to: Date.parse(flight.arrival),
+    }))
+    // A flight whose times will not parse is dropped from the drawing rather
+    // than placed at an arbitrary position, and the caller still lists it.
+    .filter((span) => Number.isFinite(span.from) && Number.isFinite(span.to));
+
+  if (spans.length === 0) return null;
+
+  const start = Math.min(...spans.map((span) => span.from));
+  const end = Math.max(...spans.map((span) => span.to));
+  const width = end - start || 1;
+
+  return (
+    <figure className="rounded-md bg-surface px-4 py-3.5 hairline">
+      <figcaption className="label-micro">
+        {plural(spans.length, "flight")}, on one clock
+      </figcaption>
+      <ul className="mt-2.5 space-y-1.5">
+        {spans.map(({ flight, from, to }) => (
+          <li key={flight.flight_no} className="flex items-center gap-3">
+            <span className="ident w-32 shrink-0 truncate text-xs text-ink">
+              {flight.flight_no}
+              <span className="ml-1.5 text-ink-3">
+                {flight.origin}&ndash;{flight.destination}
+              </span>
+            </span>
+            <span className="relative h-5 min-w-0 flex-1 rounded-xs bg-inset">
+              <span
+                aria-hidden
+                className="absolute inset-y-0 rounded-xs bg-[image:var(--grad-brand)] opacity-80"
+                style={{
+                  left: `${((from - start) / width) * 100}%`,
+                  width: `${Math.max(1.5, ((to - from) / width) * 100)}%`,
+                }}
+              />
+            </span>
+            <span className="num w-24 shrink-0 text-right text-xs text-ink-2">
+              {clock(flight.departure)}&ndash;{clock(flight.arrival)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </figure>
   );
 }
 

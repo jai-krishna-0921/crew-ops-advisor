@@ -11,13 +11,14 @@
  * is worth keeping from every chat product: it makes the conversation the
  * whole page rather than a panel above a toolbar.
  *
- * WHAT IS NOT WORTH KEEPING is the shape they all share. A rounded pill with
- * a sparkle on the left and a circular gradient arrow on the right is the
- * single most recognisable object in consumer AI, and copying it told a crew
- * controller they were using a chatbot. This is a command line on an
- * operations desk: a squared field on a ruled bar, with a prompt caret in
- * front of the cursor and a labelled control rather than a glyph. The
- * affordance is identical and the association is gone.
+ * WHAT MADE IT GENERIC was never the rounding. It was the furniture: a
+ * sparkle on the left, standing in for "this is AI", and a circular gradient
+ * arrow on the right, which together are the single most recognisable object
+ * in consumer AI. Those are gone. A prompt caret marks where typing begins,
+ * the way a terminal does, and the control carries a word.
+ *
+ * The pill shape stays, because a soft capsule is a genuinely good shape for
+ * a single line of input and it is not what made the old bar look borrowed.
  *
  * The button says what it does. An icon-only circle is fine when the whole
  * world already knows the icon, and worse than a word when the product is
@@ -92,7 +93,7 @@ export function Composer({
     <div className="px-4 pb-5 sm:px-6">
       <div
         className={cx(
-          "relative flex items-end gap-2.5 rounded-sm bg-surface py-2.5 pr-2.5 pl-3",
+          "relative flex items-end gap-2.5 rounded-[1.6rem] bg-surface py-2.5 pr-2.5 pl-4",
           "shadow-float transition-shadow duration-200 ease-out-quint focus-within:shadow-pop",
         )}
       >
@@ -127,7 +128,7 @@ export function Composer({
           onClick={busy ? onStop : send}
           disabled={!busy && !canSend}
           className={cx(
-            "inline-flex shrink-0 items-center gap-1.5 rounded-xs px-3 py-1.5 text-base font-semibold",
+            "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-base font-semibold",
             "transition-[background-color,color,box-shadow] duration-200 ease-out-quint",
             "disabled:cursor-not-allowed",
             busy

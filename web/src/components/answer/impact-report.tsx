@@ -19,6 +19,7 @@ import {
   SEVERITY_TONE,
   shortDate,
 } from "@/lib/format";
+import { FlightTimeline } from "@/components/answer/charts";
 import { GroundedText } from "@/components/answer/grounded-prose";
 import { Pill, Token } from "@/components/ui/primitives";
 import { cx, TONE } from "@/components/ui/tone";
@@ -56,6 +57,12 @@ export function ImpactReportView({ impact }: { impact: ImpactReport }) {
       {impact.uncrewed_flights.length > 0 ? (
         <div className="space-y-1.5">
           <SectionHead title="Uncrewed" meta={impact.trigger} />
+          {/* The same flights twice, on purpose, and not as decoration. The
+              timeline answers "when is the hole in the day", which the rows
+              underneath can only answer by reading six pairs of times and
+              comparing them; the rows answer "which aircraft, which
+              stations, how many aboard", which the timeline cannot show. */}
+          <FlightTimeline flights={impact.uncrewed_flights} />
           {/* A gap grid, not a bordered list. The divisions are the ground
               showing between the rows, so there is nothing to keep in sync
               and nothing to clear off the last child. */}

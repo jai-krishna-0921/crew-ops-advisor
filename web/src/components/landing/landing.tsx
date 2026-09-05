@@ -1096,22 +1096,31 @@ function Footer() {
         </p>
       </div>
 
-      {/* THE WORDMARK IS THE FLOOR OF THE PAGE. Cropped by the bottom edge on
-          purpose, drifting sideways against the scroll, and `aria-hidden`
-          because it is a piece of furniture rather than a heading: the
-          accessible name of this page is set four times above it already.
+      {/* THE WORDMARK IS THE FLOOR OF THE PAGE, and now it is a plinth the
+          page stands on rather than a watermark bled into it. At six percent
+          of the ink colour on the page's own cream it read as a printing
+          fault, something that had failed to load; the name of the product
+          should not be the faintest thing on its own landing page. Dropped
+          onto a dark band it is simply the end of the document, which is
+          what the shape was always trying to say.
+
+          Still cropped by the bottom edge on purpose, still drifting
+          sideways against the scroll, still `aria-hidden`, because it is
+          furniture rather than a heading and the accessible name of this
+          page is set four times above it.
+
           `overflow-hidden` on this wrapper is load bearing rather than tidy:
           the type size was raised for the shorter name (six letters against
-          "crew ops advisor"'s sixteen) without raising the box that holds it,
-          so the glyphs stood taller than their container and spilled upward
-          into the link columns and the credit line above. Clipping to the
-          wrapper is what turns "escaped text" back into "a wordmark cropped
-          on purpose", regardless of how the two numbers are tuned. */}
+          "crew ops advisor"'s sixteen) without raising the box that holds
+          it, so the glyphs stood taller than their container and spilled
+          upward into the link columns and the credit line above. Clipping to
+          the wrapper is what turns "escaped text" back into "a wordmark
+          cropped on purpose", regardless of how the two numbers are tuned. */}
       <div
         aria-hidden
-        className="pointer-events-none relative h-[11vw] min-h-[4rem] overflow-hidden select-none"
+        className="pointer-events-none relative mt-6 h-[11vw] min-h-[4rem] overflow-hidden bg-ink select-none"
       >
-        <p className="drift-left macro absolute inset-x-0 -bottom-[2vw] text-center text-[16vw] leading-none whitespace-nowrap text-ink opacity-[0.06]">
+        <p className="drift-left macro absolute inset-x-0 -bottom-[2vw] text-center text-[16vw] leading-none whitespace-nowrap text-page opacity-90">
           Extroc
         </p>
       </div>

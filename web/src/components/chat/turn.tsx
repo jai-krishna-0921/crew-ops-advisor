@@ -29,6 +29,7 @@
 
 import {
   ArrowClockwiseIcon,
+  ArrowElbowDownRightIcon,
   MagnifyingGlassIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react/dist/ssr";
@@ -41,6 +42,7 @@ import { Thinking } from "@/components/ai/elements";
 export function TurnView({
   turn,
   index,
+  followsUp = false,
   onAsk,
   onRetry,
   onFocus,
@@ -50,6 +52,8 @@ export function TurnView({
   turn: TurnState;
   /** Position in the thread, zero based. Drawn as the entry's number. */
   index: number;
+  /** This question is one the previous answer proposed, taken up. */
+  followsUp?: boolean;
   onAsk: (question: string) => void;
   onRetry: (question: string) => void;
   onFocus: () => void;
@@ -81,10 +85,23 @@ export function TurnView({
       <div className="min-w-0">
         {/* The question is the entry's heading, not something a participant
             said, so it is set in the display face at the size of a section
-            title and given a rule under it. */}
-        <h2 className="macro border-b border-line-soft pb-2.5 text-[1.2rem] leading-snug text-ink">
-          {turn.question}
-        </h2>
+            title and given a rule under it.
+
+            A question the last answer proposed says so above itself. Without
+            it every entry opens identically and a thread reads as a stack of
+            unrelated enquiries, when half of them are the controller pulling
+            on a thread the system handed them. */}
+        <div className="border-b border-line-soft pb-2.5">
+          {followsUp ? (
+            <p className="mb-1 flex items-center gap-1.5 text-2xs font-semibold tracking-[0.08em] text-ink-3 uppercase">
+              <ArrowElbowDownRightIcon size={11} weight="bold" aria-hidden />
+              Follow-up
+            </p>
+          ) : null}
+          <h2 className="macro text-[1.2rem] leading-snug text-ink">
+            {turn.question}
+          </h2>
+        </div>
 
       {reply ? (
         <div className="mt-5 space-y-4">

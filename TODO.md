@@ -298,6 +298,56 @@ request for decoration).
 - [x] Fix: an invisible full-viewport backdrop swallowed every click meant
       for the menu it was supposed to dismiss
 
+## Landed: Extroc's own identity
+
+- [x] Renamed to Extroc everywhere the product names itself. The hackathon's
+      name and the dataset's name are dCortex's and stay as they are.
+- [x] A brand gradient (indigo into warm amber) kept separate from the action
+      gradient, so the logo stops reading as another call to action. On the
+      mark's clock hand via an SVG gradient, and on `brand-edge`.
+- [x] `brand-edge`: the accent rail for surfaces where the product speaks in
+      its own voice (the reasoning trace, the greeting) rather than reporting
+      a computed result. Deliberately not on data tables.
+- [x] The reasoning trace stops being a grey box with a "Show"/"Hide" toggle,
+      which was ChatGPT's collapsible thought panel in all but name, and uses
+      the product's own caret disclosure.
+- [x] Landing footer: the wordmark on a dark plinth instead of six percent
+      ink on cream, where it read as a printing fault.
+
+## Landed: elements instead of prose
+
+- [x] `LimitBar`: a rule trace's observed against its limit, with the ceiling
+      marked and the overshoot painted past it. A breach reads before the
+      words do.
+- [x] `CostBars`, above one line item only, since a lone bar is full width
+      whatever the number says.
+- [x] `OptionCostCompare`: the ranked options side by side on cost. Cost
+      only, because the ranking is not a function of it.
+- [x] `FlightTimeline`: uncrewed flights on one clock, so the shape of the
+      hole in the day is visible rather than inferred from six pairs of
+      times.
+- [x] `FigureTiles` for loose facts, stating each value on its own.
+- [x] The rule the file is built on: geometry is a view over supplied
+      numbers, the way sorting is, but every visible label is a value a tool
+      emitted. No percentages anywhere, because no tool emits one.
+
+## Landed: the console stops looking like a chat
+
+- [x] Attested figures are set in semibold, not underlined. Six dotted rules
+      in one sentence read as struck-through text.
+- [x] The question is the heading of a numbered entry on a spine, not a right
+      aligned filled bubble.
+- [x] A question the previous answer proposed is marked as a follow-up, by
+      matching what was offered rather than by position in the thread.
+- [x] The composer keeps its pill, loses the sparkle and the circular
+      gradient arrow, and gains a prompt caret and a control with a word on
+      it.
+- [x] The reading column widened from 3xl to 5xl. Prose still holds its own
+      measure; tables, bars and option cards use the room.
+- [x] Fix: the fact popover was clipped by the scroll container and by any
+      card with `overflow-hidden`. It renders in a portal now, measured off
+      the trigger, which no ancestor can cut off.
+
 ## Open
 
 Everything below is coverage. The deterministic path currently answers 27 of 38

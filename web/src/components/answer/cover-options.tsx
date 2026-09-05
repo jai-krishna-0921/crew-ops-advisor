@@ -25,7 +25,7 @@ import {
 import type { CoverKind, CoverOption, Recommendation } from "@/lib/contracts";
 import { inr, joinParts, minutesToClock, plural } from "@/lib/format";
 import { GroundedText } from "@/components/answer/grounded-prose";
-import { CostBars } from "@/components/answer/charts";
+import { CostBars, OptionCostCompare } from "@/components/answer/charts";
 import {
   firstBreach,
   LegalityReportView,
@@ -89,6 +89,8 @@ export function RecommendationView({
         <span className="label-micro mr-2 inline">Ranked by</span>
         {recommendation.ranking_basis}
       </p>
+
+      <OptionCostCompare options={options} />
 
       <div className="space-y-2.5">
         {options.map((option) => (
