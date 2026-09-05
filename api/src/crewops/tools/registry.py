@@ -51,7 +51,13 @@ from crewops.domain import (
     load_world,
     parse_utc,
 )
-from crewops.ops import CoverSearch, OpsEngine, allocate, option_to_cover_option
+from crewops.ops import (
+    CoverSearch,
+    OpsEngine,
+    allocate,
+    build_ranked_recommendation,
+    option_to_cover_option,
+)
 from crewops.rules import (
     LegalityEngine,
     ProposedDuty,
@@ -2299,6 +2305,97 @@ class Tools:
 
     # ============================================================== tier 3
 
+    def _cover_search_for_gap(
+        self,
+        *,
+        pairing_id: str | None,
+        flight_numbers: list[str] | None,
+        for_crew_id: str | None,
+        registration: str | None,
+        role: str | None,
+        on_date: DateType | None,
+        exclude_crew_ids: list[str] | None,
+        args: dict[str, Any],
+    ) -> tuple[CoverSearch, str, str | None]:
+        """Turn "cover this" into a completed `CoverSearch`, or say why not.
+
+        Shared by `find_cover_options` and `generate_ranked_recommendations`,
+        because resolving which seat is empty is the same problem for both and
+        it is the part with all the ways to go wrong in it: a tail that flies
+        several pairings, a crew id that holds no duty on the date, a pairing
+        that does not exist, a role nobody named.
+
+        Raises `LookupError` with the sentence a controller should read. The
+        caller turns that into an `ok=False` envelope under its own tool name,
+        so an error still says which tool refused. `args` is mutated in place
+        when a registration resolves to a pairing, so the audit log shows what
+        was actually searched rather than only what was asked.
+        """
+        # A controller names the metal: "cover the VT-DXF First Officer on
+        # 20 Sep". Nothing bridged a tail to a pairing, so questions phrased
+        # that way arrived here with nothing to cover and were declined.
+        if registration and not pairing_id and not flight_numbers:
+            matches = self._pairings_for_registration_on(registration, on_date)
+            if not matches:
+                when = f" on {on_date}" if on_date else ""
+                raise LookupError(f"{registration} flies no pairing{when}.")
+            if len(matches) > 1 and on_date is None:
+                raise LookupError(
+                    f"{registration} flies {len(matches)} pairings "
+                    f"({', '.join(matches)}). Name a date to pick one."
+                )
+            pairing_id = matches[0]
+            args["pairing_id"] = pairing_id
+
+        if not pairing_id and not flight_numbers and not for_crew_id:
+            raise LookupError(
+                "Name a pairing_id, a set of flight_numbers, a for_crew_id, or a "
+                "registration to cover."
+            )
+
+        forbid = list(exclude_crew_ids or [])
+        resolved_role = role
+        sick: str | None = None
+
+        if for_crew_id:
+            member = self.world.crew_member(for_crew_id)
+            if member is None:
+                raise LookupError(self._unknown_crew(for_crew_id))
+            # `for_crew_id` names the person vacating the seat, so their rank
+            # decides the role directly. Guessing from the pairing (the
+            # `_role_to_cover` fallback below) is only for when nobody is named.
+            sick = for_crew_id
+            if resolved_role is None:
+                resolved_role = member.rank
+            if pairing_id is None and not flight_numbers:
+                lookup_date = on_date or self.world.snapshot.date()
+                pairing_id = self._pairing_for_crew_on(for_crew_id, lookup_date)
+                if pairing_id is None:
+                    raise LookupError(f"{for_crew_id} holds no pairing on {lookup_date}.")
+            if for_crew_id not in forbid:
+                forbid = [*forbid, for_crew_id]
+
+        if resolved_role is None:
+            resolved_role, sick = self._role_to_cover(pairing_id, flight_numbers, forbid)
+        if resolved_role is None:
+            raise LookupError(
+                "Could not determine which role needs cover. Name the crew member "
+                "who is out with for_crew_id, or pass role explicitly."
+            )
+
+        if pairing_id:
+            if self.world.pairing(pairing_id) is None:
+                raise LookupError(self._unknown_pairing(pairing_id))
+            search = self.ops.find_cover_for_pairing(
+                pairing_id, role=resolved_role, sick_crew_id=sick, forbid_crew=forbid
+            )
+        else:
+            ids = self._resolve_flight_ids(flight_numbers or [], on_date)
+            search = self.ops.find_cover_for_flights(
+                ids, role=resolved_role, sick_crew_id=sick, forbid_crew=forbid
+            )
+        return search, resolved_role, sick
+
     def find_cover_options(
         self,
         *,
@@ -2325,89 +2422,17 @@ class Tools:
             "include_rejected": include_rejected,
         }
 
-        # A controller names the metal: "cover the VT-DXF First Officer on
-        # 20 Sep". Nothing bridged a tail to a pairing, so questions phrased
-        # that way arrived here with nothing to cover and were declined.
-        if registration and not pairing_id and not flight_numbers:
-            matches = self._pairings_for_registration_on(registration, on_date)
-            if not matches:
-                when = f" on {on_date}" if on_date else ""
-                return error_envelope(
-                    "find_cover_options",
-                    args,
-                    f"{registration} flies no pairing{when}.",
-                    timer=timer,
-                )
-            if len(matches) > 1 and on_date is None:
-                return error_envelope(
-                    "find_cover_options",
-                    args,
-                    f"{registration} flies {len(matches)} pairings "
-                    f"({', '.join(matches)}). Name a date to pick one.",
-                    timer=timer,
-                )
-            pairing_id = matches[0]
-            args["pairing_id"] = pairing_id
-
-        if not pairing_id and not flight_numbers and not for_crew_id:
-            return error_envelope(
-                "find_cover_options",
-                args,
-                "Name a pairing_id, a set of flight_numbers, a for_crew_id, or a "
-                "registration to cover.",
-                timer=timer,
-            )
-        forbid = list(exclude_crew_ids or [])
-        resolved_role = role
-        sick: str | None = None
-
-        if for_crew_id:
-            member = self.world.crew_member(for_crew_id)
-            if member is None:
-                return error_envelope(
-                    "find_cover_options", args, self._unknown_crew(for_crew_id), timer=timer
-                )
-            # `for_crew_id` names the person vacating the seat, so their rank
-            # decides the role directly. Guessing from the pairing (the
-            # `_role_to_cover` fallback below) is only for when nobody is named.
-            sick = for_crew_id
-            if resolved_role is None:
-                resolved_role = member.rank
-            if pairing_id is None and not flight_numbers:
-                lookup_date = on_date or self.world.snapshot.date()
-                pairing_id = self._pairing_for_crew_on(for_crew_id, lookup_date)
-                if pairing_id is None:
-                    return error_envelope(
-                        "find_cover_options",
-                        args,
-                        f"{for_crew_id} holds no pairing on {lookup_date}.",
-                        timer=timer,
-                    )
-            if for_crew_id not in forbid:
-                forbid = [*forbid, for_crew_id]
-
-        if resolved_role is None:
-            resolved_role, sick = self._role_to_cover(pairing_id, flight_numbers, forbid)
-        if resolved_role is None:
-            return error_envelope(
-                "find_cover_options",
-                args,
-                "Could not determine which role needs cover. Name the crew member "
-                "who is out with for_crew_id, or pass role explicitly.",
-                timer=timer,
-            )
         try:
-            if pairing_id:
-                if self.world.pairing(pairing_id) is None:
-                    raise LookupError(self._unknown_pairing(pairing_id))
-                search = self.ops.find_cover_for_pairing(
-                    pairing_id, role=resolved_role, sick_crew_id=sick, forbid_crew=forbid
-                )
-            else:
-                ids = self._resolve_flight_ids(flight_numbers or [], on_date)
-                search = self.ops.find_cover_for_flights(
-                    ids, role=resolved_role, sick_crew_id=sick, forbid_crew=forbid
-                )
+            search, resolved_role, _sick = self._cover_search_for_gap(
+                pairing_id=pairing_id,
+                flight_numbers=flight_numbers,
+                for_crew_id=for_crew_id,
+                registration=registration,
+                role=role,
+                on_date=on_date,
+                exclude_crew_ids=exclude_crew_ids,
+                args=args,
+            )
         except LookupError as exc:
             return error_envelope("find_cover_options", args, str(exc), timer=timer)
 
@@ -2451,6 +2476,101 @@ class Tools:
             ],
             timer=timer,
             truncated=len(kept) < len(search.options),
+        )
+
+    def generate_ranked_recommendations(
+        self,
+        *,
+        pairing_id: str | None = None,
+        flight_numbers: list[str] | None = None,
+        for_crew_id: str | None = None,
+        registration: str | None = None,
+        role: str | None = None,
+        on_date: DateType | None = None,
+        exclude_crew_ids: list[str] | None = None,
+        max_options: int | None = None,
+    ) -> ToolEnvelope:
+        """The whole Tier 3 sequence in one call. No model, no arithmetic here.
+
+        Enumerate, rule check, price, rank: four steps that admit exactly one
+        order, run in it. Every figure the answer may quote is emitted as a
+        `Fact` by `build_ranked_recommendation`, per candidate rather than per
+        summary, because the template for this intent names every candidate and
+        a number nobody attested is a number nobody checked.
+        """
+        timer = ToolTimer()
+        args: dict[str, Any] = {
+            "pairing_id": pairing_id,
+            "flight_numbers": flight_numbers,
+            "for_crew_id": for_crew_id,
+            "registration": registration,
+            "role": role,
+            "on_date": on_date,
+            "exclude_crew_ids": exclude_crew_ids,
+            "max_options": max_options,
+        }
+        tool = "generate_ranked_recommendations"
+
+        try:
+            search, resolved_role, sick = self._cover_search_for_gap(
+                pairing_id=pairing_id,
+                flight_numbers=flight_numbers,
+                for_crew_id=for_crew_id,
+                registration=registration,
+                role=role,
+                on_date=on_date,
+                exclude_crew_ids=exclude_crew_ids,
+                args=args,
+            )
+        except LookupError as exc:
+            return error_envelope(tool, args, str(exc), timer=timer)
+
+        recommendation = build_ranked_recommendation(
+            search, covering_for=for_crew_id or sick, max_options=max_options
+        )
+        facts = [
+            *recommendation.facts,
+            *[f for option in recommendation.legal_options for f in option.facts],
+        ]
+
+        priced = [o for o in recommendation.legal_options if o.crew_id]
+        best = priced[0] if priced else None
+        detail = (
+            f"{recommendation.candidates_evaluated} candidates evaluated against all "
+            f"{len(recommendation.rules_per_candidate)} rules, "
+            f"{len(priced)} legal and priced, "
+            f"{len(recommendation.rejected_options)} rejected with the rule that "
+            "excluded each. "
+            + (
+                f"Rank 1 is {best.crew_id} at INR {best.cost.total_inr:,.0f}."
+                if best
+                else "No legal crew option exists, so cancellation is the only answer."
+            )
+        )
+        return ok_envelope(
+            tool,
+            args,
+            recommendation,
+            facts=facts,
+            trace=[
+                step(
+                    "Enumerate, rule check, price, rank",
+                    detail,
+                    [f.key for f in facts[:3]],
+                ),
+                step(
+                    "Ranking heuristic",
+                    recommendation.ranking_basis,
+                    [f"{search.assignment_ref}.legal_options"],
+                ),
+            ],
+            citations=[
+                cite("crew.json", f"every active {resolved_role}"),
+                cite("reserve_pool.json", "on-call windows tested at the required report"),
+                cite("rules.json", "all seven rules per candidate per day"),
+                cite("costs.json", "callout, positioning, delay and cancellation rates"),
+            ],
+            timer=timer,
         )
 
     def plan_joint_cover(

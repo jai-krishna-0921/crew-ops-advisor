@@ -14,7 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from crewops.contracts.evidence import Confidence, Fact
-from crewops.contracts.rules import LegalityReport, RuleId
+from crewops.contracts.rules import FeasibilityIssue, LegalityReport, RuleId, RuleTrace
 
 
 class FlightRef(BaseModel):
@@ -211,6 +211,80 @@ class Recommendation(BaseModel):
     facts: list[Fact] = Field(default_factory=list)
 
 
+class RejectedCandidate(CoverOption):
+    """A candidate the search found, checked and ruled out, with the rule named.
+
+    A `CoverOption` already carries the full `LegalityReport`, so the breaching
+    trace is reachable from it. That is not the same as it being *stated*: a
+    consumer has to walk `per_day` and filter on the verdict to find it, and a
+    ranking guard that wants "which rule excluded this person" cannot be
+    written against a structure it has to search.
+
+    So the trace is lifted to the surface here. `rule_id` is the exact id the
+    rules engine returned (`RULE-DUTY-02`, not "a duty rule"), and `rule_trace`
+    is the whole trace with the arithmetic behind it. Both are None only when
+    the exclusion was a feasibility issue rather than a regulation, which is
+    the case the seven-rule scope deliberately does not cover: being already
+    rostered across the cover window is real and blocking, and giving it a
+    `RULE-` id would misrepresent the rulebook.
+    """
+
+    rule_id: RuleId | None = Field(
+        default=None,
+        description="The rule that excluded this candidate, exactly as the "
+        "engine returned it. None when the exclusion was a feasibility issue.",
+    )
+    rule_trace: RuleTrace | None = Field(
+        default=None, description="The breaching trace, with its arithmetic"
+    )
+    feasibility: list[FeasibilityIssue] = Field(
+        default_factory=list,
+        description="Blocking non-regulatory exclusions, when that is what "
+        "ruled the candidate out. Never given a RULE- id.",
+    )
+    exclusion_reason: str = Field(
+        default="", description="The engine's own sentence for the exclusion"
+    )
+
+
+class RankedRecommendation(Recommendation):
+    """The Tier 3 macro-tool's payload: enumerated, rule checked, priced, ranked.
+
+    A `Recommendation` in every respect (it subclasses one, so every consumer
+    that reads `options` and `rejected` keeps working unchanged), with the two
+    lists a ranking guard actually wants to assert on stated under their own
+    names.
+
+    `legal_options` and `options` are the same objects, as are
+    `rejected_options` and `rejected`. The duplication is deliberate and cheap:
+    the inherited names keep the contract, the explicit names carry the promise
+    that this payload enumerated **every** candidate, priced **every** survivor
+    and attached a `RuleTrace` to **every** exclusion. A `Recommendation` that
+    happens to have an empty `rejected` list makes no such promise.
+    """
+
+    legal_options: list[CoverOption] = Field(
+        default_factory=list,
+        description="Every candidate that cleared all seven rules on every day "
+        "of the cover, priced and ranked. Ordered by the heuristic in "
+        "`ranking_basis`.",
+    )
+    rejected_options: list[RejectedCandidate] = Field(
+        default_factory=list,
+        description="Every candidate found and excluded, each carrying the "
+        "specific RuleTrace that excluded it.",
+    )
+    rules_per_candidate: list[RuleId] = Field(
+        default_factory=list,
+        description="The rule set run against every candidate, in order. Seven "
+        "ids, always: a candidate checked against fewer was not checked.",
+    )
+    costs_source: str = Field(
+        default="costs.json",
+        description="Where the callout, deadhead and cancellation rates came from",
+    )
+
+
 class Gap(BaseModel):
     """One seat that needs filling."""
 
@@ -259,8 +333,10 @@ class JointPlan(BaseModel):
 
 
 # `Recommendation` is declared above `JointPlan` because it reads better in that
-# order, so its forward reference is resolved here once both exist.
+# order, so its forward reference is resolved here once both exist. The subclass
+# inherits the same unresolved reference and needs the same treatment.
 Recommendation.model_rebuild()
+RankedRecommendation.model_rebuild()
 
 
 class Alert(BaseModel):
@@ -305,7 +381,9 @@ __all__ = [
     "Gap",
     "ImpactReport",
     "JointPlan",
+    "RankedRecommendation",
     "Recommendation",
+    "RejectedCandidate",
     "RiskSeverity",
     "Watchlist",
 ]

@@ -31,6 +31,7 @@ from crewops.ops.positioning import (
     plan_positioning,
     positioning_options,
 )
+from crewops.ops.recommend import RANKING_HEURISTIC, build_ranked_recommendation
 from crewops.ops.watchlist import (
     CERT_HORIZON_DAYS,
     CRITICAL_HEADROOM_HOURS,
@@ -47,6 +48,7 @@ __all__ = [
     "HIGH_RISK_THRESHOLD",
     "POSITIONING_LEAD_MINUTES",
     "RANKING_BASIS",
+    "RANKING_HEURISTIC",
     "REOPEN_TURNAROUND_MINUTES",
     "RULES_CHECKED",
     "TIGHT_HEADROOM_HOURS",
@@ -63,6 +65,7 @@ __all__ = [
     "RankedOption",
     "WatchlistBuilder",
     "allocate",
+    "build_ranked_recommendation",
     "option_to_cover_option",
     "plan_positioning",
     "positioning_options",

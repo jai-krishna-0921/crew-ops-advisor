@@ -307,6 +307,38 @@ class FindCoverOptionsArgs(BaseModel):
     )
 
 
+class GenerateRankedRecommendationsArgs(BaseModel):
+    pairing_id: str | None = Field(default=None, description="The gap to cover")
+    flight_numbers: list[str] | None = None
+    for_crew_id: str | None = Field(
+        default=None,
+        description="The crew member who is out. Prefer this: it resolves the "
+        "pairing on its own and it names the seat, which decides both the rank "
+        "the search filters on and the callout rate it charges.",
+    )
+    role: str | None = Field(
+        default=None,
+        description="The seat to fill when the person is not known. Must match a "
+        "rank exactly: Senior Cabin Crew is not substitutable for Cabin Crew.",
+    )
+    on_date: date | None = Field(
+        default=None, description="Which day of the roster the gap falls on"
+    )
+    registration: str | None = Field(
+        default=None,
+        description="Aircraft tail, e.g. VT-DXF, for questions that name the "
+        "metal rather than the crew or the pairing.",
+    )
+    exclude_crew_ids: list[str] | None = Field(
+        default=None, description="Usually the crew member who is out"
+    )
+    max_options: int | None = Field(
+        default=None,
+        description="Leave unset. A ranked answer that shows the top five of "
+        "thirteen has sampled the legal options rather than ranked them.",
+    )
+
+
 class PlanJointCoverArgs(BaseModel):
     gaps: list[dict[str, str]] = Field(
         description="One entry per simultaneous gap, each naming a pairing or "
@@ -584,6 +616,25 @@ TOOL_SPECS: Final[tuple[ToolSpec, ...]] = (
         FindCoverOptionsArgs,
         lambda tools, a: tools.find_cover_options(**a.model_dump(exclude_none=True)),
         lambda a: f"Searching for cover on {a.get('pairing_id') or a.get('flight_numbers')}",
+    ),
+    ToolSpec(
+        "generate_ranked_recommendations",
+        "The whole Tier 3 sequence as one deterministic call: enumerate the "
+        "candidate pool, run all seven rules against every candidate on every "
+        "day, price every survivor against costs.json (reserve callout, day-off "
+        "callout, deadhead positioning and the delay it introduces), then rank "
+        "by cost and reachability. Prefer this over find_cover_options when the "
+        "question asks what to do rather than what is available: it returns "
+        "legal_options and rejected_options as separate lists, and every reject "
+        "carries the exact RuleTrace that excluded it.",
+        GenerateRankedRecommendationsArgs,
+        lambda tools, a: tools.generate_ranked_recommendations(
+            **a.model_dump(exclude_none=True)
+        ),
+        lambda a: (
+            "Ranking cover for "
+            f"{a.get('pairing_id') or a.get('for_crew_id') or a.get('flight_numbers')}"
+        ),
     ),
     ToolSpec(
         "plan_joint_cover",

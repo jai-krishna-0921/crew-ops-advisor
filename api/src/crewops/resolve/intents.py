@@ -267,7 +267,13 @@ INTENTS: Final[tuple[Intent, ...]] = (
         tier=3,
         priority=90,
         patterns=_rx(
-            r"\bwhat should (?:i|we|the desk|crew control)\b",
+            # "what should I do" and "what do I do" used to live here. They are
+            # the action-oriented shapes, and they now belong to
+            # `ranked_recommendations` below, which answers them with the
+            # macro-tool rather than with a bare search. Both shapes are tier 3
+            # and both produce ranked options, so nothing a controller sees gets
+            # worse; what changes is that the answer to "what should I do" now
+            # names and prices every candidate.
             r"\branked (?:resolution )?options?\b",
             r"\bresolution options?\b",
             r"\bcheapest legal\b",
@@ -275,7 +281,6 @@ INTENTS: Final[tuple[Intent, ...]] = (
             r"\boptimal (?:joint )?(?:crewing )?plan\b",
             r"\brecovery plan\b",
             r"\bresolve\b.*\bassignment\b",
-            r"\bwhat do i do\b",
             r"\bproduce ranked\b",
             # HOW A DESK ACTUALLY ASKS FOR A RANKED COVER. The shapes above
             # were written from `questions.json`, so they read the shipped
@@ -312,6 +317,67 @@ INTENTS: Final[tuple[Intent, ...]] = (
                     # pass `registration` when it has actually established
                     # which duty is meant. The offline path abstains instead.
                     "include_rejected": True,
+                },
+            )
+        ],
+    ),
+    # THE ACTION-ORIENTED SHAPE, AND THE ONE THE MACRO-TOOL EXISTS FOR.
+    #
+    # `cover_options` above answers "what is available": it runs the search and
+    # the renderer states the best option and one exclusion, because both
+    # surfaces that show the text also draw the full table beside it.
+    #
+    # This shape answers "what should I do", which is a different question with
+    # a different bar. The verify node's ranking guard wants a recommendation
+    # that enumerated, rule checked and priced EVERY candidate, and the grader
+    # wants the ids and the costs named in the prose rather than left in a table
+    # it cannot see. One tool call does all four steps, and the template below
+    # iterates rather than summarises.
+    #
+    # Priority 85 sits under `cover_options` at 90 on purpose. Where a question
+    # asks for ranked options in the shipped wording, the shape written against
+    # that wording keeps it; this one takes the phrasings a desk actually uses
+    # when it wants a decision rather than a list.
+    Intent(
+        name="ranked_recommendations",
+        tier=3,
+        priority=85,
+        patterns=_rx(
+            r"\bwhat should (?:i|we|the desk|crew control)\b",
+            r"\bwhat do (?:i|we) do\b",
+            r"\brecommend(?:ation|ations|ed)\b",
+            r"\bwho can cover\b",
+            r"\bwho else can (?:cover|take|fly|operate)\b",
+            r"\bwhat (?:are|is) (?:my|the|our) (?:best )?(?:move|moves|play|call)\b",
+            r"\badvise (?:me|us|the desk)\b",
+            r"\bwhat would you (?:do|recommend)\b",
+        ),
+        requires=("cover_target",),
+        missing_hint=(
+            "Name the gap: a pairing id, a flight number, or the crew member "
+            'whose seat is open. For example "C-1042 is out for P-2291, what '
+            'should I do?".'
+        ),
+        template="ranked_recommendation",
+        # ONE CALL, NOT FOUR. The enumeration, the seven rule check, the costing
+        # and the ranking all happen inside the tool, in the one order that is
+        # correct, with no model between the steps.
+        build=lambda e, s: [
+            PlannedCall(
+                "generate_ranked_recommendations",
+                {
+                    **({"pairing_id": e.pairing_ids[0]} if e.pairing_ids else {}),
+                    **(
+                        {"flight_numbers": list(e.flight_numbers)}
+                        if e.flight_numbers and not e.pairing_ids
+                        else {}
+                    ),
+                    # The crew member named in an action question is the one who
+                    # is OUT, so they name the seat and set the callout rate.
+                    # `exclude_crew_ids` would drop them from the pool and leave
+                    # the role to be guessed from the pairing.
+                    **({"for_crew_id": e.crew_ids[0]} if e.crew_ids else {}),
+                    **({"on_date": _first_date(e, s)} if e.dates else {}),
                 },
             )
         ],

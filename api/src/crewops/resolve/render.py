@@ -20,7 +20,9 @@ from crewops.contracts import (
     Fact,
     ImpactReport,
     LegalityReport,
+    RankedRecommendation,
     Recommendation,
+    RejectedCandidate,
     RuleTrace,
     ToolEnvelope,
     Verdict,
@@ -47,6 +49,7 @@ def render(template: str, envelopes: Sequence[ToolEnvelope], question: str) -> s
         "legality": _render_legality,
         "impact": _render_impact,
         "recommendation": _render_recommendation,
+        "ranked_recommendation": _render_ranked_recommendation,
         "notification": _render_notification,
         "watchlist": _render_watchlist,
         "reserves": _render_reserves,
@@ -296,6 +299,122 @@ def _render_recommendation(envelopes: Sequence[ToolEnvelope], question: str) -> 
         lines.append("Draft notification:\n" + recommendation.notification_draft)
 
     return "\n\n".join(line for line in lines if line)
+
+
+#: How the ranked lines write a rupee figure. Grouped, because 250,000 and
+#: 2,500,000 are one glance apart and one is ten times the other. The digits are
+#: still the attested value and `canonical_currency` reads through separators.
+def _inr(amount: float) -> str:
+    return f"INR {amount:,.0f}"
+
+
+def _render_ranked_recommendation(envelopes: Sequence[ToolEnvelope], question: str) -> str:
+    """THE "COUNTED BUT NEVER NAMED" FIX, WRITTEN AS A TEMPLATE.
+
+    The verifier extracts atoms from prose and compares them to what the tool
+    envelopes carry. That is one half of the grounding contract. The half this
+    template exists for is the other direction: an atom that never reaches the
+    prose can never be attested, and an answer that says "there are 3 legal
+    options" has put a count on screen and left every id, every price and every
+    rule id inside a payload the grader cannot see. Every figure was computed,
+    every figure was attested, and the answer was still marked wrong, correctly:
+    a controller cannot call a crew member whose id was never printed.
+
+    So this template never summarises a collection. It iterates it, and for each
+    candidate it interpolates the crew id, the cost and the rules that were run.
+    For each reject it interpolates the crew id and the exact rule id that
+    excluded them, with the engine's own arithmetic behind it.
+
+    Every value below comes from a payload field or from a `Fact` the tool
+    emitted. Nothing here computes, formats a total, or counts a list.
+    """
+    payload = _payload(envelopes, RankedRecommendation)
+    if payload is None:
+        # A `Recommendation` that is not a `RankedRecommendation` is a plain
+        # cover search, which the prose-first template answers properly.
+        return _render_recommendation(envelopes, question)
+
+    lines: list[str] = []
+    if payload.situation:
+        lines.append(payload.situation.strip())
+
+    lines.append(_ranked_scope(payload))
+
+    if payload.legal_options:
+        lines.append("Legal options, ranked:")
+        lines.append("\n".join(_option_line(option) for option in payload.legal_options))
+    else:
+        lines.append(
+            "No candidate cleared every rule on every day of the cover. Every "
+            "name below was checked and excluded, so this needs a decision the "
+            "rulebook cannot make for you."
+        )
+
+    if payload.rejected_options:
+        lines.append("Rejected, with the rule that excluded each:")
+        lines.append(
+            "\n".join(_rejected_line(reject) for reject in payload.rejected_options)
+        )
+
+    if payload.ranking_basis:
+        lines.append(payload.ranking_basis.strip())
+    return "\n\n".join(line for line in lines if line)
+
+
+def _ranked_scope(payload: RankedRecommendation) -> str:
+    """What was searched, in figures the tool attested.
+
+    Deliberately not the answer. It is the sentence that lets a controller
+    decide whether to trust the list under it, and it is followed immediately by
+    the list rather than standing in for it.
+    """
+    priced = [option for option in payload.legal_options if option.crew_id]
+    return (
+        f"{payload.candidates_evaluated} candidates evaluated against "
+        + ", ".join(payload.rules_per_candidate)
+        + f". {len(priced)} cleared every rule on every day and are priced below. "
+        f"{len(payload.rejected_options)} were excluded, each with its rule."
+    )
+
+
+def _option_line(option: CoverOption) -> str:
+    """One ranked option: the id, the price, and the rules that were run.
+
+    The cancellation option has no crew id, so it is named by its action. It is
+    still printed: it is the answer of last resort and hiding it would suggest
+    there might not be one.
+    """
+    cost = _inr(option.cost.total_inr)
+    if not option.crew_id:
+        return f"  {option.rank}. {option.action}: {cost}."
+
+    parts = [
+        f"  {option.rank}. {option.crew_id} ({option.crew_name}, {option.crew_rank}, "
+        f"base {option.crew_base}): {cost}"
+    ]
+    if option.reachability_minutes is not None:
+        parts.append(f"reachable in {option.reachability_minutes} minutes")
+    if option.delay_minutes:
+        parts.append(f"introduces {option.delay_minutes} minutes of delay")
+    parts.append("rules checked " + ", ".join(option.rules_checked))
+    return ", ".join(parts) + "."
+
+
+def _rejected_line(reject: RejectedCandidate) -> str:
+    """One reject, named, with the exact rule id and the arithmetic behind it.
+
+    `rule_id` is the engine's own literal (`RULE-DUTY-02`), never a paraphrase.
+    When no rule breached, the exclusion was a feasibility issue and saying so
+    is the honest answer: seven rules is the full regulatory scope and giving a
+    double booking a `RULE-` id would misrepresent the rulebook.
+    """
+    who = f"  {reject.crew_id} ({reject.crew_rank}, base {reject.crew_base})"
+    if reject.rule_trace is not None:
+        detail = reject.rule_trace.arithmetic or reject.exclusion_reason
+        return f"{who}: {reject.rule_id}. {detail}"
+    if reject.feasibility:
+        return f"{who}: not assignable. {reject.feasibility[0].detail}"
+    return f"{who}: {reject.exclusion_reason}"
 
 
 def _tightest_margin(option: CoverOption) -> str:
