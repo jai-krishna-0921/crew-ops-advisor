@@ -92,7 +92,7 @@ from crewops.resolve.intents import match_intent
 from crewops.resolve.triage import reads_as_followup, triage_question
 from crewops.verify import Verifier
 
-__all__ = ["TurnPlan", "bind_tool_specs", "build_graph"]
+__all__ = ["TurnPlan", "bind_tool_specs", "build_graph", "subjectless_ask"]
 
 #: How much of a tool payload is handed back to the model. The full envelope
 #: always reaches the verifier and the HTTP layer; this cap only protects the
@@ -159,6 +159,48 @@ def _summarise_payload(envelope: ToolEnvelope) -> str:
     if hasattr(payload, "__class__"):
         return f"{payload.__class__.__name__}, {len(envelope.facts)} facts"
     return f"{len(envelope.facts)} facts"
+
+
+#: Requirements that name WHAT THE ANSWER IS ABOUT, as opposed to how it is
+#: narrowed. A cover search with no target and a callout with no duty are not
+#: underspecified questions, they are questions with no subject.
+_SUBJECT_REQUIREMENTS: Final = frozenset({"cover_target", "assignment"})
+
+
+def subjectless_ask(question: str, *, has_history: bool) -> str | None:
+    """The hint to refuse with when a recommendation is about nothing.
+
+    Asked cold, "What are my options, cheapest first?" was answered: the model
+    found a gap in the week, reported on C-5417's seat on P-2213, and every
+    figure in it was real. A true answer to a question nobody asked, and a
+    controller reading that first line acts on a seat they were not asking
+    about. The offline path already refuses it, because `cover_options`
+    declares the target it needs.
+
+    Deliberately narrow. All three have to hold: the shape needs a subject, the
+    question names no identifier at all, and the thread has nothing behind it.
+    A wrong refusal here is unrecoverable and a wrong forward is caught
+    downstream, so anything short of all three goes to the model.
+    """
+    if has_history:
+        return None
+    from crewops.resolve.triage import canonical_question, extract_entities
+
+    asked = canonical_question(question)
+    entities = extract_entities(asked)
+    if entities.any_identifier():
+        return None
+    intent = match_intent(asked, entities)
+    if intent is None:
+        return None
+    if not _SUBJECT_REQUIREMENTS.intersection(intent.requires):
+        return None
+    if not intent.missing(entities):
+        return None
+    return (
+        intent.missing_hint
+        or "Name the pairing, the flight or the crew whose seat is open."
+    )
 
 
 def _prefetch_plan(question: str, snapshot: datetime) -> list[Any]:
@@ -296,8 +338,10 @@ def build_graph(
         # The checkpointer has that history in `messages`; the model reads it
         # and answers, as it already does for "which of them are captains".
         # With nothing behind it on this thread, the refusal stands.
-        continues = bool(state.get("messages")) and reads_as_followup(state["question"])
-        in_scope = verdict.in_scope or continues
+        history = bool(state.get("messages"))
+        continues = history and reads_as_followup(state["question"])
+        no_subject = subjectless_ask(state["question"], has_history=history)
+        in_scope = (verdict.in_scope or continues) and no_subject is None
         update: dict[str, Any] = {
             "in_scope": in_scope,
             "tier": verdict.tier,
@@ -311,6 +355,19 @@ def build_graph(
             # A greeting is answered, not refused. Nothing is missing: the
             # controller has not asked for anything yet. Same treatment as the
             # offline resolver, so both paths greet identically.
+            if no_subject is not None:
+                update["abstention"] = Abstention(
+                    reason=AbstentionReason.UNDERSPECIFIED,
+                    message=(
+                        "I cannot answer that reliably. That asks for a "
+                        "recommendation without saying what it is about. "
+                        + no_subject
+                    ),
+                    missing=[no_subject],
+                    did_establish=[],
+                    suggestions=_scope_suggestions(),
+                )
+                return update
             greeting = verdict.abstention_reason is AbstentionReason.GREETING
             update["abstention"] = Abstention(
                 reason=verdict.abstention_reason or AbstentionReason.OUT_OF_SCOPE,
