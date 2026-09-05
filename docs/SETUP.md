@@ -154,16 +154,67 @@ reported. Without that, a copied `.env.example` selected Anthropic, failed to
 authenticate on every turn, and left a perfectly good Ollama key behind it
 doing nothing. `CREWOPS_LLM_PROVIDER` still exists to settle it explicitly.
 
-### If it says deterministic and you have a key
+### Ollama has two setups and they are not interchangeable
 
-**Run `uv run crewops health` from `api/`.** It now prints a `Why` row that
-names the provider it chose and the reason, lists every env file it read, and
-names any value it ignored as a placeholder. `GET /api/health` returns the same
-thing as `llm_detail`, `env_files_searched` and `ignored_placeholders`.
+This is where every reported setup failure has come from.
 
-That one command answers the three things that actually go wrong: the file is
-somewhere it was not read, the key is a template, or the variable is spelled
-differently from the three above.
+| You set                          | What it means         | Default model             | You must                       |
+| -------------------------------- | --------------------- | ------------------------- | ------------------------------ |
+| `OLLAMA_API_KEY`               | Ollama Cloud          | `deepseek-v4-flash:cloud` | run `ollama serve` locally     |
+| `OLLAMA_HOST` alone            | a local daemon        | `qwen3:8b`                | have pulled the model yourself |
+
+A model id ending in `:cloud` is served by Ollama Cloud. Asking a local daemon
+for one produces exactly this, and it is the most common report:
+
+```
+ResponseError: model 'deepseek-v4-flash:cloud' not found (status code: 404)
+```
+
+That is not a broken install. It is "you asked a local daemon for a cloud
+model", and the configuration used to cause it: Ollama was selected by
+`OLLAMA_HOST` **or** `OLLAMA_API_KEY`, and both were handed the cloud model.
+The default now depends on which variable selected it. Set `CREWOPS_MODEL` to
+override either.
+
+Whatever model you choose has to support **tool calling**. The agent binds 24
+tools, and a model that cannot call them answers with no evidence, which the
+grounding check then rejects.
+
+### If it says deterministic, or every turn fails
+
+**Run `uv run crewops health` from `api/`.** It reads the configuration and
+then actually calls the provider:
+
+```
+Provider       ollama
+Mode           agent
+Model          deepseek-v4-flash:cloud
+Why            Agent mode, provider ollama, because OLLAMA_API_KEY is set.
+               Env files read: /repo/.env.local
+Reachable      NO
+Fix            The model 'deepseek-v4-flash:cloud' is not available on
+               provider ollama. Run `ollama pull deepseek-v4-flash:cloud` to
+               fetch it, or `ollama list` to see what you already have and set
+               CREWOPS_MODEL to one of those. A model ending in ':cloud' is
+               served by Ollama Cloud and needs OLLAMA_API_KEY, not a local
+               daemon. The deterministic path is unaffected and still answers
+               offline, so this costs you the prose and not the analysis.
+```
+
+The `Reachable` row exists because the table used to stop at `Model` and print
+green. Configured is not working: two people were told "Provider: ollama, Mode:
+agent" while every turn came back 404. `--no-probe` skips the round trip.
+
+`GET /api/health` returns the configuration side always, as `llm_detail`,
+`env_files_searched` and `ignored_placeholders`. The live check is opt in at
+`GET /api/health?probe=1`, which adds `provider_reachable` and
+`provider_detail`, because `mode` is read on every page load and a network call
+there would make the console slow to open. `provider_reachable` is tri-state:
+`true` answered, `false` failed, `null` means no provider is configured, which
+is a supported state and never a failure.
+
+A failed turn now carries the same explanation the health check prints, instead
+of the vendor's raw exception.
 
 ### The web console
 
@@ -250,6 +301,19 @@ the variable name.
 
 **Answers arrive but say the mode is deterministic.** That is agent mode being
 off, not a failure. See above.
+
+**`ResponseError: model '...' not found (status code: 404)`.** The provider
+does not serve the model you asked for. If the id ends in `:cloud` you are
+pointing a local Ollama daemon at an Ollama Cloud model: set `OLLAMA_API_KEY`,
+or set `CREWOPS_MODEL` to something from `ollama list`. `crewops health` prints
+the exact command.
+
+**`Connection refused` and nothing in the console.** Two different things wear
+this message. If `crewops health` says `Reachable: NO` with a host in it, the
+model provider is down: `ollama serve`, or switch to `ANTHROPIC_API_KEY`. If
+the health check is fine and the browser cannot reach anything, it is the API
+that is not running: `make dev`, or `cd api && uv run uvicorn --factory
+crewops.server.app:create_app --port 8000`. The UI expects it on `:8000`.
 
 **`uv sync` cannot find a Python.** `uv python install 3.13` and try again.
 

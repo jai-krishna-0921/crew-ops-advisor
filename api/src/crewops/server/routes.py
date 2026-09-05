@@ -20,6 +20,7 @@ from datetime import date, datetime
 from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
@@ -99,11 +100,39 @@ class Health(BaseModel):
     env_files_searched: list[str] = Field(default_factory=list)
     ignored_placeholders: list[str] = Field(default_factory=list)
 
+    #: Whether the provider actually ANSWERED, as opposed to being configured.
+    #:
+    #: Tri-state, and the third state is the point. True means a round trip
+    #: succeeded, False means one failed, and null means either no provider is
+    #: configured (a supported state, never a failure) or nobody asked. This
+    #: endpoint reported a green "Provider: ollama, Mode: agent" to two
+    #: teammates whose every turn was 404ing, because presence of a variable is
+    #: all it ever checked.
+    provider_reachable: bool | None = None
+    provider_detail: str = ""
+    provider_model: str | None = None
+
 
 @router.get("/health")
-async def health(request: Request) -> Health:
+async def health(request: Request, probe: bool = False) -> Health:
+    """Configuration always; a live round trip only when asked for.
+
+    `probe` is opt in because `mode` is read on every page load, and putting a
+    network call in front of that would make the console slow to open in order
+    to answer a question nobody asked on that request.
+    """
     state = _state(request)
     report = providers.diagnose()
+    check = (
+        await run_in_threadpool(providers.preflight)
+        if probe
+        else providers.ProviderCheck(
+            ok=None,
+            provider=report.provider,
+            model=None,
+            detail="Not probed. Add ?probe=1 to call the provider.",
+        )
+    )
     return Health(
         status="ok" if state.dataset_loaded else "degraded",
         dataset_loaded=state.dataset_loaded,
@@ -114,6 +143,9 @@ async def health(request: Request) -> Health:
         llm_detail=report.detail,
         env_files_searched=list(report.searched),
         ignored_placeholders=list(report.skipped),
+        provider_reachable=check.ok,
+        provider_detail=check.detail,
+        provider_model=check.model,
     )
 
 

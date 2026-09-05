@@ -121,7 +121,11 @@ class AgentConfig:
         # No provider selected still has to yield a usable config: callers ask
         # for `.model` to display it, and the offline path never uses it.
         selected = providers.resolve()
-        fallback = selected.default_model if selected else DEFAULT_MODEL
+        # `providers.model_for` rather than `selected.default_model`, because
+        # the default depends on WHICH VARIABLE selected the provider, not only
+        # on which provider it is: OLLAMA_HOST with no key is a local daemon
+        # and every ":cloud" model 404s there.
+        fallback = providers.model_for(selected) if selected else DEFAULT_MODEL
         model = os.environ.get("CREWOPS_MODEL", "").strip() or fallback
 
         return cls(

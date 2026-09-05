@@ -277,16 +277,27 @@ class AgentRunner:
         error: str | None,
     ) -> Reply:
         if error is not None and not state.get("abstention"):
+            # THE VENDOR'S SENTENCE IS NOT AN EXPLANATION. "ResponseError:
+            # model 'deepseek-v4-flash:cloud' not found (status code: 404)" is
+            # correct and useless: the reader still has to know that ":cloud"
+            # means Ollama Cloud, that Ollama Cloud needs a key, and which
+            # variable carries it. `explain_failure` says which model was
+            # tried, what to run, and that the offline path is unaffected.
+            from crewops.agent import providers
+
             state = {
                 **state,
                 "abstention": Abstention(
                     reason=AbstentionReason.TOOL_ERROR,
                     message=(
                         "I cannot answer that reliably. The turn failed before it "
-                        f"could be checked: {error}"
+                        f"could be checked. {providers.explain_failure(error)}"
                     ),
                     missing=["A completed turn"],
-                    suggestions=["Try again, or run the same question with --offline"],
+                    suggestions=[
+                        "Run `crewops health` to check the provider",
+                        "Ask the same question offline with --offline",
+                    ],
                 ),
             }
         return build_reply(

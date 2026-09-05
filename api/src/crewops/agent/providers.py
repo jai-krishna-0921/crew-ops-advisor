@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final, Literal
 
@@ -41,13 +41,18 @@ __all__ = [
     "NONE",
     "OLLAMA",
     "OPENAI",
+    "ProviderCheck",
     "ProviderReport",
     "ProviderSpec",
     "UnknownProviderError",
     "build",
     "diagnose",
+    "explain_failure",
     "is_placeholder",
+    "model_for",
+    "preflight",
     "resolve",
+    "selected_var",
     "spec",
     "structured_output_method",
 ]
@@ -88,6 +93,26 @@ class ProviderSpec:
     #: How `with_structured_output` should be asked to work for this vendor.
     #: None means take the LangChain default.
     structured_method: str | None = None
+
+    #: A different default model when a particular variable is what selected
+    #: this provider. WHY THIS EXISTS: Ollama is selected by `OLLAMA_API_KEY`
+    #: **or** `OLLAMA_HOST`, and its measured default is an Ollama Cloud model
+    #: that needs the key. A teammate with a plain local daemon, or merely with
+    #: `OLLAMA_HOST` exported by their shell, therefore selected Ollama and was
+    #: handed a model their daemon had never heard of:
+    #:
+    #:   ResponseError: model 'deepseek-v4-flash:cloud' not found (404)
+    #:
+    #: A 404 the configuration asked for. Keyed by the variable rather than by
+    #: a flag, because "which variable selected this" is exactly the question
+    #: whose answer differs.
+    model_by_var: dict[str, str] = field(default_factory=dict)
+
+    def model_for(self, var: str | None) -> str:
+        """The default model when `var` is what selected this provider."""
+        if var is not None and var in self.model_by_var:
+            return self.model_by_var[var]
+        return self.default_model
 
 
 #: Order is precedence, and the ordering is the migration path. Ollama carries
@@ -132,6 +157,14 @@ _SPECS: Final[tuple[ProviderSpec, ...]] = (
         default_model="deepseek-v4-flash:cloud",
         selects_on=("OLLAMA_API_KEY", "OLLAMA_HOST"),
         structured_method="function_calling",
+        # `OLLAMA_HOST` with no key is a LOCAL daemon, and every ":cloud"
+        # model is a 404 there. A starting point rather than a considered
+        # choice, exactly like the OpenAI default above: what a local install
+        # has pulled is not knowable from here, so this only has to be a real
+        # tool-calling model that somebody plausibly has. When it is wrong the
+        # failure now says which model was tried and how to change it, which
+        # is the part that was actually missing.
+        model_by_var={"OLLAMA_HOST": "qwen3:8b"},
     ),
 )
 
@@ -279,6 +312,188 @@ def resolve() -> ProviderSpec | None:
         if _live(candidate) is not None:
             return candidate
     return None
+
+
+def selected_var() -> str | None:
+    """Which environment variable selected the current provider, if any.
+
+    `CREWOPS_LLM_PROVIDER` forces a provider without naming a variable, so the
+    first of that provider's own variables that carries a usable value is
+    reported instead. None means nothing is selected and the deterministic path
+    is answering, which is a supported state rather than a failure.
+    """
+    chosen = resolve()
+    if chosen is None:
+        return None
+    return _live(chosen)
+
+
+def model_for(chosen: ProviderSpec | None = None) -> str:
+    """The default model for the current selection.
+
+    Split out of `AgentConfig.from_env` because the answer depends on HOW the
+    provider was selected, not only on which one it is.
+    """
+    selected = chosen if chosen is not None else resolve()
+    if selected is None:
+        return spec(ANTHROPIC).default_model
+    return selected.model_for(_live(selected))
+
+
+#: What the vendor says, mapped to what the reader has to do about it. Ordered:
+#: the first pattern that matches wins, so the specific shapes come first.
+_FAILURE_PATTERNS: Final[tuple[tuple[re.Pattern[str], str], ...]] = (
+    (re.compile(r"model\s+'?\"?(?P<model>[\w.:\-/]+)'?\"?\s+not found", re.I), "model"),
+    (re.compile(r"\b404\b|not found|does not exist|unknown model", re.I), "model"),
+    (
+        re.compile(
+            r"connection refused|failed to connect|ECONNREFUSED|"
+            r"connection error|max retries exceeded|name or service not known|"
+            r"timed out|timeout",
+            re.I,
+        ),
+        "reach",
+    ),
+    (
+        re.compile(r"\b401\b|\b403\b|unauthor|invalid[\s_-]*(?:x-)?api[\s_-]*key|"
+                   r"authentication|permission denied|credential", re.I),
+        "auth",
+    ),
+    (re.compile(r"\b429\b|rate.?limit|quota|insufficient[_\s]quota", re.I), "limit"),
+)
+
+#: The last line of every explanation. The single most important thing a
+#: teammate staring at a stack trace does not know is that the desk still
+#: works: the deterministic path answers the same questions through the same
+#: tools, the same rules engine and the same grounding check.
+_STILL_WORKS: Final = (
+    "The deterministic path is unaffected and still answers offline, so this "
+    "costs you the prose and not the analysis."
+)
+
+
+def _ollama_host() -> str:
+    return os.environ.get("OLLAMA_HOST", "").strip() or "http://localhost:11434"
+
+
+def explain_failure(raw: str, chosen: ProviderSpec | None = None) -> str:
+    """Turn a provider's exception text into something to act on.
+
+    "ResponseError: model 'deepseek-v4-flash:cloud' not found (status code:
+    404)" is the vendor's sentence. It does not say which variable to change,
+    which command to run, or that the offline path is still answering. Every
+    branch here says all three, and no branch can print a key: only variable
+    NAMES and the model id go into these strings.
+
+    An unrecognised failure is passed through rather than dressed up. Inventing
+    advice for an error nobody has read is worse than showing the error.
+    """
+    selected = chosen if chosen is not None else resolve()
+    provider = selected.name if selected else NONE
+    kind = next((k for pattern, k in _FAILURE_PATTERNS if pattern.search(raw)), None)
+
+    if kind == "model":
+        match = _FAILURE_PATTERNS[0][0].search(raw)
+        model = (
+            match.group("model")
+            if match
+            else os.environ.get("CREWOPS_MODEL", "").strip() or model_for(selected)
+        )
+        fix = "Set CREWOPS_MODEL to a model this provider actually serves."
+        if provider == OLLAMA:
+            fix = (
+                f"Run `ollama pull {model}` to fetch it, or `ollama list` to see "
+                "what you already have and set CREWOPS_MODEL to one of those. "
+                "A model ending in ':cloud' is served by Ollama Cloud and needs "
+                "OLLAMA_API_KEY, not a local daemon."
+            )
+        return f"The model {model!r} is not available on provider {provider}. {fix} {_STILL_WORKS}"
+
+    if kind == "reach":
+        where = _ollama_host() if provider == OLLAMA else f"the {provider} API"
+        fix = (
+            f"Nothing answered at {where}. Start it with `ollama serve`, point "
+            "OLLAMA_HOST somewhere that is running, or use a hosted key "
+            "(ANTHROPIC_API_KEY) instead."
+            if provider == OLLAMA
+            else f"Could not reach {where}. Check the network and try again."
+        )
+        return f"{fix} {_STILL_WORKS}"
+
+    if kind == "auth":
+        var = selected.selects_on[0] if selected else "the provider key"
+        return (
+            f"{var} was rejected by {provider}. Replace the value with a live "
+            f"key, or remove the line to fall back to the offline path. {_STILL_WORKS}"
+        )
+
+    if kind == "limit":
+        return (
+            f"{provider} rate limited or refused the request on quota. Wait and "
+            f"retry, or switch providers with CREWOPS_LLM_PROVIDER. {_STILL_WORKS}"
+        )
+
+    return f"{raw} {_STILL_WORKS}"
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderCheck:
+    """The result of actually calling the provider.
+
+    `ok` is tri-state on purpose. True means a real round trip succeeded, False
+    means one failed, and **None means no provider is configured**, which is a
+    supported state and must never be reported as a failure.
+    """
+
+    ok: bool | None
+    provider: str | None
+    model: str | None
+    detail: str
+
+
+def preflight(timeout_s: float = 10.0) -> ProviderCheck:
+    """One cheap round trip to the configured provider. Never raises.
+
+    `crewops health` reported "Provider: ollama, Mode: agent, Model:
+    deepseek-v4-flash:cloud" in green to two teammates whose every turn was
+    404ing, because it printed what was CONFIGURED and never touched the
+    provider. A green light in front of a broken turn is worse than a red one.
+
+    Not called on the request path. Selection stays presence-based and
+    instantaneous there, exactly as `llm_configured` documents; this is for the
+    human asking why.
+    """
+    selected = resolve()
+    if selected is None:
+        return ProviderCheck(
+            ok=None,
+            provider=None,
+            model=None,
+            detail="No provider configured. The deterministic path is answering.",
+        )
+
+    model = os.environ.get("CREWOPS_MODEL", "").strip() or model_for(selected)
+    try:
+        # No `.bind(timeout=...)`. It returns a RunnableBinding that passes
+        # the kwarg through to a client that may not take one, and the
+        # TypeError that comes back reads exactly like a dead provider: the
+        # first version of this check reported a working local daemon as
+        # unreachable. `timeout_s` is advisory and left to the client.
+        client = build(selected, model=model, max_tokens=16)
+        client.invoke("ping")
+    except Exception as exc:
+        return ProviderCheck(
+            ok=False,
+            provider=selected.name,
+            model=model,
+            detail=explain_failure(f"{type(exc).__name__}: {exc}", selected),
+        )
+    return ProviderCheck(
+        ok=True,
+        provider=selected.name,
+        model=model,
+        detail=f"{selected.name} answered on {model}.",
+    )
 
 
 def missing_env() -> list[str]:

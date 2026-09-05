@@ -504,8 +504,15 @@ def health(
     data_dir: Annotated[
         Path | None, typer.Option("--data-dir", help="Dataset directory")
     ] = None,
+    probe: Annotated[
+        bool,
+        typer.Option(
+            "--probe/--no-probe",
+            help="Actually call the provider, not just read the configuration",
+        ),
+    ] = True,
 ) -> None:
-    """What is configured, what is loaded, and which mode is active."""
+    """What is configured, what is loaded, which mode is active, and whether it works."""
     table = Table(header_style="bold", title="Extroc")
     table.add_column("Check")
     table.add_column("Value")
@@ -531,6 +538,22 @@ def health(
             "Placeholders ignored",
             Text(", ".join(report.skipped), style="red"),
         )
+
+    # CONFIGURED IS NOT WORKING. This table read "Provider: ollama, Mode:
+    # agent, Model: deepseek-v4-flash:cloud" in green to two teammates whose
+    # every turn came back 404, because it printed the environment and never
+    # called anything. One round trip is free in a command a human typed.
+    if probe:
+        check = _providers.preflight()
+        if check.ok is True:
+            table.add_row("Reachable", Text("yes", style="green"))
+        elif check.ok is False:
+            table.add_row("Reachable", Text("NO", style="red"))
+            table.add_row("Fix", Text(check.detail, style="yellow"))
+        else:
+            table.add_row("Reachable", Text("not probed, no provider", style="yellow"))
+        if check.ok is True:
+            table.add_row("Checked model", check.model or "")
 
     try:
         tools = load_tools(data_dir)
