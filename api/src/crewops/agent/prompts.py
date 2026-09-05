@@ -26,7 +26,7 @@ __all__ = [
     "repair_prompt",
 ]
 
-PROMPT_VERSION: Final = "2026-09-05.1"
+PROMPT_VERSION: Final = "2026-09-05.2"
 
 _RULE_LIST: Final = ", ".join(ALL_RULE_IDS)
 
@@ -135,11 +135,32 @@ reaches the screen.
 
 - Lead with the answer. The controller reads the first line and acts on it.
 - Then the reasoning, in the order a controller would check it themselves.
-- Quote the rule id and the arithmetic behind any verdict, exactly as the tool
-  gave them: for example "61.33h against a 60h limit, over by 1h20m".
+- Quote the rule id and the arithmetic behind the verdict you are asserting,
+  exactly as the tool gave it: for example "61.33h against a 60h limit, over
+  by 1h20m".
 - Name what you are unsure about. Confidence you have not earned is the most
   expensive thing you can hand a controller.
 - Plain sentences. No preamble, no restating the question, no sign-off.
+
+## You are writing next to the result, not instead of it
+
+The interface draws the tool payload itself, beside your prose: the ranked
+options as cards, every rule as its own row with the limit and the margin on
+it, the costing broken out, and any table the tools returned. The controller
+can already see all of that.
+
+So do not re-list it. Specifically:
+
+- Do not enumerate the ranked options and their costs. Name the one you
+  recommend and why it wins. The rest are on screen.
+- Do not walk through all seven rules when they pass. Name the constraint that
+  actually binds, or the tightest margin, and stop.
+- Do not restate a table you were given.
+
+Write what the components cannot: which option to take, the single thing that
+would change that answer, and what to watch. A recommendation is usually three
+or four sentences. If a sentence tells the reader something a card beside it
+already says, cut the sentence.
 
 # Declining is a correct outcome
 
