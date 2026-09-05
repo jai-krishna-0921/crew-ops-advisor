@@ -66,6 +66,7 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 
 from crewops.agent import providers
+from crewops.agent.compact import compacts, model_view
 from crewops.agent.config import AgentConfig
 from crewops.agent.events import emit
 from crewops.agent.guards import GuardFailure, run_guards, strip_em_dashes
@@ -94,10 +95,20 @@ from crewops.verify import Verifier
 
 __all__ = ["TurnPlan", "bind_tool_specs", "build_graph", "subjectless_ask"]
 
-#: How much of a tool payload is handed back to the model. The full envelope
-#: always reaches the verifier and the HTTP layer; this cap only protects the
-#: prompt budget, and `truncated` records that it fired.
+#: How much of a tool payload is handed back to the model, when the payload is
+#: a shape nothing knows how to compact. The full envelope always reaches the
+#: verifier and the HTTP layer; this cap only protects the prompt budget, and
+#: `truncated` records that it fired.
 _PAYLOAD_CHAR_BUDGET: Final = 6_000
+
+#: The allowance for a COMPACTED payload, and larger than the raw cap on
+#: purpose. `find_cover_options` with its rejects is 223,156 characters and
+#: `agent/compact.py` takes it to about 11,000 by dropping the per-rule per-day
+#: arithmetic the interface already draws and the prose is forbidden to
+#: restate. What is left is identity, verdict, price and reason for every
+#: option, complete. Truncated content is a JSON string that stops mid-object;
+#: compacted content is all signal, so it is worth more room.
+_COMPACT_CHAR_BUDGET: Final = 16_000
 
 
 class TurnPlan(BaseModel):
@@ -267,14 +278,20 @@ def _tool_message_content(envelope: ToolEnvelope) -> tuple[str, bool]:
     payload_json: Any
     truncated = False
     try:
-        payload_json = (
-            envelope.payload.model_dump(mode="json")
-            if hasattr(envelope.payload, "model_dump")
-            else envelope.payload
-        )
+        # COMPACT FIRST, CUT ONLY AS A LAST RESORT. The raw cover search is
+        # 223,156 characters against a 6,000 budget, so the model used to be
+        # handed rank 1, half of rank 2 and "...[truncated]" and asked to write
+        # about six options. `model_view` drops the per-rule per-day arithmetic
+        # that the interface draws and the prose is forbidden to restate, and
+        # keeps every option's identity, verdict, price and reason. Complete,
+        # and about 11,000 characters.
+        payload_json = model_view(envelope.payload)
         rendered = json.dumps(payload_json, default=str)
-        if len(rendered) > _PAYLOAD_CHAR_BUDGET:
-            payload_json = rendered[:_PAYLOAD_CHAR_BUDGET] + "...[truncated]"
+        budget = (
+            _COMPACT_CHAR_BUDGET if compacts(envelope.payload) else _PAYLOAD_CHAR_BUDGET
+        )
+        if len(rendered) > budget:
+            payload_json = rendered[:budget] + "...[truncated]"
             truncated = True
     except (TypeError, ValueError):
         payload_json = str(envelope.payload)[:_PAYLOAD_CHAR_BUDGET]
