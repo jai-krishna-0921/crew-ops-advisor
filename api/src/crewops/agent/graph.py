@@ -787,11 +787,17 @@ def build_graph(
         pending = state.get("pending_guard") or {}
         reason = str(pending.get("reason", "the answer broke a structural rule"))
         required = [str(tool) for tool in pending.get("required_tools", [])]
-        return {
-            "repairs": state.get("repairs", 0) + 1,
+        update: dict[str, Any] = {
             "pending_guard": None,
             "messages": [HumanMessage(content=policy_repair_prompt(reason, required))],
         }
+        # A style rewrite is counted apart from a grounding one, so being asked
+        # to stop enumerating never costs a turn its correction for a figure.
+        if pending.get("fatal", True):
+            update["repairs"] = state.get("repairs", 0) + 1
+        else:
+            update["style_repairs"] = state.get("style_repairs", 0) + 1
+        return update
 
     # ---------------------------------------------------------------- abstain
 
@@ -874,7 +880,12 @@ def _guard_outcome(
         repair_attempts=repairs,
         note=f"Guard '{failure.guard}' rejected the answer: {failure.reason}",
     )
-    if repairs < config.max_repairs:
+    # A STYLE REWRITE SPENDS ITS OWN BUDGET. Sharing one counter meant a turn
+    # asked to stop enumerating had used its only pass, so the rewrite quoting
+    # one unattestable figure was refused for a reason unrelated to the figure.
+    # Agent abstentions went 4 to 8 on the scorecard when the guard landed.
+    spent = repairs if failure.fatal else state.get("style_repairs", 0)
+    if spent < config.max_repairs:
         return {
             "verification": report,
             "timings": timings,
@@ -882,6 +893,7 @@ def _guard_outcome(
                 "guard": failure.guard,
                 "reason": failure.reason,
                 "required_tools": list(failure.required_tools),
+                "fatal": failure.fatal,
             },
         }
     if not failure.fatal:

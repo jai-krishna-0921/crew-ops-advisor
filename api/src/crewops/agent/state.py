@@ -53,7 +53,18 @@ class TurnState(TypedDict, total=False):
     # --------------------------------------------------------- the answer
     draft: str
     verification: VerificationReport | None
+
+    #: Corrections spent on an UNATTESTED FIGURE. One, then decline: the
+    #: ceiling is what stops a turn negotiating with the verifier until
+    #: something sticks.
     repairs: int
+
+    #: Corrections spent on STYLE, which is a different failure and needs its
+    #: own purse. Sharing one counter meant a turn asked to stop enumerating
+    #: had used its only pass, so the rewrite quoting one unattestable figure
+    #: was refused for a reason unrelated to the figure. A style rewrite can
+    #: never cause a refusal, so it can never loop either.
+    style_repairs: int
     abstention: Abstention | None
 
     #: Set by `verify` when a structural guard rejects the answer, cleared when
@@ -94,6 +105,7 @@ def new_turn_state(
         "draft": "",
         "verification": None,
         "repairs": 0,
+        "style_repairs": 0,
         "abstention": None,
         "pending_guard": None,
         "started_at": started_at,
