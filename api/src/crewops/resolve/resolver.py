@@ -29,6 +29,7 @@ from crewops.contracts import (
     VerificationReport,
     VerificationStatus,
 )
+from crewops.resolve.completeness import unmodelled_constraints
 from crewops.resolve.intents import Intent, PlannedCall, match_intent
 from crewops.resolve.render import render
 from crewops.resolve.triage import canonical_question, triage_question
@@ -103,7 +104,7 @@ class DeterministicResolver:
                         if greeting
                         else "I cannot answer that reliably. " + triage.reason
                     ),
-                    missing=[] if greeting else [triage.reason],
+                    missing=[] if greeting else list(triage.missing) or [triage.reason],
                     suggestions=list(SUPPORTED_SHAPES[:3]),
                 ),
                 tier=triage.tier,
@@ -147,16 +148,51 @@ class DeterministicResolver:
                         f"'{intent.name}' question, but it does not name "
                         + " or ".join(gaps)
                         + "."
+                        # `missing_hint` was a declared field that nothing read.
+                        # It is where an intent puts the line a controller can
+                        # copy, which is the difference between a refusal and a
+                        # question worth answering.
+                        + (f" {intent.missing_hint}" if intent.missing_hint else "")
                     ),
                     missing=gaps,
-                    suggestions=[
-                        f"Add {gap} and ask again" for gap in gaps
-                    ],
+                    suggestions=[f"Add {gap} and ask again" for gap in gaps],
                 ),
                 tier=intent.tier,
             )
 
-        envelopes = self._run(intent.build(triage.entities, snapshot))
+        plan = intent.build(triage.entities, snapshot)
+
+        # MATCHING A SHAPE IS NOT ANSWERING THE QUESTION. A shape has a fixed
+        # argument list, and a constraint the question carries that the shape
+        # cannot express used to be dropped in silence: the tools then ran over
+        # the unfiltered set and the renderer stated that as the answer. Every
+        # figure in it was real, so neither the verifier nor the guards saw a
+        # problem. It was the answer to a different question, which is the one
+        # failure this system exists to avoid.
+        unmodelled = unmodelled_constraints(asked, plan)
+        if unmodelled:
+            return self._abstain(
+                question,
+                thread_id=thread_id,
+                turn_id=turn_id,
+                asked_at=asked_at,
+                started=started,
+                abstention=Abstention(
+                    reason=AbstentionReason.UNDERSPECIFIED,
+                    message=(
+                        "I cannot answer that reliably. I understood this as a "
+                        f"'{intent.name}' question, but that shape cannot express "
+                        + unmodelled[0].split(".")[0]
+                        + ". Answering without it would have reported the "
+                        "unfiltered set as though it were the answer."
+                    ),
+                    missing=unmodelled,
+                    suggestions=list(SUPPORTED_SHAPES[:3]),
+                ),
+                tier=intent.tier,
+            )
+
+        envelopes = self._run(plan)
         tier = max(intent.tier, triage.tier)
 
         failed = [envelope for envelope in envelopes if not envelope.ok]

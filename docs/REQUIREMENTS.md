@@ -34,10 +34,10 @@ changed, and no quotation is shortened without an ellipsis.
 | REQ-01 | "Conversational interface: web chat, voice, or a well-designed CLI" | mandatory | Both: a Typer/Rich CLI (`crewops chat`, `crewops ask`) and a Next.js web console streaming over SSE | `api/src/crewops/cli.py`, `web/` | manual demo; `GET /api/health` |
 | REQ-02 | "Reasoning layer answering questions across as many tiers as you reach" | mandatory | LangGraph agent selecting deterministic tools, with a deterministic offline resolver behind the same `Reply` type | `api/src/crewops/agent/`, `api/src/crewops/resolve/` | `make eval`, per-tier scorecard |
 | REQ-03 | "Visible explanations on all non-trivial answers" | mandatory | Every tool returns a `ToolEnvelope` carrying `trace` and `facts`; every rule verdict carries a `RuleTrace.arithmetic` string with both operands, the operator, the result and the limit | `contracts/evidence.py`, `contracts/rules.py` | `make golden`; UI evidence drawer |
-| REQ-04 | "Architecture diagram: showing the boundary you drew between LLM reasoning and deterministic logic" | mandatory | Not yet drawn. Owner: presentation. The boundary itself is enforced by `tests/test_boundary.py`, which is the stronger claim and should be shown next to the diagram | `docs/` (pending) | n/a, it is a document |
-| REQ-05 | "README: setup, approach, key trade-offs, known limitations" | mandatory | Not yet written | `README.md` (pending) | n/a |
+| REQ-04 | "Architecture diagram: showing the boundary you drew between LLM reasoning and deterministic logic" | mandatory | **done.** A 12 page architecture document, plus an interactive version at `/architecture` in the running app. The boundary itself is enforced by `tests/test_boundary.py`, which is the stronger claim and is shown next to the diagram | `docs/architecture.pdf`, `docs/architecture.html`, `web/src/app/architecture/` | `make boundary` |
+| REQ-05 | "README: setup, approach, key trade-offs, known limitations" | mandatory | **done.** Setup and approach in the README, the long form in `docs/SETUP.md`, trade-offs in their own section, limitations in `docs/FAILURE-ANALYSIS.md` | `README.md`, `docs/SETUP.md` | n/a, it is a document |
 | REQ-06 | "Sample inputs and outputs, including at least one case your system handles poorly, with your analysis" | mandatory | `docs/FAILURE-ANALYSIS.md` plus a generated transcript set from the scorecard | `docs/FAILURE-ANALYSIS.md`, `make eval` artefact | `make eval` writes the transcripts |
-| REQ-07 | "Presentation deck and live demo" | mandatory | Not yet built | pending | n/a |
+| REQ-07 | "Presentation deck and live demo" | mandatory | **partial.** The live demo runs: `make dev`, and `COMMANDS.md` is the script in running order with what each command proves. The deck itself is not built | `COMMANDS.md` | n/a |
 
 **REQ-04 note.** The PDF asks for a diagram of the boundary. We have something
 better available and should present both: an executable test that fails if any
@@ -51,11 +51,11 @@ nothing on the other side of it is decorative. A diagram asserts the boundary.
 
 | Id | Requirement, verbatim | Class | Status | Where | Verified by |
 |---|---|---|---|---|---|
-| REQ-08 | "Tier 1: Lookup & Retrieval (mandatory). Answerable directly from the data. No domain modelling required." | mandatory | planned | `tools/` tier 1 group | `make eval`, Tier 1 rows; `docs/TIER-COVERAGE.md` section 1 |
-| REQ-09 | "Tier 2: Consequence & Simulation (strongly expected). Requires reasoning about impact, not just retrieval." | expected | planned | `ops/`, `rules/`, `tools/` tier 2 group | `make eval`, Tier 2 rows |
-| REQ-10 | "Tier 3: Recommendation & Action (stretch). Requires ranking legal options against real trade-offs. Expected: ranked, rule-compliant options with cost, legality status, reachability and reasoning." | stretch | planned | `ops/rank`, `find_cover_options` | `make golden` against S1, S2, S5; `make eval` Tier 3 rows |
-| REQ-11 | "Bonus: draft the notification message to the affected crew." | optional | planned | `draft_notification` | Q36 golden test |
-| REQ-12 | "Explainability is mandatory. Every non-trivial answer must carry reasoning a controller can read and challenge. A correct answer with no visible reasoning scores poorly." | mandatory | planned | `narrate/`, `RuleTrace`, `TraceStep`, `Citation` | grounding guard; UI reasoning trail |
+| REQ-08 | "Tier 1: Lookup & Retrieval (mandatory). Answerable directly from the data. No domain modelling required." | mandatory | **done.** 16 of 16 correct in agent mode, 15 of 16 with 1 abstention offline, 0 wrong either way | `tools/` tier 1 group | `make eval`, Tier 1 rows |
+| REQ-09 | "Tier 2: Consequence & Simulation (strongly expected). Requires reasoning about impact, not just retrieval." | expected | **done.** 10 to 12 of 14 correct in agent mode across runs, 9 of 14 offline, 0 wrong either way; the remainder abstain | `ops/`, `rules/`, `tools/` tier 2 group | `make eval`, Tier 2 rows |
+| REQ-10 | "Tier 3: Recommendation & Action (stretch). Requires ranking legal options against real trade-offs. Expected: ranked, rule-compliant options with cost, legality status, reachability and reasoning." | stretch | **done.** 6 of 8 correct in agent mode, 3 of 8 offline, 0 wrong either way. Every option carries cost, legality, reachability and reasoning, and the rejected candidates carry the rule that excluded them | `ops/candidates.py`, `ops/costing.py`, `ops/joint.py`, `find_cover_options`, `plan_joint_cover` | `make golden` against S1, S2, S5; `make eval` Tier 3 rows |
+| REQ-11 | "Bonus: draft the notification message to the affected crew." | optional | **done.** Q36 answers correctly in both modes | `draft_notification` | Q36 golden test |
+| REQ-12 | "Explainability is mandatory. Every non-trivial answer must carry reasoning a controller can read and challenge. A correct answer with no visible reasoning scores poorly." | mandatory | **done.** Every `Reply` carries the `Fact` list with a `derivation` per figure, a `RuleTrace` per rule evaluated with its arithmetic, the `TraceStep` chain and the citations back into the dataset | `RuleTrace`, `TraceStep`, `Citation`, `resolve/render.py`, `agent/reply.py` | grounding guard; UI evidence drawer |
 | REQ-13 | "What should the language model do, what should deterministic code do, and how do you compose them into a system that is both conversational and correct?" | mandatory | The submission's entire thesis: the model plans and explains, deterministic code computes, and a guard node rejects any sentence containing a number, identifier, date or rule id that no tool emitted this turn | `docs/CONTRACTS.md` "The boundary rule, stated precisely"; `agent/graph.py`; `verify/` | `make boundary`; verification status on every `Reply` |
 
 REQ-10 has a caveat that belongs here rather than buried. The PDF's Tier 3
@@ -91,7 +91,7 @@ two, deliberately.
 | REQ-19 | "Multi-turn conversation with context retention" | optional | **Taken.** LangGraph SQLite checkpointing, so a thread survives a restart and replays as an audit trail | `agent/memory`, `GET /api/threads/{id}` |
 | REQ-20 | "Proactive alerting ('three crew approach duty limits tomorrow')" | optional | **Taken.** `get_watchlist` and `crewops brief <date>`, entirely deterministic | `tools/`, `cli.py` |
 | REQ-21 | "Drafting crew notifications" | optional | **Taken.** `draft_notification`, deterministic template filled from computed facts. The model may adjust tone and may not introduce a time, flight number or report location the template did not supply | `draft_notification` |
-| REQ-22 | "Chained or simultaneous disruptions" | optional | **Taken, and it is not really optional.** Q32 and S6 are simultaneous disruptions in the shipped answer keys, so declining this loses a Tier 3 question and a scenario. See GAP-2 in `docs/TIER-COVERAGE.md` | `ops/` joint allocation, pending a tool to call it |
+| REQ-22 | "Chained or simultaneous disruptions" | optional | **Taken, and it is not really optional.** Q32 and S6 are simultaneous disruptions in the shipped answer keys, so declining this loses a Tier 3 question and a scenario. `plan_joint_cover` solves the allocation as one problem and asserts no crew id appears twice, because two independent searches return the same scarce reserve as rank 1 for both gaps | `ops/joint.py`, `plan_joint_cover` | S6 golden test |
 | REQ-23 | "Confidence / uncertainty signalling" | optional | **Taken.** `Reply.confidence`, `Abstention` with a typed reason, and `Provenance.ASSUMED` rendered differently in the UI so the system is visibly not claiming a modelling assumption as observed fact | `contracts/evidence.py` |
 | REQ-24 | "The dataset is clean; real operational data is not. Handling malformed input is a bonus, not a requirement." | optional | **Partially taken.** We do not harden against malformed dataset records. We do harden against malformed *questions*, which is the input a controller actually supplies: ambiguous referents and underspecified questions return a typed `Abstention` rather than a guess | `AbstentionReason.AMBIGUOUS_REFERENT`, `UNDERSPECIFIED` |
 
@@ -100,23 +100,22 @@ two, deliberately.
 | Id | Requirement, verbatim | Class | Target | Verified by |
 |---|---|---|---|---|
 | REQ-25 | "Answers should arrive fast enough to feel usable on a live shift. No formal benchmark, but a 45-second response is not a decision aid." | expected | Tier 1 under 2s, Tier 2 under 8s, Tier 3 under 20s, all end to end in agent mode. Deterministic mode should be under 500ms at every tier. The scorecard reports mean and p95 latency per tier so the claim is measured, not asserted | `make eval` latency columns |
-| REQ-26 | "Commentary in your README on how such a system would handle crew PII in production earns credit under Technical Excellence." | optional, credited | Not yet written. It is a paragraph of README for explicit marks under a 15% criterion, so it is worth writing well: field-level classification, redaction at the tool boundary rather than in the prompt, no crew identifiers in model context where a pseudonymous handle would do, and retention limits on the checkpoint database | `README.md` (pending) |
+| REQ-26 | "Commentary in your README on how such a system would handle crew PII in production earns credit under Technical Excellence." | optional, credited | **done.** Pseudonymisation at the tool boundary, medical certificate detail kept out of the model's half entirely, the `Fact` ledger logged rather than the prompt, and purpose limitation on reachability data | `docs/PRODUCTION.md`, linked from the README |
 
-REQ-25 has a design consequence worth stating: GAP-5 in
-`docs/TIER-COVERAGE.md` (no fleet-wide duty scan) forces 150 sequential tool
-calls to answer Q26. That is a latency failure before it is a correctness
-failure, which is why it is filed as high severity rather than medium.
+REQ-25 had a design consequence worth recording: with no fleet-wide duty scan,
+Q26 needed 150 sequential tool calls, which is a latency failure before it is a
+correctness failure. `scan_duty_headroom` answers it in one call.
 
 ## 6. Deliverables checklist (PDF section 8, page 7)
 
 | Id | Item | Status |
 |---|---|---|
 | REQ-27 | "Source code repository (GitHub / GitLab)" | done |
-| REQ-04 | "Architecture diagram: including the LLM vs deterministic boundary" | not yet |
-| REQ-05 | "README with setup instructions, approach and trade-offs" | not yet |
-| REQ-06 | "Sample inputs and outputs, including one failure case with analysis" | partial, `docs/FAILURE-ANALYSIS.md` started |
-| REQ-07a | "Presentation deck" | not yet |
-| REQ-07b | "Live demo" | not yet |
+| REQ-04 | "Architecture diagram: including the LLM vs deterministic boundary" | done, `docs/architecture.pdf` and `/architecture` in the app |
+| REQ-05 | "README with setup instructions, approach and trade-offs" | done, `README.md` and `docs/SETUP.md` |
+| REQ-06 | "Sample inputs and outputs, including one failure case with analysis" | done, `docs/FAILURE-ANALYSIS.md` and the `make eval` artefacts |
+| REQ-07a | "Presentation deck" | **not yet** |
+| REQ-07b | "Live demo" | done, `make dev` plus the script in `COMMANDS.md` |
 
 ## 7. Generalisation (PDF section 7, page 7)
 
@@ -137,12 +136,12 @@ creep costs them and costs hours we do not have.
 
 | Id | "You are NOT expected to build", verbatim | Page | Our position |
 |---|---|---|---|
-| NG-01 | "A prediction model. Disruption-risk signals are provided pre-computed. Treat them like a weather forecast; your job is what the controller does about it." | 5 | We build no model of any kind that predicts anything. `risk_signals.json` is read and surfaced as a `DATASET` provenance fact and never recomputed, adjusted or blended. Note that we currently cannot surface it at all: GAP-3 |
+| NG-01 | "A prediction model. Disruption-risk signals are provided pre-computed. Treat them like a weather forecast; your job is what the controller does about it." | 5 | We build no model of any kind that predicts anything. `risk_signals.json` is read and surfaced as a `DATASET` provenance fact and never recomputed, adjusted or blended. Q16 answers the score and its drivers straight from the file |
 | NG-02 | "Authentication, user management or multi-tenancy" | 6 | None. The HTTP surface has no auth and `docs/CONTRACTS.md` says so explicitly, citing this line, so a judge reads it as a decision rather than an omission |
 | NG-03 | "Production infrastructure, CI/CD or deployment pipelines" | 6 | **We have partially crossed this line and it is defensible.** `.github/workflows/ci.yml` exists. It is not a deployment pipeline: it runs lint, types, the boundary test and the golden tests. Its purpose is to fail if the dataset moves or the boundary leaks, which is a correctness guarantee for REQ-14 and REQ-13, not infrastructure. We add nothing further: no containers, no deploy step, no environments |
 | NG-04 | "Integrations with real airline systems" | 6 | None. The only data source is `data/`, which REQ-14 also requires |
 | NG-05 | "A mobile application" | 6 | None. The web console is responsive because that is free, not because we are targeting mobile |
-| NG-06 | "A full mathematical optimisation solver, heuristic ranking with clear reasoning is sufficient" | 6 | We rank by cost then crew id, exactly as the answer keys do, and state the ranking basis in `Recommendation.ranking_basis` so it can be argued with. The joint allocation in GAP-2 is a two-gap exhaustive enumeration over a candidate list of tens, not a solver. If that ever needs an LP, we have misread the problem |
+| NG-06 | "A full mathematical optimisation solver, heuristic ranking with clear reasoning is sufficient" | 6 | We rank by cost then crew id, exactly as the answer keys do, and state the ranking basis in `Recommendation.ranking_basis` so it can be argued with. The joint allocation in `plan_joint_cover` is a two-gap exhaustive enumeration over a candidate list of tens, not a solver. If that ever needs an LP, we have misread the problem |
 | NG-07 | "Coverage of all real regulations, the seven provided rules are the full scope" | 6 | Seven rules, loaded from `rules.json` params, no eighth. `RuleId` is a closed `Literal` of exactly seven values, so an eighth rule is a type error rather than a judgement call. When a question needs a rule we do not model, the system abstains with `AbstentionReason.REQUIRES_UNMODELLED_RULE` and names what it would need. See the caveat below |
 
 ### The NG-07 caveat, stated plainly

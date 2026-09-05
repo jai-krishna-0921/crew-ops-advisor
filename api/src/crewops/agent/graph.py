@@ -87,6 +87,8 @@ from crewops.contracts import (
     VerificationReport,
     VerificationStatus,
 )
+from crewops.resolve.completeness import unmodelled_constraints
+from crewops.resolve.intents import match_intent
 from crewops.resolve.triage import triage_question
 from crewops.verify import Verifier
 
@@ -157,6 +159,33 @@ def _summarise_payload(envelope: ToolEnvelope) -> str:
     if hasattr(payload, "__class__"):
         return f"{payload.__class__.__name__}, {len(envelope.facts)} facts"
     return f"{len(envelope.facts)} facts"
+
+
+def _prefetch_plan(question: str, snapshot: datetime) -> list[Any]:
+    """The offline resolver's tool plan for this question, or nothing.
+
+    Nothing is returned unless the resolver both recognises the shape and has
+    every argument it needs, because a plan the resolver would have refused to
+    run is a plan whose results would answer a different question. That is the
+    same gate `resolve/completeness.py` applies, for the same reason.
+    """
+    intent = match_intent(question)
+    if intent is None:
+        return []
+    from crewops.resolve.triage import extract_entities
+
+    entities = extract_entities(question)
+    if intent.missing(entities):
+        return []
+    try:
+        plan = intent.build(entities, snapshot)
+    except (IndexError, KeyError, ValueError):
+        # A build that raises is a shape mismatch, not an error worth failing
+        # the turn over. The agent's own loop still runs.
+        return []
+    if unmodelled_constraints(question, plan):
+        return []
+    return list(plan)
 
 
 def _tool_message_content(envelope: ToolEnvelope) -> tuple[str, bool]:
@@ -277,7 +306,7 @@ def build_graph(
                     if greeting
                     else "I cannot answer that reliably. " + verdict.reason
                 ),
-                missing=[] if greeting else [verdict.reason],
+                missing=[] if greeting else list(verdict.missing) or [verdict.reason],
                 did_establish=[],
                 suggestions=_scope_suggestions(),
             )
@@ -299,7 +328,7 @@ def build_graph(
         )
         model_calls = 0
         if planner is not None and not _over_budget(state, cfg):
-            messages = [
+            plan_messages = [
                 SystemMessage(content=PLAN_SYSTEM_PROMPT),
                 HumanMessage(
                     content=plan_user_prompt(
@@ -321,7 +350,7 @@ def build_graph(
             # the cost of every turn.
             for attempt in (1, 2):
                 try:
-                    result = structured.invoke(messages)
+                    result = structured.invoke(plan_messages)
                     model_calls += 1
                 except Exception as exc:
                     emit("note", {"text": f"Planner unavailable, continuing: {exc}"})
@@ -360,26 +389,108 @@ def build_graph(
                 "prompt_version": PROMPT_VERSION,
             },
         )
+        messages: list[AnyMessage] = [
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(
+                content=answer_kickoff(
+                    state["question"],
+                    plan=plan.intent,
+                    steps=plan.steps,
+                    as_of=as_of,
+                )
+            ),
+        ]
+        prefetched: list[ToolEnvelope] = []
+
+        # PREFETCH. The agent discovers its tools one round trip at a time, and
+        # a round trip is ~4.5 seconds against a 30 second budget while the
+        # tools themselves cost single-digit milliseconds. For a shape the
+        # offline resolver already recognises that discovery buys nothing: the
+        # call list is known, so run it here and let the agent's first call be
+        # the one that writes the answer.
+        #
+        # The envelopes go into state exactly like the loop's own, so the
+        # verifier attests them and the guards see them. Nothing about the
+        # boundary changes; only the number of times the model is asked.
+        if cfg.prefetch:
+            for call in _prefetch_plan(state["question"], _snapshot_of(state)):
+                emit(
+                    "tool_call",
+                    {
+                        "tool": call.tool,
+                        "args": call.args,
+                        "label": _label_for(call.tool, call.args),
+                    },
+                )
+                started_call = time.monotonic()
+                try:
+                    envelope = call_tool(cast(Any, tools), call.tool, call.args)
+                except Exception as exc:
+                    envelope = ToolEnvelope(
+                        tool=call.tool,
+                        args=call.args,
+                        ok=False,
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
+                if not envelope.latency_ms:
+                    envelope = envelope.model_copy(
+                        update={
+                            "latency_ms": int((time.monotonic() - started_call) * 1000)
+                        }
+                    )
+                prefetched.append(envelope)
+                emit(
+                    "tool_result",
+                    {
+                        "tool": envelope.tool,
+                        "ok": envelope.ok,
+                        "latency_ms": envelope.latency_ms,
+                        "summary": _summarise_payload(envelope),
+                        "envelope": envelope.model_dump(mode="json"),
+                    },
+                )
+
+        if prefetched:
+            # Presented as the loop would have presented them: a tool call the
+            # model can see it did not have to make, and its result. A
+            # ToolMessage with no matching tool_call breaks the message
+            # sequence and the provider rejects the next request.
+            calls = [
+                {
+                    "name": envelope.tool,
+                    "args": envelope.args,
+                    "id": f"prefetch_{index}",
+                }
+                for index, envelope in enumerate(prefetched)
+            ]
+            messages.append(AIMessage(content="", tool_calls=calls))
+            for index, envelope in enumerate(prefetched):
+                content, truncated = _tool_message_content(envelope)
+                if truncated:
+                    prefetched[index] = envelope.model_copy(
+                        update={"truncated": True}
+                    )
+                messages.append(
+                    ToolMessage(
+                        content=content,
+                        tool_call_id=f"prefetch_{index}",
+                        name=envelope.tool,
+                    )
+                )
+
         return {
             "tier": tier,
             "plan_intent": strip_em_dashes(plan.intent),
             "plan_steps": [strip_em_dashes(step) for step in plan.steps],
             "model_calls": state.get("model_calls", 0) + model_calls,
+            "envelopes": prefetched,
             "timings": {
                 **state.get("timings", {}),
                 "plan_ms": int((time.monotonic() - started) * 1000),
+                "tools_ms": state.get("timings", {}).get("tools_ms", 0)
+                + sum(e.latency_ms for e in prefetched),
             },
-            "messages": [
-                SystemMessage(content=SYSTEM_PROMPT),
-                HumanMessage(
-                    content=answer_kickoff(
-                        state["question"],
-                        plan=plan.intent,
-                        steps=plan.steps,
-                        as_of=as_of,
-                    )
-                ),
-            ],
+            "messages": messages,
         }
 
     # ------------------------------------------------------------------ agent
@@ -775,6 +886,20 @@ def _rejection_note(report: VerificationReport) -> str:
         f"{report.note or ''} One correction pass was spent and the answer still "
         "carried unattested values, so the turn declines."
     ).strip()
+
+
+def _snapshot_of(state: TurnState) -> datetime:
+    """The as-of the turn is reasoning about, for building a prefetch plan.
+
+    The dataset snapshot when the turn does not name one, which is what every
+    intent's `build` already assumes.
+    """
+    as_of = state.get("as_of")
+    if isinstance(as_of, datetime):
+        return as_of.replace(tzinfo=None)
+    from crewops.agent.factory import default_snapshot
+
+    return default_snapshot()
 
 
 def _as_of_text(state: TurnState) -> str:

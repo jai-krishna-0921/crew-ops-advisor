@@ -113,6 +113,9 @@ class ListReservesArgs(BaseModel):
         description="The required REPORT time, not the callout time. The on-call "
         "window is tested against report, and the test is inclusive at both ends.",
     )
+    crew_id: str | None = Field(
+        default=None, description="One reserve, when the question names a crew id"
+    )
 
 
 class FindExpiringCertificationsArgs(BaseModel):
@@ -143,7 +146,12 @@ class AggregateArgs(BaseModel):
     field: str | None = Field(
         default=None, description="Required for sum, max, min, mean and distinct"
     )
-    group_by: str | None = Field(default=None, description="Field to group on")
+    group_by: str | None = Field(
+        default=None,
+        description="Field to group on. Pairings can be grouped by captain, "
+        "first_officer or senior_cabin_crew as well as aircraft and "
+        "aircraft_type. An unknown field is an error that lists the real ones.",
+    )
     filters: dict[str, str | int | float | bool | None] | None = Field(
         default=None, description="Field to value equality filters"
     )
@@ -467,7 +475,11 @@ TOOL_SPECS: Final[tuple[ToolSpec, ...]] = (
         "Counts, extrema, distinct values and grouped totals. Reach for this "
         "whenever a question says 'how many', 'which is the longest' or 'which "
         "stations'. Counting a list yourself is arithmetic, and arithmetic is "
-        "not yours to do.",
+        "not yours to do. Pairing rows carry captain, first_officer and "
+        "senior_cabin_crew, so 'which captain holds the most pairings or legs' "
+        "is one call grouped by captain. An unknown field is an error naming "
+        "the fields that collection does have: read that error and re-call, "
+        "never fall back to fetching the records one at a time.",
         AggregateArgs,
         lambda tools, a: tools.aggregate(**a.model_dump(exclude_none=True)),
         lambda a: f"Aggregating {a.get('metric')} over {a.get('collection')}",
@@ -541,8 +553,13 @@ TOOL_SPECS: Final[tuple[ToolSpec, ...]] = (
     ),
     ToolSpec(
         "scan_duty_headroom",
-        "Fleet wide sweep for crew approaching a duty or flight hour limit, in "
-        "one call rather than one call per crew member.",
+        "Every crew member's accrued duty and flight hours in one call, ranked "
+        "with the least headroom, meaning the hardest worked, first. This is "
+        "also the tool for 'who is my most used captain', 'who is worked "
+        "hardest' and 'who is closest to a limit': filter with rank and base, "
+        "and raise threshold_hours (60 covers the whole fleet) to rank everyone "
+        "rather than only those near a limit. Never loop get_duty_clocks per "
+        "crew member to build this yourself.",
         ScanDutyHeadroomArgs,
         lambda tools, a: tools.scan_duty_headroom(**a.model_dump(exclude_none=True)),
         lambda a: f"Sweeping duty headroom for {a.get('on_date')}",

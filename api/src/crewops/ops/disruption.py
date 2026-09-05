@@ -27,12 +27,14 @@ from datetime import timedelta
 
 from crewops.contracts.evidence import Fact, Provenance
 from crewops.contracts.ops import (
+    CostBreakdown,
     DownstreamRisk,
     FlightRef,
     ImpactReport,
     RiskSeverity,
 )
-from crewops.domain import Flight, WorldOverlay, WorldState, hours_between
+from crewops.domain import Flight, Pairing, WorldOverlay, WorldState, hours_between
+from crewops.ops.costing import price_cancellation, price_crew_set
 from crewops.rules import LegalityEngine, ProposedDuty, proposed_duty_from_flights
 
 #: The shipped `action` string for an infeasible closure delay separates the
@@ -105,6 +107,19 @@ class DelayResult:
     partial_fdp_limit: float
     dropped_flights: tuple[str, ...]
     impact: ImpactReport
+
+    #: The same two leg sets as flight numbers rather than ids. A controller
+    #: says "DX404", not "DX404-2026-09-16", and every renderer that had only
+    #: the ids ended up printing a count instead of the members.
+    partial_duty_flight_numbers: tuple[str, ...] = ()
+    dropped_flight_numbers: tuple[str, ...] = ()
+
+    #: The two ways out of a breach, priced. Both are None when the delayed
+    #: duty is still legal: there is nothing to recover from, and quoting a
+    #: recovery cost for a duty that can be flown as rostered would invite a
+    #: controller to spend money they do not need to spend.
+    recrew_cost: CostBreakdown | None = None
+    cancel_cost: CostBreakdown | None = None
 
 
 class DisruptionSimulator:
@@ -463,6 +478,36 @@ class DisruptionSimulator:
 
     # ---------------------------------------------------------------- delay
 
+    def _leg_numbers(self, flight_ids: Sequence[str]) -> tuple[str, ...]:
+        """Flight ids as the numbers a controller says out loud.
+
+        `DX404-2026-09-16` identifies a row; `DX404` is what goes over the
+        phone. Every renderer that had only the ids printed a count instead of
+        the members, which is a correct computation and a useless answer.
+        """
+        return tuple(self.world.require_flight(f).flight_no for f in flight_ids)
+
+    def _price_recovery(
+        self, pairing: Pairing, dropped: Sequence[str], *, breach: bool
+    ) -> tuple[CostBreakdown | None, CostBreakdown | None]:
+        """The two ways out of an FDP breach, priced: re-crew, or cancel.
+
+        Re-crewing calls the whole rostered complement out from reserve to fly
+        the legs the delayed crew can no longer take. Cancelling those legs is
+        the alternative, and it is priced beside it because a recommendation
+        with nothing to compare against is an assertion.
+
+        Both are None when the delayed duty is still legal. There is nothing to
+        recover from, and quoting a recovery cost for a duty that can be flown
+        as rostered invites a controller to spend money they do not need to.
+        """
+        if not (breach and dropped):
+            return None, None
+        return (
+            price_crew_set(self.world.costs, [member.role for member in pairing.crew]),
+            price_cancellation(self.world.costs, legs=len(dropped)),
+        )
+
     def whole_duty_delay(
         self, *, pairing_id: str, on_date: DateType, delay_hours: float
     ) -> DelayResult:
@@ -493,6 +538,10 @@ class DisruptionSimulator:
         )
         partial_fdp = partial.duty_hours if partial else 0.0
         partial_limit = self.engine.fdp_limit_for(len(kept)) if kept else 0.0
+
+        kept_numbers = self._leg_numbers(kept)
+        dropped_numbers = self._leg_numbers(dropped)
+        recrew_cost, cancel_cost = self._price_recovery(pairing, dropped, breach=breach)
 
         detail = (
             f"RULE-FDP-01: the delayed duty runs {fdp_after}h against a {limit}h limit "
@@ -538,8 +587,9 @@ class DisruptionSimulator:
                 f"duty slides {delay_hours}h. "
                 + (
                     f"That is over the {limit}h limit for {day.sectors} sectors. "
-                    f"Dropping the last leg leaves {len(kept)} sectors at {partial_fdp}h "
-                    f"against a {partial_limit}h limit, which the rostered crew can fly."
+                    f"Dropping {', '.join(dropped_numbers)} leaves {len(kept)} sectors, "
+                    f"{', '.join(kept_numbers)}, at {partial_fdp}h against a "
+                    f"{partial_limit}h limit, which the rostered crew can fly."
                     if breach and kept
                     else f"That is within the {limit}h limit."
                 )
@@ -591,6 +641,10 @@ class DisruptionSimulator:
             partial_fdp_limit=partial_limit,
             dropped_flights=dropped,
             impact=impact,
+            partial_duty_flight_numbers=kept_numbers,
+            dropped_flight_numbers=dropped_numbers,
+            recrew_cost=recrew_cost,
+            cancel_cost=cancel_cost,
         )
 
     def mid_duty_delay(self, *, flight_id: str, delay_hours: float) -> DelayResult:
@@ -628,6 +682,10 @@ class DisruptionSimulator:
         partial = proposed_duty_from_flights(self.world, kept) if kept else None
         partial_fdp = partial.duty_hours if partial else 0.0
         partial_limit = self.engine.fdp_limit_for(len(kept)) if kept else 0.0
+
+        kept_numbers = self._leg_numbers(kept)
+        dropped_numbers = self._leg_numbers(dropped)
+        recrew_cost, cancel_cost = self._price_recovery(pairing, dropped, breach=breach)
 
         detail = (
             f"RULE-FDP-01: {flight.flight_no} is delayed {delay_hours}h mid duty, so "
@@ -676,9 +734,10 @@ class DisruptionSimulator:
                 "crew already reported and only the release moves. "
                 + (
                     f"That is over the {limit}h limit for {day.sectors} sectors. "
-                    f"Dropping the last leg leaves {len(kept)} sectors at "
-                    f"{partial_fdp}h against a {partial_limit}h limit, which the "
-                    "rostered crew can fly on the original schedule."
+                    f"Dropping {', '.join(dropped_numbers)} leaves {len(kept)} sectors, "
+                    f"{', '.join(kept_numbers)}, at {partial_fdp}h against a "
+                    f"{partial_limit}h limit, which the rostered crew can fly on the "
+                    "original schedule."
                     if breach and kept
                     else f"That is within the {limit}h limit."
                 )
@@ -731,6 +790,10 @@ class DisruptionSimulator:
             partial_fdp_limit=partial_limit,
             dropped_flights=dropped,
             impact=impact,
+            partial_duty_flight_numbers=kept_numbers,
+            dropped_flight_numbers=dropped_numbers,
+            recrew_cost=recrew_cost,
+            cancel_cost=cancel_cost,
         )
 
     # -------------------------------------------------------- reassignment

@@ -141,6 +141,7 @@ class ToolSurface(Protocol):
         aircraft_type: str | None = None,
         rank: str | None = None,
         at_time: datetime | None = None,
+        crew_id: str | None = None,
     ) -> ToolEnvelope:
         """Reserve crew with on-call windows and availability for a date.
 

@@ -35,6 +35,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from crewops.contracts import Table
+from crewops.contracts.ops import JointPlan, Recommendation
 from crewops.tools import payloads as P  # noqa: N812  short alias, matches resolve/render.py
 
 __all__ = ["tabulate"]
@@ -62,7 +63,94 @@ def tabulate(payload: object) -> Table | None:
         return _roster(payload)
     if isinstance(payload, P.CertificationList):
         return _certifications(payload)
+    if isinstance(payload, Recommendation):
+        return _cover_options(payload)
+    if isinstance(payload, JointPlan):
+        return _allocation(payload)
     return None
+
+
+def _cover_options(payload: Recommendation) -> Table | None:
+    """The ranked options for one gap.
+
+    A ranked list is a result set, and it was the last one still reaching the
+    screen as prose. `_render_recommendation` states the best option and the
+    runner up and stops, on purpose: linearising thirteen options with their
+    cost lines produced five thousand characters that buried the decision.
+
+    That argument is against a paragraph, not against showing the ranking. So
+    the ranking goes where a ranking belongs. It also fixes the case the prose
+    could never reach: when a turn resolves two gaps at once, there are two of
+    these payloads, and prose that renders the first one silently drops a whole
+    pairing. One table per payload cannot do that.
+    """
+    if not payload.options:
+        return None
+    return Table(
+        title=payload.situation or "Ranked cover options",
+        columns=["Rank", "Action", "Crew", "Base", "Cost INR", "Covers", "Delay min"],
+        rows=[
+            [
+                option.rank,
+                option.action,
+                option.crew_id or None,
+                option.crew_base or None,
+                option.cost.total_inr,
+                option.coverage_summary,
+                option.delay_minutes,
+            ]
+            for option in payload.options
+        ],
+        row_ids=[f"{option.rank}:{option.crew_id or 'cancel'}" for option in payload.options],
+        caption=_caption(
+            payload.ranking_basis,
+            f"{payload.candidates_evaluated} candidates evaluated, "
+            f"{len(payload.rejected)} excluded by a rule."
+            if payload.candidates_evaluated
+            else "",
+        ),
+    )
+
+
+def _allocation(payload: JointPlan) -> Table | None:
+    """Who takes which gap, when several are open at once.
+
+    The point of the allocation is the constraint prose keeps losing: the same
+    reserve cannot take both pairings. A row per assignment shows the pairing
+    each person is going to, side by side, which is the one view that makes a
+    double booking visible at a glance.
+    """
+    if not payload.assignments:
+        return None
+    # `gaps_covered` is written in assignment order by the solver, so the pair
+    # is positional. A row whose gap the solver did not label is left blank
+    # rather than matched to a neighbour's.
+    gaps = list(payload.gaps_covered)
+    gaps += [""] * (len(payload.assignments) - len(gaps))
+    return Table(
+        title=f"Joint allocation, {payload.objective.replace('_', ' ')}",
+        columns=["Gap", "Action", "Crew", "Base", "Cost INR", "Covers"],
+        rows=[
+            [
+                gap,
+                option.action,
+                option.crew_id or None,
+                option.crew_base or None,
+                option.cost.total_inr,
+                option.coverage_summary,
+            ]
+            for gap, option in zip(gaps, payload.assignments, strict=True)
+        ],
+        row_ids=[
+            option.crew_id or f"gap-{index}"
+            for index, option in enumerate(payload.assignments)
+        ],
+        caption=_caption(
+            f"Total INR {payload.total_cost.total_inr:,.0f}.",
+            "No crew id appears twice: one person, one pairing.",
+            "; ".join(payload.contention),
+        ),
+    )
 
 
 def _reserves(payload: P.ReserveList) -> Table | None:

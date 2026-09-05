@@ -45,7 +45,7 @@ over a typed `TurnState`.
 
 | Node | Does | Model involved |
 |---|---|---|
-| `route` | Triage. In scope at all? Which tier? An out of scope question short circuits before any tool planning is paid for. | yes, cheaply |
+| `route` | Triage. In scope at all? Which tier? An out of scope question short circuits before any tool planning is paid for. | **no.** Pattern matching only, so a greeting or an out of scope question costs nothing at all |
 | `plan` | States the intent and the steps, emitted as a `PlanEvent` before any tool runs | yes |
 | `agent` | The tool calling loop. Chooses tools and arguments. | yes |
 | `tools` | Executes against the injected `ToolSurface`, accumulates every `ToolEnvelope` into turn state | no |
@@ -94,6 +94,7 @@ rather than as more regex in the verifier.
 | `verdict_guard` | Any legality claim with no `check_legality` (or cover search) envelope this turn | A verdict is computed, never inferred |
 | `ranking_guard` | Any ranked recommendation with no cover search envelope | Ranking needs every candidate enumerated, rule checked and priced, including the rejected ones |
 | `substance_guard` | An empty answer, or a bare refusal with no reason | A refusal has to name what was missing and what the system can answer instead |
+| `breach_agreement_guard` | An answer that opens by reporting a pass when the rules engine computed a breach this turn | The other two mechanisms both miss this one. Every value in "P-2203 passes all seven rules" is attested, and `verdict_guard` is satisfied because six legality calls did run and all returned pass: the pairing *as scheduled* passes, and the question was about the delay. So this checks a relation, not a value, and it checks ordering rather than presence, because a controller reads the first line and acts on it |
 
 Each failure names the tools that would fix it, so the repair pass is specific
 rather than scolding. "Call `check_legality` for C-3310 on P-2291" is

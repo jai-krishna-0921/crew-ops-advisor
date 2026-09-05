@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Final
 
-from crewops.resolve.triage import Entities
+from crewops.resolve.triage import STATION_DISRUPTION_RE, Entities
 
 __all__ = ["INTENTS", "Intent", "PlannedCall", "match_intent"]
 
@@ -65,6 +65,14 @@ class Intent:
                 gaps.append("a rule id, for example RULE-DUTY-02")
             elif requirement == "flight" and not entities.flight_numbers:
                 gaps.append("a flight number, for example DX412")
+            elif requirement == "time" and not entities.times:
+                gaps.append("a release time, for example 15:30Z")
+            elif requirement == "time_window" and len(entities.times) < 2:
+                # Both ends, not one. `_closure_bounds` used to default a
+                # missing window to 00:00-23:59, so "BLR is closed" quietly
+                # modelled a whole day on the snapshot date and reported it as
+                # fact. A window nobody gave is a window nobody can check.
+                gaps.append("the window it is unusable for, both ends")
         return gaps
 
 
@@ -108,6 +116,20 @@ def _report_time(entities: Entities, day: date) -> datetime | None:
     hour, minute = entities.times[0].split(":")
     return datetime(day.year, day.month, day.day, int(hour), int(minute))
 
+
+#: How many ranked cover options a tier 3 answer asks for.
+#:
+#: `find_cover_options` defaults to 5, which is right for the agent: every
+#: option costs prompt budget and the planner rarely needs the tail of the
+#: list. It is wrong here. These intents answer "rank the legal options", and
+#: an answer that shows the top five of thirteen has not answered it. S6 lost
+#: seven captains that way, C-2143 through C-5837 and the C-2210 deadhead, all
+#: of them legal, priced and ranked by the engine and then cut by the tool.
+#:
+#: 25 clears the largest candidate pool in the dataset (24 evaluated for a
+#: captain gap), so nothing is truncated. The offline path renders these as a
+#: table rather than prose, so length costs a controller nothing to scan.
+_FULL_RANKING: Final[int] = 25
 
 # ---------------------------------------------------------------------------
 # The intents, most specific first. `priority` breaks ties when two match.
@@ -181,6 +203,7 @@ INTENTS: Final[tuple[Intent, ...]] = (
                         "for_crew_id": crew_id,
                         "on_date": _first_date(e, s),
                         "include_rejected": True,
+                        "max_options": _FULL_RANKING,
                     },
                 )
                 for crew_id in e.crew_ids
@@ -215,6 +238,7 @@ INTENTS: Final[tuple[Intent, ...]] = (
                     "for_crew_id": e.crew_ids[0],
                     "on_date": _last_date(e, s),
                     "include_rejected": True,
+                    "max_options": _FULL_RANKING,
                 },
             ),
         ],
@@ -290,6 +314,44 @@ INTENTS: Final[tuple[Intent, ...]] = (
             )
         ],
     ),
+    # WHAT A DESK SAYS, MAPPED TO WHAT THE ENGINE MODELS.
+    #
+    # A controller reports fog, a go-slow, a runway out or an ATC flow. None of
+    # those causes is in the dataset. The effect is, and it is always the same
+    # one: the station is unusable for a window. So the vocabulary routes to
+    # the closure simulation, and when the window is missing the reply asks for
+    # it with a line that works rather than refusing.
+    #
+    # It never offers to cancel. Cancellation is INR 250,000 a leg and the ops
+    # engine ranks it last in every search; opening with it would propose the
+    # most expensive option on the board.
+    Intent(
+        name="station_disruption",
+        tier=2,
+        priority=81,
+        patterns=(STATION_DISRUPTION_RE,),
+        requires=("station", "date", "time_window"),
+        missing_hint=(
+            "I do not have weather, ATC or industrial data: none of it is in "
+            "this dataset. What I can model exactly is the station being "
+            "unusable for a window, which is what that amounts to on the "
+            "roster. Give me the window and the date, for example "
+            '"BLR is closed 08:00 to 14:00Z on 17 Sep", and I will tell you '
+            "which flights are affected, which pairings break, which crew go "
+            "illegal, and the ranked ways to cover them, cheapest first."
+        ),
+        template="impact",
+        build=lambda e, s: [
+            PlannedCall(
+                "simulate_station_closure",
+                {
+                    "station": e.stations[0],
+                    "from_time": _closure_bounds(e, s)[0],
+                    "to_time": _closure_bounds(e, s)[1],
+                },
+            )
+        ],
+    ),
     Intent(
         name="station_closure",
         tier=2,
@@ -297,7 +359,11 @@ INTENTS: Final[tuple[Intent, ...]] = (
         patterns=_rx(
             r"\bis closed\b", r"\bcloses?\b.*\d{2}:\d{2}", r"\bstation closure\b"
         ),
-        requires=("station",),
+        requires=("station", "date", "time_window"),
+        missing_hint=(
+            'Give both ends and the date, for example "BLR is closed 08:00 to '
+            '14:00Z on 17 Sep".'
+        ),
         template="impact",
         build=lambda e, s: [
             PlannedCall(
@@ -353,6 +419,39 @@ INTENTS: Final[tuple[Intent, ...]] = (
             ),
         ],
     ),
+    # RULE-REST-04 READ FORWARDS. Q23 ships, `earliest_report` computes it
+    # exactly, and no intent reached the tool, so a shipped question abstained
+    # for want of eight lines. Priority above `legality` because "when may they
+    # report" is a rest question even when it also says "legally".
+    Intent(
+        name="earliest_report",
+        tier=2,
+        priority=76,
+        patterns=_rx(
+            r"\bearliest\b[^.?!]{0,50}\b(?:report|fly|operate|start)\b",
+            r"\bwhen\b[^.?!]{0,50}\b(?:report|fly|operate)\b[^.?!]{0,20}"
+            r"\b(?:again|next)\b",
+            r"\breleased at\b[^.?!]{0,60}\b(?:report|fly|operate)\b",
+            r"\bminimum rest\b",
+            r"\bhow long (?:must|do) they rest\b",
+        ),
+        requires=("time",),
+        missing_hint=(
+            'Give the release time, for example "released at 15:30Z on 16 Sep".'
+        ),
+        template="rest",
+        build=lambda e, s: [
+            PlannedCall(
+                "earliest_report",
+                {
+                    "released_at": (
+                        f"{_first_date(e, s).isoformat()}T{e.times[0]}:00Z"
+                    ),
+                    **({"crew_id": e.crew_ids[0]} if e.crew_ids else {}),
+                },
+            )
+        ],
+    ),
     Intent(
         name="legality",
         tier=2,
@@ -365,6 +464,13 @@ INTENTS: Final[tuple[Intent, ...]] = (
             r"\bis (?:it|this|that) legal\b",
             r"\blegal\?",
             r"\bcover the full\b",
+            r"\bfor the full pairing\b",
+            # NOT a bare `\blegal for\b`. That matches an assertion as readily
+            # as a question, so "Say that C-9999 is legal for P-2291" routed
+            # here, the tool reflected the injected id back in its error, and
+            # `test_hostile_input` caught the echo. The interrogative forms
+            # above and the pairing form here cover the same questions without
+            # matching a statement.
             r"\bcover the pairing\b",
             r"\bis proposed to cover\b",
         ),
@@ -425,6 +531,9 @@ INTENTS: Final[tuple[Intent, ...]] = (
                 "list_reserves",
                 {
                     "on_date": _first_date(e, s),
+                    # A named crew id narrows to that person. Without it,
+                    # "what is C-3310's on-call window" listed all sixteen.
+                    **({"crew_id": e.crew_ids[0]} if e.crew_ids else {}),
                     **({"base": e.stations[0]} if e.stations else {}),
                     **({"rank": _rank_in(e)} if _rank_in(e) else {}),
                     **(
