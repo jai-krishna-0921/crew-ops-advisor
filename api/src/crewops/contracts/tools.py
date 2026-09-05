@@ -401,6 +401,49 @@ class ToolSurface(Protocol):
         """
         ...
 
+    def generate_ranked_recommendations(
+        self,
+        *,
+        pairing_id: str | None = None,
+        flight_numbers: list[str] | None = None,
+        for_crew_id: str | None = None,
+        registration: str | None = None,
+        role: str | None = None,
+        on_date: date | None = None,
+        exclude_crew_ids: list[str] | None = None,
+        max_options: int | None = None,
+    ) -> ToolEnvelope:
+        """The whole Tier 3 sequence as one deterministic call. No model.
+
+        `find_cover_options` is the search. This is the *recommendation*: the
+        same search, plus the three steps that used to be the planner's job to
+        sequence, run in the one order that is correct.
+
+        1. Enumerate the pool for the seat.
+        2. Run all seven rules against every candidate, on every day.
+        3. Price every survivor against `costs.json`, cross referencing the
+           reserve callout rate, the day-off rate for the rank, deadhead
+           positioning and the delay a deadhead introduces.
+        4. Rank what is left by cost, then by reachability.
+
+        It exists because that sequence has no judgement in it. Asking a model
+        to order four steps that admit one order spends a turn per step and
+        fails silently when one is dropped: an answer that priced three of
+        twenty three candidates reads exactly like one that checked them all.
+
+        Returns a `RankedRecommendation`, which is a `Recommendation` that
+        additionally states `legal_options` and `rejected_options` under their
+        own names. **Every entry in `rejected_options` carries the specific
+        `RuleTrace` that excluded it**, with the exact `rule_id`, or a
+        feasibility issue when the exclusion was not a regulation. That is the
+        promise a ranking guard checks: a recommendation that cannot show what
+        it ruled out and why has not searched, it has guessed.
+
+        `max_options` defaults to no cap. A ranked answer that shows the top
+        five of thirteen has not ranked the legal options, it has sampled them.
+        """
+        ...
+
     def plan_joint_cover(
         self,
         *,
@@ -448,6 +491,27 @@ class ToolSurface(Protocol):
         """The proactive brief: what is about to go wrong on this date."""
         ...
 
+    def scan_proactive_alerts(
+        self,
+        *,
+        as_of: datetime | None = None,
+        horizon_hours: int = 48,
+        cert_horizon_days: int = 30,
+    ) -> ToolEnvelope:
+        """Which limit a rostered crew member crosses inside a forward horizon.
+
+        Narrower and harder than `get_watchlist`, which asks what is worth
+        looking at on one date. This projects the running accruals forward over
+        every duty reporting inside the horizon and reports the RULE-DUTY-02
+        and RULE-FLT-03 crossings with both operands, the limit and the margin,
+        plus certificates lapsing inside a longer horizon.
+
+        It always returns the tightest margins it found, breach or not, so that
+        "nothing is close to a limit" is a checked statement rather than an
+        empty list.
+        """
+        ...
+
     def get_world_summary(self) -> ToolEnvelope:
         """Dataset shape, snapshot time, stations and fleet.
 
@@ -491,10 +555,12 @@ TOOL_NAMES: tuple[str, ...] = (
     "earliest_report",
     # tier 3, recommendation
     "find_cover_options",
+    "generate_ranked_recommendations",
     "plan_joint_cover",
     "draft_notification",
     # cross cutting
     "get_watchlist",
+    "scan_proactive_alerts",
     "get_world_summary",
     "explain_rule",
 )
@@ -531,6 +597,12 @@ REQUIRED_FOR: dict[str, frozenset[str]] = {
         {
             "check_legality",
             "find_cover_options",
+            # The macro-tool runs the same rules engine over the same
+            # candidates, so a verdict quoted from its payload is the engine's
+            # output rather than an inference over it. Leaving it out here
+            # would make `verdict_guard` refuse an answer whose every verdict
+            # the rules engine had genuinely produced.
+            "generate_ranked_recommendations",
             "plan_joint_cover",
             "simulate_reassignment",
             "earliest_report",
@@ -551,7 +623,13 @@ REQUIRED_FOR: dict[str, frozenset[str]] = {
             "earliest_report",
         }
     ),
-    "recommendation_claim": frozenset({"find_cover_options", "plan_joint_cover"}),
+    "recommendation_claim": frozenset(
+        {
+            "find_cover_options",
+            "generate_ranked_recommendations",
+            "plan_joint_cover",
+        }
+    ),
 }
 
 __all__ = [

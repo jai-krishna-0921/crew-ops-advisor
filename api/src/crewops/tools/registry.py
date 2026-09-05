@@ -51,7 +51,13 @@ from crewops.domain import (
     load_world,
     parse_utc,
 )
-from crewops.ops import CoverSearch, OpsEngine, allocate, option_to_cover_option
+from crewops.ops import (
+    CoverSearch,
+    OpsEngine,
+    allocate,
+    build_ranked_recommendation,
+    option_to_cover_option,
+)
 from crewops.rules import (
     LegalityEngine,
     ProposedDuty,
@@ -265,6 +271,9 @@ class Tools:
             "status": status,
             "limit": limit,
         }
+        unknown = self._unknown_station(base)
+        if unknown is not None:
+            return error_envelope("find_crew", args, unknown, timer=timer)
         if crew_ids:
             missing = [c for c in crew_ids if self.world.crew_member(c) is None]
             if missing:
@@ -436,6 +445,9 @@ class Tools:
             "registration": registration,
             "limit": limit,
         }
+        unknown = self._unknown_station(origin, destination)
+        if unknown is not None:
+            return error_envelope("find_flights", args, unknown, timer=timer)
         if pairing_id and self.world.pairing(pairing_id) is None:
             return error_envelope(
                 "find_flights", args, self._unknown_pairing(pairing_id), timer=timer
@@ -653,6 +665,9 @@ class Tools:
             "at_time": at_time,
             "crew_id": crew_id,
         }
+        unknown = self._unknown_station(base)
+        if unknown is not None:
+            return error_envelope("list_reserves", args, unknown, timer=timer)
         first, last = self.world.date_range
         if not first <= on_date <= last:
             return error_envelope(
@@ -1111,6 +1126,9 @@ class Tools:
     ) -> ToolEnvelope:
         timer = ToolTimer()
         args = {"min_score": min_score, "base": base, "on_date": on_date, "limit": limit}
+        unknown = self._unknown_station(base)
+        if unknown is not None:
+            return error_envelope("find_crew_at_risk", args, unknown, timer=timer)
         rostered_ids: set[str] | None = None
         if on_date is not None:
             rostered_ids = {
@@ -2299,6 +2317,97 @@ class Tools:
 
     # ============================================================== tier 3
 
+    def _cover_search_for_gap(
+        self,
+        *,
+        pairing_id: str | None,
+        flight_numbers: list[str] | None,
+        for_crew_id: str | None,
+        registration: str | None,
+        role: str | None,
+        on_date: DateType | None,
+        exclude_crew_ids: list[str] | None,
+        args: dict[str, Any],
+    ) -> tuple[CoverSearch, str, str | None]:
+        """Turn "cover this" into a completed `CoverSearch`, or say why not.
+
+        Shared by `find_cover_options` and `generate_ranked_recommendations`,
+        because resolving which seat is empty is the same problem for both and
+        it is the part with all the ways to go wrong in it: a tail that flies
+        several pairings, a crew id that holds no duty on the date, a pairing
+        that does not exist, a role nobody named.
+
+        Raises `LookupError` with the sentence a controller should read. The
+        caller turns that into an `ok=False` envelope under its own tool name,
+        so an error still says which tool refused. `args` is mutated in place
+        when a registration resolves to a pairing, so the audit log shows what
+        was actually searched rather than only what was asked.
+        """
+        # A controller names the metal: "cover the VT-DXF First Officer on
+        # 20 Sep". Nothing bridged a tail to a pairing, so questions phrased
+        # that way arrived here with nothing to cover and were declined.
+        if registration and not pairing_id and not flight_numbers:
+            matches = self._pairings_for_registration_on(registration, on_date)
+            if not matches:
+                when = f" on {on_date}" if on_date else ""
+                raise LookupError(f"{registration} flies no pairing{when}.")
+            if len(matches) > 1 and on_date is None:
+                raise LookupError(
+                    f"{registration} flies {len(matches)} pairings "
+                    f"({', '.join(matches)}). Name a date to pick one."
+                )
+            pairing_id = matches[0]
+            args["pairing_id"] = pairing_id
+
+        if not pairing_id and not flight_numbers and not for_crew_id:
+            raise LookupError(
+                "Name a pairing_id, a set of flight_numbers, a for_crew_id, or a "
+                "registration to cover."
+            )
+
+        forbid = list(exclude_crew_ids or [])
+        resolved_role = role
+        sick: str | None = None
+
+        if for_crew_id:
+            member = self.world.crew_member(for_crew_id)
+            if member is None:
+                raise LookupError(self._unknown_crew(for_crew_id))
+            # `for_crew_id` names the person vacating the seat, so their rank
+            # decides the role directly. Guessing from the pairing (the
+            # `_role_to_cover` fallback below) is only for when nobody is named.
+            sick = for_crew_id
+            if resolved_role is None:
+                resolved_role = member.rank
+            if pairing_id is None and not flight_numbers:
+                lookup_date = on_date or self.world.snapshot.date()
+                pairing_id = self._pairing_for_crew_on(for_crew_id, lookup_date)
+                if pairing_id is None:
+                    raise LookupError(f"{for_crew_id} holds no pairing on {lookup_date}.")
+            if for_crew_id not in forbid:
+                forbid = [*forbid, for_crew_id]
+
+        if resolved_role is None:
+            resolved_role, sick = self._role_to_cover(pairing_id, flight_numbers, forbid)
+        if resolved_role is None:
+            raise LookupError(
+                "Could not determine which role needs cover. Name the crew member "
+                "who is out with for_crew_id, or pass role explicitly."
+            )
+
+        if pairing_id:
+            if self.world.pairing(pairing_id) is None:
+                raise LookupError(self._unknown_pairing(pairing_id))
+            search = self.ops.find_cover_for_pairing(
+                pairing_id, role=resolved_role, sick_crew_id=sick, forbid_crew=forbid
+            )
+        else:
+            ids = self._resolve_flight_ids(flight_numbers or [], on_date)
+            search = self.ops.find_cover_for_flights(
+                ids, role=resolved_role, sick_crew_id=sick, forbid_crew=forbid
+            )
+        return search, resolved_role, sick
+
     def find_cover_options(
         self,
         *,
@@ -2325,89 +2434,17 @@ class Tools:
             "include_rejected": include_rejected,
         }
 
-        # A controller names the metal: "cover the VT-DXF First Officer on
-        # 20 Sep". Nothing bridged a tail to a pairing, so questions phrased
-        # that way arrived here with nothing to cover and were declined.
-        if registration and not pairing_id and not flight_numbers:
-            matches = self._pairings_for_registration_on(registration, on_date)
-            if not matches:
-                when = f" on {on_date}" if on_date else ""
-                return error_envelope(
-                    "find_cover_options",
-                    args,
-                    f"{registration} flies no pairing{when}.",
-                    timer=timer,
-                )
-            if len(matches) > 1 and on_date is None:
-                return error_envelope(
-                    "find_cover_options",
-                    args,
-                    f"{registration} flies {len(matches)} pairings "
-                    f"({', '.join(matches)}). Name a date to pick one.",
-                    timer=timer,
-                )
-            pairing_id = matches[0]
-            args["pairing_id"] = pairing_id
-
-        if not pairing_id and not flight_numbers and not for_crew_id:
-            return error_envelope(
-                "find_cover_options",
-                args,
-                "Name a pairing_id, a set of flight_numbers, a for_crew_id, or a "
-                "registration to cover.",
-                timer=timer,
-            )
-        forbid = list(exclude_crew_ids or [])
-        resolved_role = role
-        sick: str | None = None
-
-        if for_crew_id:
-            member = self.world.crew_member(for_crew_id)
-            if member is None:
-                return error_envelope(
-                    "find_cover_options", args, self._unknown_crew(for_crew_id), timer=timer
-                )
-            # `for_crew_id` names the person vacating the seat, so their rank
-            # decides the role directly. Guessing from the pairing (the
-            # `_role_to_cover` fallback below) is only for when nobody is named.
-            sick = for_crew_id
-            if resolved_role is None:
-                resolved_role = member.rank
-            if pairing_id is None and not flight_numbers:
-                lookup_date = on_date or self.world.snapshot.date()
-                pairing_id = self._pairing_for_crew_on(for_crew_id, lookup_date)
-                if pairing_id is None:
-                    return error_envelope(
-                        "find_cover_options",
-                        args,
-                        f"{for_crew_id} holds no pairing on {lookup_date}.",
-                        timer=timer,
-                    )
-            if for_crew_id not in forbid:
-                forbid = [*forbid, for_crew_id]
-
-        if resolved_role is None:
-            resolved_role, sick = self._role_to_cover(pairing_id, flight_numbers, forbid)
-        if resolved_role is None:
-            return error_envelope(
-                "find_cover_options",
-                args,
-                "Could not determine which role needs cover. Name the crew member "
-                "who is out with for_crew_id, or pass role explicitly.",
-                timer=timer,
-            )
         try:
-            if pairing_id:
-                if self.world.pairing(pairing_id) is None:
-                    raise LookupError(self._unknown_pairing(pairing_id))
-                search = self.ops.find_cover_for_pairing(
-                    pairing_id, role=resolved_role, sick_crew_id=sick, forbid_crew=forbid
-                )
-            else:
-                ids = self._resolve_flight_ids(flight_numbers or [], on_date)
-                search = self.ops.find_cover_for_flights(
-                    ids, role=resolved_role, sick_crew_id=sick, forbid_crew=forbid
-                )
+            search, resolved_role, _sick = self._cover_search_for_gap(
+                pairing_id=pairing_id,
+                flight_numbers=flight_numbers,
+                for_crew_id=for_crew_id,
+                registration=registration,
+                role=role,
+                on_date=on_date,
+                exclude_crew_ids=exclude_crew_ids,
+                args=args,
+            )
         except LookupError as exc:
             return error_envelope("find_cover_options", args, str(exc), timer=timer)
 
@@ -2451,6 +2488,101 @@ class Tools:
             ],
             timer=timer,
             truncated=len(kept) < len(search.options),
+        )
+
+    def generate_ranked_recommendations(
+        self,
+        *,
+        pairing_id: str | None = None,
+        flight_numbers: list[str] | None = None,
+        for_crew_id: str | None = None,
+        registration: str | None = None,
+        role: str | None = None,
+        on_date: DateType | None = None,
+        exclude_crew_ids: list[str] | None = None,
+        max_options: int | None = None,
+    ) -> ToolEnvelope:
+        """The whole Tier 3 sequence in one call. No model, no arithmetic here.
+
+        Enumerate, rule check, price, rank: four steps that admit exactly one
+        order, run in it. Every figure the answer may quote is emitted as a
+        `Fact` by `build_ranked_recommendation`, per candidate rather than per
+        summary, because the template for this intent names every candidate and
+        a number nobody attested is a number nobody checked.
+        """
+        timer = ToolTimer()
+        args: dict[str, Any] = {
+            "pairing_id": pairing_id,
+            "flight_numbers": flight_numbers,
+            "for_crew_id": for_crew_id,
+            "registration": registration,
+            "role": role,
+            "on_date": on_date,
+            "exclude_crew_ids": exclude_crew_ids,
+            "max_options": max_options,
+        }
+        tool = "generate_ranked_recommendations"
+
+        try:
+            search, resolved_role, sick = self._cover_search_for_gap(
+                pairing_id=pairing_id,
+                flight_numbers=flight_numbers,
+                for_crew_id=for_crew_id,
+                registration=registration,
+                role=role,
+                on_date=on_date,
+                exclude_crew_ids=exclude_crew_ids,
+                args=args,
+            )
+        except LookupError as exc:
+            return error_envelope(tool, args, str(exc), timer=timer)
+
+        recommendation = build_ranked_recommendation(
+            search, covering_for=for_crew_id or sick, max_options=max_options
+        )
+        facts = [
+            *recommendation.facts,
+            *[f for option in recommendation.legal_options for f in option.facts],
+        ]
+
+        priced = [o for o in recommendation.legal_options if o.crew_id]
+        best = priced[0] if priced else None
+        detail = (
+            f"{recommendation.candidates_evaluated} candidates evaluated against all "
+            f"{len(recommendation.rules_per_candidate)} rules, "
+            f"{len(priced)} legal and priced, "
+            f"{len(recommendation.rejected_options)} rejected with the rule that "
+            "excluded each. "
+            + (
+                f"Rank 1 is {best.crew_id} at INR {best.cost.total_inr:,.0f}."
+                if best
+                else "No legal crew option exists, so cancellation is the only answer."
+            )
+        )
+        return ok_envelope(
+            tool,
+            args,
+            recommendation,
+            facts=facts,
+            trace=[
+                step(
+                    "Enumerate, rule check, price, rank",
+                    detail,
+                    [f.key for f in facts[:3]],
+                ),
+                step(
+                    "Ranking heuristic",
+                    recommendation.ranking_basis,
+                    [f"{search.assignment_ref}.legal_options"],
+                ),
+            ],
+            citations=[
+                cite("crew.json", f"every active {resolved_role}"),
+                cite("reserve_pool.json", "on-call windows tested at the required report"),
+                cite("rules.json", "all seven rules per candidate per day"),
+                cite("costs.json", "callout, positioning, delay and cancellation rates"),
+            ],
+            timer=timer,
         )
 
     def plan_joint_cover(
@@ -2774,6 +2906,107 @@ class Tools:
 
     # ======================================================== cross cutting
 
+    def scan_proactive_alerts(
+        self,
+        *,
+        as_of: DateTime | None = None,
+        horizon_hours: int = 48,
+        cert_horizon_days: int = 30,
+    ) -> ToolEnvelope:
+        timer = ToolTimer()
+        args = {
+            "as_of": as_of,
+            "horizon_hours": horizon_hours,
+            "cert_horizon_days": cert_horizon_days,
+        }
+        if horizon_hours <= 0 or cert_horizon_days <= 0:
+            return error_envelope(
+                "scan_proactive_alerts",
+                args,
+                "The horizons must be positive. A zero length horizon cannot "
+                "distinguish 'nothing found' from 'nothing looked at'.",
+                timer=timer,
+            )
+
+        scan = self.ops.scan_alerts(
+            as_of=as_of, horizon_hours=horizon_hours, cert_horizon_days=cert_horizon_days
+        )
+        every = [*scan.alerts, *scan.closest_approaches]
+        facts = [
+            *[fact for alert in every for fact in alert.facts],
+            computed_fact(
+                "alerts.horizon_hours",
+                "Forward horizon",
+                scan.horizon_hours,
+                "hours",
+                f"limits projected from {format_utc(scan.as_of)} to "
+                f"{format_utc(scan.horizon_end)}",
+                _SOURCE,
+            ),
+            computed_fact(
+                "alerts.cert_horizon_days",
+                "Certification horizon",
+                scan.cert_horizon_days,
+                "days",
+                "a renewal is a booking rather than a swap, so it needs longer warning",
+                _SOURCE,
+            ),
+            computed_fact(
+                "alerts.raised",
+                "Alerts raised",
+                len(scan.alerts),
+                "count",
+                scan.headline,
+                _SOURCE,
+            ),
+            *[
+                computed_fact(
+                    f"alerts.count.{severity}",
+                    f"{severity.capitalize()} alerts",
+                    count,
+                    "count",
+                    f"alerts at {severity} severity in this scan",
+                    _SOURCE,
+                )
+                for severity, count in scan.counts.items()
+            ],
+            *[
+                computed_fact(
+                    f"alerts.scanned.{name}",
+                    f"{name.replace('_', ' ').capitalize()} scanned",
+                    value,
+                    "count",
+                    f"records examined over the {scan.horizon_hours} hour horizon",
+                    _SOURCE,
+                )
+                for name, value in scan.scanned.items()
+            ],
+        ]
+        return ok_envelope(
+            "scan_proactive_alerts",
+            args,
+            scan,
+            facts=facts,
+            trace=[
+                step(
+                    "Project every rostered duty in the horizon",
+                    f"{scan.scanned['duties_in_horizon']} duties across "
+                    f"{scan.scanned['crew_in_horizon']} crew reporting between "
+                    f"{format_utc(scan.as_of)} and {format_utc(scan.horizon_end)}",
+                    ["alerts.scanned.duties_in_horizon", "alerts.horizon_hours"],
+                ),
+                step("Compare against the rulebook", scan.headline, ["alerts.raised"]),
+            ],
+            citations=[
+                cite("duty_clocks.json", "running duty and flight hour accruals"),
+                cite("rosters.json", "the duties inside the horizon"),
+                cite("certifications.json", "expiries inside the certification horizon"),
+                cite("rules.json", "RULE-DUTY-02, RULE-FLT-03 and RULE-CERT-06 limits"),
+                cite("risk_signals.json", "provided disruption scores"),
+            ],
+            timer=timer,
+        )
+
     def get_watchlist(
         self, *, for_date: DateType, as_of: DateTime | None = None
     ) -> ToolEnvelope:
@@ -3004,6 +3237,32 @@ class Tools:
             f"No crew record for {crew_id}. The dataset holds "
             f"{len(self.world.crew)} crew, with ids in the form C-1234."
         )
+
+    def _unknown_station(self, *args: str | None) -> str | None:
+        """The message for the first station named that does not exist.
+
+        "A failed lookup is not a finding of 'none'" is already the rule for a
+        call that errored. This is its mirror: a filter on an identifier the
+        dataset has never heard of is not a query that returned nothing, it is
+        a query that could not be asked. `list_reserves(base="IDR")` answered
+        "0 reserves at IDR", which reads as a finding about IDR's cover.
+
+        Crew ids and pairing ids were checked from the start because they are
+        subjects. Stations are filters, so an unknown one silently matched no
+        rows, which looks exactly like a real station with nothing on it.
+        """
+        known = set(self.world.stations)
+        for value in args:
+            if value is None:
+                continue
+            if value.strip().upper() not in known:
+                return (
+                    f"{value} is not a station in this dataset, so there is "
+                    "nothing to report about it. This network serves "
+                    + ", ".join(sorted(known))
+                    + "."
+                )
+        return None
 
     def _unknown_pairing(self, pairing_id: str) -> str:
         return (

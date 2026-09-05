@@ -34,10 +34,12 @@ from crewops.resolve.conversation import PriorTurn, ThreadContext, merge_entitie
 from crewops.resolve.intents import Intent, PlannedCall, match_intent
 from crewops.resolve.render import render
 from crewops.resolve.triage import (
+    STATIONS,
     canonical_question,
     reads_as_followup,
     refers_without_naming,
     triage_question,
+    unknown_stations,
 )
 from crewops.verify import Verifier
 
@@ -103,6 +105,61 @@ class DeterministicResolver:
         # it as out of scope, which was correct about the words and wrong about
         # the situation. When the same thread has an answered turn behind it,
         # that turn supplies the subject and this one supplies the change.
+        # A STATION-SHAPED TOKEN THAT IS NOT A STATION IS A FINDING.
+        #
+        # "Who is on reserve at IDR" dropped its filter and answered about all
+        # 16 reserves, because IDR is not a station so nothing extracted it, so
+        # the plan carried no base. Every figure in that reply was real and it
+        # answered a different question from the one that was asked.
+        #
+        # Checked before the follow-up merge on purpose, so "sorry I mean INR"
+        # reports INR rather than quietly re-running the previous turn.
+        strangers = unknown_stations(asked)
+        if strangers:
+            # REMEMBER THE TURN ANYWAY, when a shape was recognised. This
+            # refusal understood everything except one token: the intent, the
+            # date and the rest of the filters were all read correctly. Only
+            # answered turns are remembered because a refusal establishes
+            # nothing, and that is right for a refusal that understood nothing.
+            # It is wrong here: dropping it means a controller who mistypes a
+            # station twice has to retype the whole question, which is the
+            # opposite of what a correction is for.
+            recognised = match_intent(asked, triage.entities)
+            if recognised is not None:
+                self.threads.remember(
+                    thread_id,
+                    PriorTurn(
+                        intent=recognised, entities=triage.entities, question=asked
+                    ),
+                )
+            return self._abstain(
+                question,
+                thread_id=thread_id,
+                turn_id=turn_id,
+                asked_at=asked_at,
+                started=started,
+                abstention=Abstention(
+                    reason=AbstentionReason.NOT_IN_DATASET,
+                    message=(
+                        "I cannot answer that reliably. "
+                        + ", ".join(strangers)
+                        + (" is" if len(strangers) == 1 else " are")
+                        + " not in this dataset, so there is nothing to report "
+                        "about "
+                        + ("it" if len(strangers) == 1 else "them")
+                        + ". This network serves "
+                        + ", ".join(sorted(STATIONS))
+                        + "."
+                    ),
+                    missing=[f"A station this network serves, not {s}" for s in strangers],
+                    suggestions=[
+                        f"Who is on reserve at {sorted(STATIONS)[0]} on 2026-09-15",
+                        "Which flights depart DEL on 2026-09-15",
+                    ],
+                ),
+                tier=triage.tier,
+            )
+
         prior = self.threads.recall(thread_id)
         follow_up = prior is not None and (
             reads_as_followup(asked) or refers_without_naming(asked, triage.entities)
@@ -297,7 +354,13 @@ class DeterministicResolver:
         # grounding check as the agent. It has no repair pass, because a
         # template that produces an unattested figure is a bug in the template,
         # not something to negotiate with.
+        # A STYLE FAILURE IS NOT A REFUSAL. The offline templates cannot be
+        # rewritten mid-turn, so a non-fatal guard here has nothing to ask for.
+        # Abstaining over verbosity would throw away a correct answer, which is
+        # the one trade this system never makes.
         failure = run_guards(draft=text, tier=tier, envelopes=envelopes)
+        if failure is not None and not failure.fatal:
+            failure = None
         if failure is not None:
             return self._abstain(
                 question,

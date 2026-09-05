@@ -366,10 +366,18 @@
   --rail-w: 17rem;
   --drawer-w: 24rem;
   --topbar-h: 3.25rem;
-  /* The conversation measure. Wider than a book column because answers
-     carry tables and option cards, narrower than the window because a
-     94-character line is not readable at speed. */
-  --measure: 46rem;
+  /* The conversation column. Not the reading measure: those are two
+     different numbers and conflating them is what left a band of empty page
+     down both sides while the ranked option cards, the cost comparison and
+     the tables were squeezed into 46rem. That squeeze is why the data table
+     used to bleed into the margins with a negative inset.
+
+     So this is the width of the CONTAINER, matched to the top bar and the
+     loading skeleton, which were already 64rem and drew wider than the
+     content they stood in for. Running text is held to about 68 characters
+     inside it, in `markdown.tsx` and `grounded-prose.tsx`, because a
+     paragraph and a table want opposite things. */
+  --measure: 64rem;
 }
 
 /* ==========================================================================

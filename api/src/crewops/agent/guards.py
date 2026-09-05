@@ -45,6 +45,18 @@ class GuardFailure:
     required_tools: tuple[str, ...]
     abstention_reason: AbstentionReason
 
+    #: Whether running out of repair budget on this guard should abstain.
+    #:
+    #: A SAFETY guard is fatal: leading with a pass over a computed breach, or
+    #: a tier 3 verdict built from retrieval alone, is dangerous, and refusing
+    #: beats it. A STYLE guard is not: re-listing options that are already
+    #: drawn beside the prose is untidy, and trading a correct answer for a
+    #: tidy refusal inverts the scoring principle the whole system rests on.
+    #: Measured, four runs: three good answers and one abstention that had
+    #: nothing to do with the style violation, because the rewrite spent the
+    #: single repair budget and the verifier then had none left.
+    fatal: bool = True
+
 
 # ---------------------------------------------------------------------------
 # Which tools can stand behind a legality verdict.
@@ -347,6 +359,79 @@ def breach_agreement_guard(
     )
 
 
+#: How many of the ranked options the prose may name. The recommendation, and
+#: one alternative for when the first choice is unavailable.
+#:
+#: Not a number picked to make something pass. The offline renderer arrived at
+#: exactly this shape on its own (rank 1, one next option, the closest
+#: exclusion, 81 words), so the bar sits where a good answer already sits.
+_NAMED_OPTIONS_MAX: Final = 2
+
+#: Below this many options there is nothing to over-enumerate: naming both of
+#: two is a comparison, not a recital.
+_ENUMERATION_FLOOR: Final = 3
+
+
+def enumeration_guard(
+    draft: str, envelopes: Sequence[ToolEnvelope]
+) -> GuardFailure | None:
+    """The prose may not re-list the ranked options that are drawn beside it.
+
+    A tier 3 answer renders the options as cards and as a cost comparison. The
+    prose above them named five of six with their costs, so a controller read
+    the same five covers three times and the callout they were meant to act on
+    sat under a screen and a half of it.
+
+    `prompts.py` already forbids this in as many words. Saying it a third time
+    is not the fix: this is a structural property of the answer and it is
+    deterministically checkable, which is what this module is for.
+
+    Rejects are deliberately not counted. "C-1017 was the closest exclusion" is
+    the reasoning a controller wants, and the offline path says it too.
+    """
+    recommendation = next(
+        (
+            envelope.payload
+            for envelope in envelopes
+            if envelope.ok and _is_recommendation(envelope.payload)
+        ),
+        None,
+    )
+    if recommendation is None:
+        return None
+
+    options = [option for option in recommendation.options if option.crew_id]
+    if len(options) < _ENUMERATION_FLOOR:
+        return None
+
+    named = [option.crew_id for option in options if option.crew_id in draft]
+    if len(named) <= _NAMED_OPTIONS_MAX:
+        return None
+
+    surplus = named[_NAMED_OPTIONS_MAX:]
+    return GuardFailure(
+        guard="enumeration",
+        reason=(
+            f"The answer names {len(named)} of the ranked options "
+            f"({', '.join(named)}) and the interface already draws every one of "
+            "them as a card with its cost. Name the option you recommend and at "
+            "most one alternative, then cut the rest: "
+            + ", ".join(surplus)
+            + ". Use the space for what the cards cannot say, which is the "
+            "constraint that binds and the single thing that would change the "
+            "answer."
+        ),
+        required_tools=(),
+        abstention_reason=AbstentionReason.UNDERSPECIFIED,
+        fatal=False,
+    )
+
+
+def _is_recommendation(payload: object) -> bool:
+    """Duck typed, so this module does not import the ops contracts."""
+    return hasattr(payload, "options") and hasattr(payload, "ranking_basis")
+
+
 def run_guards(
     *, draft: str, tier: int | None, envelopes: Sequence[ToolEnvelope]
 ) -> GuardFailure | None:
@@ -356,6 +441,7 @@ def run_guards(
         breach_agreement_guard(draft, envelopes),
         verdict_guard(draft, envelopes),
         ranking_guard(draft, envelopes),
+        enumeration_guard(draft, envelopes),
         tier_guard(tier, envelopes),
     ):
         if failure is not None:

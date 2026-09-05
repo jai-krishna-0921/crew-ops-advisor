@@ -66,6 +66,7 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 
 from crewops.agent import providers
+from crewops.agent.compact import compacts, model_view
 from crewops.agent.config import AgentConfig
 from crewops.agent.events import emit
 from crewops.agent.guards import GuardFailure, run_guards, strip_em_dashes
@@ -92,12 +93,28 @@ from crewops.resolve.intents import match_intent
 from crewops.resolve.triage import reads_as_followup, triage_question
 from crewops.verify import Verifier
 
-__all__ = ["TurnPlan", "bind_tool_specs", "build_graph", "subjectless_ask"]
+__all__ = [
+    "TurnPlan",
+    "bind_tool_specs",
+    "build_graph",
+    "subjectless_ask",
+    "unknown_station_ask",
+]
 
-#: How much of a tool payload is handed back to the model. The full envelope
-#: always reaches the verifier and the HTTP layer; this cap only protects the
-#: prompt budget, and `truncated` records that it fired.
+#: How much of a tool payload is handed back to the model, when the payload is
+#: a shape nothing knows how to compact. The full envelope always reaches the
+#: verifier and the HTTP layer; this cap only protects the prompt budget, and
+#: `truncated` records that it fired.
 _PAYLOAD_CHAR_BUDGET: Final = 6_000
+
+#: The allowance for a COMPACTED payload, and larger than the raw cap on
+#: purpose. `find_cover_options` with its rejects is 223,156 characters and
+#: `agent/compact.py` takes it to about 11,000 by dropping the per-rule per-day
+#: arithmetic the interface already draws and the prose is forbidden to
+#: restate. What is left is identity, verdict, price and reason for every
+#: option, complete. Truncated content is a JSON string that stops mid-object;
+#: compacted content is all signal, so it is worth more room.
+_COMPACT_CHAR_BUDGET: Final = 16_000
 
 
 class TurnPlan(BaseModel):
@@ -165,6 +182,33 @@ def _summarise_payload(envelope: ToolEnvelope) -> str:
 #: narrowed. A cover search with no target and a callout with no duty are not
 #: underspecified questions, they are questions with no subject.
 _SUBJECT_REQUIREMENTS: Final = frozenset({"cover_target", "assignment"})
+
+
+def unknown_station_ask(question: str) -> str | None:
+    """The refusal for a station this network does not serve, or None.
+
+    `list_reserves` and friends already refuse an unknown station, and the
+    model relayed that as "the reserve lookup for that station failed", which
+    reads like an outage rather than a typo and tells a controller nothing.
+    There is nothing clever to do with a station that does not exist, so this
+    is settled before the model is called: both modes then give the same
+    answer for the same reason, and the turn costs a round trip less.
+
+    Position-anchored, in `unknown_stations`, because INR is the currency on
+    every cost line in this dataset.
+    """
+    from crewops.resolve.triage import STATIONS, canonical_question, unknown_stations
+
+    strangers = unknown_stations(canonical_question(question))
+    if not strangers:
+        return None
+    named = ", ".join(strangers)
+    verb = "is" if len(strangers) == 1 else "are"
+    them = "it" if len(strangers) == 1 else "them"
+    return (
+        f"{named} {verb} not in this dataset, so there is nothing to report "
+        f"about {them}. This network serves " + ", ".join(sorted(STATIONS)) + "."
+    )
 
 
 def subjectless_ask(question: str, *, has_history: bool) -> str | None:
@@ -245,7 +289,10 @@ def _tool_message_content(envelope: ToolEnvelope) -> tuple[str, bool]:
                     "error": envelope.error or "the lookup failed",
                     "note": (
                         "A failed lookup is not a negative finding. Do not report "
-                        "this as 'none found'."
+                        "this as 'none found'. Tell the user what `error` says: "
+                        "it names what was wrong and usually what to ask "
+                        "instead, and 'the lookup failed' on its own reads like "
+                        "an outage and is nothing they can act on."
                     ),
                 }
             ),
@@ -267,14 +314,20 @@ def _tool_message_content(envelope: ToolEnvelope) -> tuple[str, bool]:
     payload_json: Any
     truncated = False
     try:
-        payload_json = (
-            envelope.payload.model_dump(mode="json")
-            if hasattr(envelope.payload, "model_dump")
-            else envelope.payload
-        )
+        # COMPACT FIRST, CUT ONLY AS A LAST RESORT. The raw cover search is
+        # 223,156 characters against a 6,000 budget, so the model used to be
+        # handed rank 1, half of rank 2 and "...[truncated]" and asked to write
+        # about six options. `model_view` drops the per-rule per-day arithmetic
+        # that the interface draws and the prose is forbidden to restate, and
+        # keeps every option's identity, verdict, price and reason. Complete,
+        # and about 11,000 characters.
+        payload_json = model_view(envelope.payload)
         rendered = json.dumps(payload_json, default=str)
-        if len(rendered) > _PAYLOAD_CHAR_BUDGET:
-            payload_json = rendered[:_PAYLOAD_CHAR_BUDGET] + "...[truncated]"
+        budget = (
+            _COMPACT_CHAR_BUDGET if compacts(envelope.payload) else _PAYLOAD_CHAR_BUDGET
+        )
+        if len(rendered) > budget:
+            payload_json = rendered[:budget] + "...[truncated]"
             truncated = True
     except (TypeError, ValueError):
         payload_json = str(envelope.payload)[:_PAYLOAD_CHAR_BUDGET]
@@ -341,7 +394,12 @@ def build_graph(
         history = bool(state.get("messages"))
         continues = history and reads_as_followup(state["question"])
         no_subject = subjectless_ask(state["question"], has_history=history)
-        in_scope = (verdict.in_scope or continues) and no_subject is None
+        no_station = unknown_station_ask(state["question"])
+        in_scope = (
+            (verdict.in_scope or continues)
+            and no_subject is None
+            and no_station is None
+        )
         update: dict[str, Any] = {
             "in_scope": in_scope,
             "tier": verdict.tier,
@@ -352,9 +410,29 @@ def build_graph(
             ),
         }
         if not in_scope:
+            # A REFUSED TURN IS STILL PART OF THE CONVERSATION. These refusals
+            # happen before the model is called, so nothing about them reached
+            # the checkpointer and the thread looked empty to the next turn:
+            # "at IDR", refused, "sorry I mean INR", refused, "sorry I meant
+            # BLR" and the model, with no history to correct against, answered
+            # about the dataset. The question and the refusal go in, so the
+            # correction has something to correct.
+            update["messages"] = [
+                HumanMessage(content=state["question"]),
+                AIMessage(content=""),
+            ]
             # A greeting is answered, not refused. Nothing is missing: the
             # controller has not asked for anything yet. Same treatment as the
             # offline resolver, so both paths greet identically.
+            if no_station is not None:
+                update["abstention"] = Abstention(
+                    reason=AbstentionReason.NOT_IN_DATASET,
+                    message="I cannot answer that reliably. " + no_station,
+                    missing=[no_station],
+                    did_establish=[],
+                    suggestions=_scope_suggestions(),
+                )
+                return update
             if no_subject is not None:
                 update["abstention"] = Abstention(
                     reason=AbstentionReason.UNDERSPECIFIED,
@@ -770,11 +848,17 @@ def build_graph(
         pending = state.get("pending_guard") or {}
         reason = str(pending.get("reason", "the answer broke a structural rule"))
         required = [str(tool) for tool in pending.get("required_tools", [])]
-        return {
-            "repairs": state.get("repairs", 0) + 1,
+        update: dict[str, Any] = {
             "pending_guard": None,
             "messages": [HumanMessage(content=policy_repair_prompt(reason, required))],
         }
+        # A style rewrite is counted apart from a grounding one, so being asked
+        # to stop enumerating never costs a turn its correction for a figure.
+        if pending.get("fatal", True):
+            update["repairs"] = state.get("repairs", 0) + 1
+        else:
+            update["style_repairs"] = state.get("style_repairs", 0) + 1
+        return update
 
     # ---------------------------------------------------------------- abstain
 
@@ -857,7 +941,12 @@ def _guard_outcome(
         repair_attempts=repairs,
         note=f"Guard '{failure.guard}' rejected the answer: {failure.reason}",
     )
-    if repairs < config.max_repairs:
+    # A STYLE REWRITE SPENDS ITS OWN BUDGET. Sharing one counter meant a turn
+    # asked to stop enumerating had used its only pass, so the rewrite quoting
+    # one unattestable figure was refused for a reason unrelated to the figure.
+    # Agent abstentions went 4 to 8 on the scorecard when the guard landed.
+    spent = repairs if failure.fatal else state.get("style_repairs", 0)
+    if spent < config.max_repairs:
         return {
             "verification": report,
             "timings": timings,
@@ -865,8 +954,15 @@ def _guard_outcome(
                 "guard": failure.guard,
                 "reason": failure.reason,
                 "required_tools": list(failure.required_tools),
+                "fatal": failure.fatal,
             },
         }
+    if not failure.fatal:
+        # ONE ASK, THEN LET IT GO. A style guard has had its correction pass
+        # and the answer is still merely verbose. Abstaining here would trade
+        # a correct answer for a tidy refusal, which is the scoring principle
+        # backwards. The draft goes on to grounding like any other.
+        return {"timings": timings, "pending_guard": None}
     return {
         "verification": report,
         "timings": timings,

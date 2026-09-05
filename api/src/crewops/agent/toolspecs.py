@@ -307,6 +307,38 @@ class FindCoverOptionsArgs(BaseModel):
     )
 
 
+class GenerateRankedRecommendationsArgs(BaseModel):
+    pairing_id: str | None = Field(default=None, description="The gap to cover")
+    flight_numbers: list[str] | None = None
+    for_crew_id: str | None = Field(
+        default=None,
+        description="The crew member who is out. Prefer this: it resolves the "
+        "pairing on its own and it names the seat, which decides both the rank "
+        "the search filters on and the callout rate it charges.",
+    )
+    role: str | None = Field(
+        default=None,
+        description="The seat to fill when the person is not known. Must match a "
+        "rank exactly: Senior Cabin Crew is not substitutable for Cabin Crew.",
+    )
+    on_date: date | None = Field(
+        default=None, description="Which day of the roster the gap falls on"
+    )
+    registration: str | None = Field(
+        default=None,
+        description="Aircraft tail, e.g. VT-DXF, for questions that name the "
+        "metal rather than the crew or the pairing.",
+    )
+    exclude_crew_ids: list[str] | None = Field(
+        default=None, description="Usually the crew member who is out"
+    )
+    max_options: int | None = Field(
+        default=None,
+        description="Leave unset. A ranked answer that shows the top five of "
+        "thirteen has sampled the legal options rather than ranked them.",
+    )
+
+
 class PlanJointCoverArgs(BaseModel):
     gaps: list[dict[str, str]] = Field(
         description="One entry per simultaneous gap, each naming a pairing or "
@@ -332,6 +364,23 @@ class DraftNotificationArgs(BaseModel):
 class GetWatchlistArgs(BaseModel):
     for_date: date
     as_of: datetime | None = None
+
+
+class ScanProactiveAlertsArgs(BaseModel):
+    as_of: datetime | None = Field(
+        default=None, description="Defaults to the dataset snapshot, 2026-09-14T18:00:00Z"
+    )
+    horizon_hours: int = Field(
+        default=48,
+        description="How far forward to project the duty and flight hour limits. "
+        "Measured against each duty's report time, not its calendar date.",
+    )
+    cert_horizon_days: int = Field(
+        default=30,
+        description="How far ahead to sweep for lapsing licences, medicals and "
+        "recurrent training. Longer than the limit horizon because a renewal is "
+        "a booking rather than a swap.",
+    )
 
 
 class GetWorldSummaryArgs(BaseModel):
@@ -591,6 +640,25 @@ TOOL_SPECS: Final[tuple[ToolSpec, ...]] = (
         lambda a: f"Searching for cover on {a.get('pairing_id') or a.get('flight_numbers')}",
     ),
     ToolSpec(
+        "generate_ranked_recommendations",
+        "The whole Tier 3 sequence as one deterministic call: enumerate the "
+        "candidate pool, run all seven rules against every candidate on every "
+        "day, price every survivor against costs.json (reserve callout, day-off "
+        "callout, deadhead positioning and the delay it introduces), then rank "
+        "by cost and reachability. Prefer this over find_cover_options when the "
+        "question asks what to do rather than what is available: it returns "
+        "legal_options and rejected_options as separate lists, and every reject "
+        "carries the exact RuleTrace that excluded it.",
+        GenerateRankedRecommendationsArgs,
+        lambda tools, a: tools.generate_ranked_recommendations(
+            **a.model_dump(exclude_none=True)
+        ),
+        lambda a: (
+            "Ranking cover for "
+            f"{a.get('pairing_id') or a.get('for_crew_id') or a.get('flight_numbers')}"
+        ),
+    ),
+    ToolSpec(
         "plan_joint_cover",
         "Cover two or more simultaneous gaps as one allocation. Use this, never "
         "two independent cover searches: two searches can return the same "
@@ -617,6 +685,17 @@ TOOL_SPECS: Final[tuple[ToolSpec, ...]] = (
         GetWatchlistArgs,
         lambda tools, a: tools.get_watchlist(**a.model_dump(exclude_none=True)),
         lambda a: f"Building the watchlist for {a.get('for_date')}",
+    ),
+    ToolSpec(
+        "scan_proactive_alerts",
+        "Which crew cross RULE-DUTY-02 or RULE-FLT-03 inside a forward horizon, "
+        "with both operands and the margin, plus certificates lapsing soon. Use "
+        "it for 'what is about to break' rather than looping a per-crew lookup. "
+        "It always returns the tightest margins it found, so a clean result is "
+        "evidence rather than silence.",
+        ScanProactiveAlertsArgs,
+        lambda tools, a: tools.scan_proactive_alerts(**a.model_dump(exclude_none=True)),
+        lambda a: f"Projecting the limits {a.get('horizon_hours', 48)} hours forward",
     ),
     ToolSpec(
         "get_world_summary",

@@ -139,3 +139,72 @@ def test_an_infeasible_plan_offers_no_options() -> None:
     )
     if reply.recommendation is not None:
         assert reply.recommendation.options == []
+
+
+def test_the_contention_reaches_a_field_the_interface_renders(envelope) -> None:
+    """Computed, and invisible.
+
+    `plan_joint_cover` explains how it settled the conflict:
+
+        "C-3305 was independently the cheapest legal option for P-2205 and
+         P-2212. Assigning them to both at once would put one crew member on
+         two aircraft, so the joint allocation gives them to exactly one gap
+         and prices the next legal option for the rest."
+
+    That is the reasoning the rubric rewards and the contracts say so in as
+    many words: "`rejected` matters as much as `options`. A controller trusts
+    a system that shows its rejects, because it proves the search was real."
+    A joint plan has no rejects; contention is its equivalent, and it lives on
+    `JointPlan`, which the web contracts do not model at all. So it reached the
+    screen nowhere.
+
+    `ranking_basis` is rendered above the cards as "Ranked by ...", and "why
+    this allocation and not the obvious one" is precisely what it is for.
+    """
+    reply = _reply(envelope)
+    assert reply.recommendation is not None
+    basis = reply.recommendation.ranking_basis
+    assert "two aircraft" in basis, basis
+    assert "C-3305" in basis, basis
+
+
+def test_the_basis_still_states_the_objective(envelope) -> None:
+    reply = _reply(envelope)
+    assert reply.recommendation is not None
+    assert "min cost" in reply.recommendation.ranking_basis
+
+
+def test_an_infeasible_plan_says_why_in_the_same_place() -> None:
+    import datetime as dt
+
+    from crewops.agent.reply import build_reply
+    from crewops.contracts import JointPlan, ToolEnvelope
+
+    envelope = ToolEnvelope(
+        tool="plan_joint_cover",
+        ok=True,
+        args={},
+        payload=JointPlan(
+            objective="min_cost",
+            feasible=False,
+            why_infeasible="No allocation covers both gaps without double booking.",
+        ),
+    )
+    reply = build_reply(
+        {
+            "envelopes": [envelope],
+            "draft": "No joint plan is available.",
+            "verification": None,
+            "tier": 3,
+            "abstention": None,
+            "timings": {},
+            "model_calls": 0,
+        },
+        question="Both captains are sick.",
+        thread_id="t",
+        turn_id="u",
+        asked_at=dt.datetime(2026, 9, 14, 18, 0, 0),
+        total_ms=1,
+    )
+    assert reply.recommendation is not None
+    assert "double booking" in reply.recommendation.situation

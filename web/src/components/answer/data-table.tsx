@@ -64,7 +64,15 @@ export function DataTable({ table }: { table: Table }) {
   return (
     <figure
       ref={top}
-      className="anim-fade-up overflow-hidden rounded-md bg-surface hairline lg:-mx-14 xl:-mx-24"
+      /* NO BLEED. This used to carry `lg:-mx-14 xl:-mx-24` so a wide table
+         could borrow the margins. The chat column is not the only thing on
+         screen: the conversations rail is resident and collapsible and the
+         section rail sits down the right edge, so the space those negative
+         margins reached into is not always there, and when it is not the
+         table simply hangs off the page and takes its right-hand columns
+         with it. The inner scroller was already correct; this lets it do its
+         job. `max-w-full` is the belt to that braces. */
+      className="anim-fade-up max-w-full overflow-hidden rounded-md bg-surface hairline"
     >
       <figcaption className="flex flex-wrap items-baseline gap-x-2 px-4 pt-3 pb-1">
         <span className="text-base font-semibold text-ink">{table.title}</span>

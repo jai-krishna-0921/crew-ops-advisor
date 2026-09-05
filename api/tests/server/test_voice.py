@@ -26,24 +26,37 @@ def reply(**changes):
 
 
 def test_speech_preserves_values_and_caveats():
+    """Every figure survives. The NOTATION is the part that changes.
+
+    This used to assert the written form verbatim, which is how "39.07h" and
+    "2026-09-15" reached the synthesiser to be read as "thirty nine point
+    zero seven H" and a string of digits. `speech_for_voice` substitutes
+    notation and never value: 39.07 is still 39.07 and 15 September 2026 is
+    still 2026-09-15.
+    """
     text = speech_text(reply())
-    assert text == "C-1042 has 39.07h remaining.\n\nCheck P-2291 on 2026-09-15.\n\nTimes are UTC."
+    assert text == (
+        "C 1042 has 39.07 hours remaining.\n\n"
+        "Check P 2291 on 15 September 2026.\n\n"
+        "Times are UTC."
+    )
+    assert "39.07" in text, "the figure itself must never move"
 
 
 def test_summary_speech_reads_headline_then_offers_verified_details():
     text = speech_text(reply(), detail_level="summary")
-    assert text == "C-1042 has 39.07h remaining.\n\nWould you like more information?"
+    assert text == "C 1042 has 39.07 hours remaining.\n\nWould you like more information?"
 
 
 def test_detail_speech_continues_without_repeating_summary():
     text = speech_text(reply(), detail_level="details")
-    assert text == "Check P-2291 on 2026-09-15.\n\nTimes are UTC."
-    assert "39.07h remaining" not in text
+    assert text == "Check P 2291 on 15 September 2026.\n\nTimes are UTC."
+    assert "39.07" not in text
 
 
 def test_summary_without_more_information_does_not_offer_it():
     concise = reply(headline=None, text="C-1042 is at BLR.", caveats=[])
-    assert speech_text(concise, detail_level="summary") == "C-1042 is at BLR."
+    assert speech_text(concise, detail_level="summary") == "C 1042 is at BLR."
     assert speech_text(concise, detail_level="details") == ""
 
 
@@ -58,10 +71,10 @@ def test_markdown_cleanup_preserves_comparisons_and_omits_tables():
             ),
         )
     )
-    assert "Duty < 60h; rest > 12h." in text
-    assert "C-1042 is available." in text
+    assert "Duty < 60 hours; rest > 12 hours." in text
+    assert "C 1042 is available." in text
     assert "C-2087" not in text
-    assert "39.07h" in text
+    assert "39.07 hours" in text
     assert "<BLR>" in text
 
 
@@ -165,8 +178,14 @@ def test_socket_transcription_and_speech_share_provider():
             "text": "Who is on reserve at BLR?",
         }
         ws.send_json({"type": "speak", "request_id": "r1", "reply": reply().model_dump()})
-        assert ws.receive_json()["type"] == "audio"
-        assert ws.receive_json() == {"type": "complete", "request_id": "r1"}
+        # ONE AUDIO EVENT PER PARAGRAPH. Chunks used to be repacked up to a
+        # thousand characters, so a whole answer arrived as a single utterance
+        # with no pause anywhere in it. A chunk boundary is where the voice
+        # stops and starts again, so it now agrees with the paragraph.
+        event = ws.receive_json()
+        while event["type"] == "audio":
+            event = ws.receive_json()
+        assert event == {"type": "complete", "request_id": "r1"}
 
 
 def test_socket_summary_reports_when_detail_is_available():
@@ -181,8 +200,10 @@ def test_socket_summary_reports_when_detail_is_available():
                 "reply": reply().model_dump(),
             }
         )
-        assert ws.receive_json()["type"] == "audio"
-        assert ws.receive_json() == {
+        event = ws.receive_json()
+        while event["type"] == "audio":
+            event = ws.receive_json()
+        assert event == {
             "type": "complete",
             "request_id": "r1",
             "has_more": True,
@@ -196,9 +217,15 @@ def test_cancel_discards_inflight_speech_and_allows_next_turn():
         ws.send_json(
             {"type": "speak", "request_id": "r1", "reply": reply(text="wait forever").model_dump()}
         )
+        # The fake provider hangs on the chunk containing "wait forever", and
+        # that is now the second paragraph rather than the whole answer, so
+        # the headline's audio arrives first.
         assert ws.receive_json()["type"] == "audio"
         ws.send_json({"type": "cancel", "request_id": "r1"})
-        assert ws.receive_json() == {"type": "cancelled", "request_id": "r1"}
+        event = ws.receive_json()
+        while event["type"] == "audio":
+            event = ws.receive_json()
+        assert event == {"type": "cancelled", "request_id": "r1"}
         assert fake.cancelled
         ws.send_json({"type": "speak", "request_id": "r2", "reply": reply().model_dump()})
         assert ws.receive_json()["request_id"] == "r2"

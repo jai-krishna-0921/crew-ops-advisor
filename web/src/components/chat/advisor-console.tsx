@@ -61,6 +61,7 @@ import { FactProvider } from "@/components/evidence/fact-context";
 import { SideRail } from "@/components/shell/side-rail";
 import { ResizeHandle, useResizableWidth } from "@/components/ui/resizable";
 import { EmptyState } from "@/components/ui/primitives";
+import { AlertCard } from "@/components/chat/alert-card";
 import { cx } from "@/components/ui/tone";
 
 export function AdvisorConsole() {
@@ -422,7 +423,7 @@ export function AdvisorConsole() {
             and takes the horizontal one away, which `hidden` would not do
             without also making this a scroll container on both axes. */}
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-x-clip overflow-y-auto">
-          <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
+          <div className="mx-auto w-full max-w-[var(--measure)] px-4 sm:px-6">
             {loadError || actionError ? (
               <div className="flex items-start gap-2 rounded-md bg-breach-wash px-3.5 py-2.5">
                 <WarningCircleIcon
@@ -449,7 +450,7 @@ export function AdvisorConsole() {
           </div>
 
           {status === "loading" ? (
-            <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
+            <div className="mx-auto w-full max-w-[var(--measure)] space-y-6 px-4 py-6 sm:px-6">
               {[0, 1].map((row) => (
                 <div key={row} className="space-y-3">
                   <div className="ml-auto h-10 w-2/5 animate-pulse rounded-xl bg-inset" />
@@ -467,7 +468,7 @@ export function AdvisorConsole() {
           ) : (
             /* The bottom padding clears the floating composer, so the last
                answer can be scrolled fully clear of it. */
-            <div className="mx-auto w-full max-w-3xl px-4 pt-4 sm:px-6" style={{ paddingBottom: composerHeight }}>
+            <div className="mx-auto w-full max-w-[var(--measure)] px-4 pt-4 sm:px-6" style={{ paddingBottom: composerHeight }}>
               {turns.map((turn, index) => (
                 <TurnView
                   key={turn.localId}
@@ -496,7 +497,7 @@ export function AdvisorConsole() {
             answer dissolve under the field instead of ending at a rule. */}
         <div ref={composerArea} className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
           <div className="veil pt-12">
-            <div className="pointer-events-auto mx-auto w-full max-w-3xl">
+            <div className="pointer-events-auto mx-auto w-full max-w-[var(--measure)]">
               {/* Voice does not need the persisted text-session restore to
                   render. Keeping this tied only to stable render state
                   avoids changing the button's disabled attribute during
@@ -763,7 +764,15 @@ function Welcome({
   );
 
   return (
-    <div className="relative mx-auto w-full max-w-3xl px-6 pt-24" style={{ paddingBottom: bottomSpacing }}>
+    /* Width from the token, so there is one number for the column and it
+       stays with the top bar. `--measure` is 64rem, which is what max-w-5xl
+       was, so the two sides of this conflict agreed on the width and differed
+       only on the padding. The dynamic bottom stays: it clears the floating
+       composer, and a static pb cannot know how tall that is. */
+    <div
+      className="relative mx-auto w-full max-w-[var(--measure)] px-6 pt-12"
+      style={{ paddingBottom: bottomSpacing }}
+    >
       {/* THE LIGHT IS FULL BLEED, THE CONTENT IS NOT. `hero-wash` used to sit
           on this column, which is 768px wide, so three radial gradients were
           clipped to a box narrower than any of them and read as a smudge with
@@ -791,6 +800,16 @@ function Welcome({
         </p>
       </div>
 
+      {/* WHAT IS ALREADY WRONG COMES BEFORE WHAT YOU MIGHT ASK. The six cards
+          below are prompts; this one is a finding. A controller arrives with a
+          roster rather than a question, so the scan that has already run is
+          worth more than six suggestions of what to type. It renders nothing
+          when the scan cannot be reached, so this screen degrades to exactly
+          what it was before. */}
+      <div className="relative mt-7">
+        <AlertCard onAsk={onAsk} />
+      </div>
+
       {/* THE ARROW IS A FILLED BUTTON IN THE CARD'S OWN HUE, and it is always
           there. It was a 13px chevron that faded in on hover, which is two
           mistakes at once: on a touch screen there is no hover so it never
@@ -798,7 +817,7 @@ function Welcome({
           panel until you were already on top of it. A solid disc is what makes
           six cards read as six buttons from across the room, and it is the one
           element of the reference doing the most work. */}
-      <div className="relative mt-10 grid gap-3 sm:grid-cols-2">
+      <div className="relative mt-6 grid gap-3 sm:grid-cols-2">
         {picks.map((question, index) => {
           const tint = (index % 6) + 1;
           const Icon = PROMPT_ICON[question.id] ?? ChatCircleDotsIcon;

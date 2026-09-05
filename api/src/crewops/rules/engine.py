@@ -417,19 +417,25 @@ class LegalityEngine:
         total: float,
         prior: float,
         added: float,
+        label: str = "the assignment",
     ) -> RuleTrace:
         """100 block hours per 28 calendar days.
 
         Correct, cheap, and inert: the peak across all 150 crew and all seven
         dates is 79.28h. It is one of the seven, so it is evaluated and
         reported rather than assumed away.
+
+        `label` names what `added` came from, so the proactive alerting scan can
+        say "duties in the next 48 hours" where a cover search says "the
+        assignment". The default reproduces the string the shipped keys carry;
+        do not change it.
         """
         limit = self.max_flight_28d
         breach = total > limit + EPSILON
         margin = round(limit - total, 2)
         window = WorldOverlay.window_dates(duty_date, self.flight_window_days)
         arithmetic = (
-            f"{prior:.2f}h prior block + {added:.2f}h from the assignment = {total:.2f}h "
+            f"{prior:.2f}h prior block + {added:.2f}h from {label} = {total:.2f}h "
             f"against a {limit:.2f}h limit over {window[0]} to {window[-1]}, "
             + (f"over by {abs(margin):.2f}h" if breach else f"{margin:.2f}h spare")
         )

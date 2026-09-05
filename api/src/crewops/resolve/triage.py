@@ -31,6 +31,7 @@ __all__ = [
     "reads_as_followup",
     "refers_without_naming",
     "triage_question",
+    "unknown_stations",
 ]
 
 #: The eight stations the network serves. From `flights.json`, hub BLR.
@@ -427,7 +428,13 @@ _FOLLOW_UP_RE: Final = re.compile(
     r"|\bwhich\s+of\s+(?:them|those|these)\b"
     r"|^\s*(?:and\s+)?(?:them|those|they)\b"
     r"|^\s*(?:and\s+)?who\s+are\s+they\b"
-    r"|^\s*(?:and\s+)?the\s+(?:next|previous|following|day\s+before|day\s+after)\b",
+    r"|^\s*(?:and\s+)?the\s+(?:next|previous|following|day\s+before|day\s+after)\b"
+    # A CORRECTION IS A CONTINUATION. "Sorry I mean DEL" names one thing and
+    # takes the rest of the question from the turn before it, which is the
+    # most ordinary thing anyone does after a typo.
+    r"|\b(?:sorry[,\s]+)?i\s+(?:mean|meant)\b"
+    r"|^\s*(?:no|nope)[,\s]+"
+    r"|\bmake\s+that\b",
     re.IGNORECASE,
 )
 
@@ -463,6 +470,53 @@ _BARE_REFERENCE: Final = re.compile(
     r"|callout|call-?out|notification|message)\b",
     re.IGNORECASE,
 )
+
+
+#: A three letter code in a place only a station can go.
+#:
+#: ANCHORED ON POSITION, DELIBERATELY. `INR` is the currency on every cost line
+#: in this dataset, `FDP`, `UTC` and `SMS` all appear in ordinary answers, and
+#: a bare `[A-Z]{3}` check would flag every one of them. "at INR" and "from
+#: INR" are things nobody writes about money.
+_STATION_POSITION: Final = re.compile(
+    r"\b(?:at|from|to|into|via|out\s+of|based\s+at|departing|arriving|"
+    r"inbound\s+to|outbound\s+from)\s+([A-Z]{3})\b"
+    r"|\b([A-Z]{3})\s+(?:is\s+)?(?:closed|closes|shut|shuts|closure)\b",
+)
+
+#: "Sorry I mean INR". A correction names one thing and inherits the rest of
+#: the question from the turn before it, so the token it names is whatever the
+#: previous turn's was: here, a station.
+_CORRECTION: Final = re.compile(
+    r"\b(?:sorry[,\s]+)?i\s+(?:mean|meant)\b|^\s*(?:no|nope)[,\s]+"
+    r"|\bmake\s+that\b|\bnot\b\s+\w+[,\s]+i\s+mean\b",
+    re.IGNORECASE,
+)
+
+
+def unknown_stations(question: str) -> tuple[str, ...]:
+    """Station-shaped tokens the dataset has never heard of.
+
+    "Who is on reserve at IDR" dropped its filter and answered about all 16
+    reserves, because IDR is not a station so nothing extracted it, so the plan
+    carried no base. Every figure in that answer was real and it was the answer
+    to a different question.
+
+    A correction counts too. "Sorry I mean INR" was declined for naming nothing
+    in the dataset, which is true of the words and useless to the person who
+    typed them: the turn before it was about a station, so INR is one, and the
+    honest reply is that it is not.
+    """
+    found: list[str] = []
+    for match in _STATION_POSITION.finditer(question):
+        token = match.group(1) or match.group(2)
+        if token and token not in STATIONS:
+            found.append(token)
+    if _CORRECTION.search(question):
+        for token in re.findall(r"\b([A-Z]{3})\b", question):
+            if token not in STATIONS:
+                found.append(token)
+    return tuple(dict.fromkeys(found))
 
 
 def refers_without_naming(question: str, entities: Entities) -> bool:

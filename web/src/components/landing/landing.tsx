@@ -37,8 +37,9 @@
  * claims made instead are about the mechanism, which does not move.
  */
 
+import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRightIcon,
   ArrowUpRightIcon,
@@ -385,10 +386,17 @@ function Nav() {
         >
           <Link
             href="/"
-            className="flex items-center gap-2 pr-2 text-base font-semibold text-ink"
+            aria-label="Extroc, home"
+            className="flex items-center pr-2"
           >
-            <Mark />
-            <span className="hidden sm:inline">Extroc</span>
+            <Image
+              src="/logo-with-name.png"
+              alt="Extroc"
+              width={2172}
+              height={724}
+              priority
+              className="h-10 w-auto"
+            />
           </Link>
 
           <span aria-hidden className="mx-1 hidden h-5 w-px bg-line md:block" />
@@ -462,35 +470,6 @@ function Nav() {
         ))}
       </div>
     </>
-  );
-}
-
-function Mark() {
-  const gradientId = useId();
-  return (
-    <svg width="20" height="20" viewBox="0 0 18 18" fill="none" aria-hidden>
-      <defs>
-        <linearGradient id={gradientId} x1="4" y1="3" x2="14" y2="15">
-          <stop offset="0%" style={{ stopColor: "var(--brand-from)" }} />
-          <stop offset="100%" style={{ stopColor: "var(--brand-to)" }} />
-        </linearGradient>
-      </defs>
-      <circle
-        cx="9"
-        cy="9"
-        r="7"
-        stroke="var(--ink-3)"
-        strokeWidth="1.5"
-        strokeDasharray="2.2 2.2"
-      />
-      <path
-        d="M9 4.6V9l3.1 2.2"
-        stroke={`url(#${gradientId})`}
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 
@@ -1361,10 +1340,13 @@ function Footer() {
         <div className="grid gap-12 lg:grid-cols-[1fr_1.5fr]">
           <Reveal>
             <div>
-              <div className="flex items-center gap-2.5">
-                <Mark />
-                <p className="text-md font-semibold text-ink">Extroc</p>
-              </div>
+              <Image
+                src="/logo-with-name.png"
+                alt="Extroc"
+                width={2172}
+                height={724}
+                className="h-14 w-auto"
+              />
               <p className="mt-5 max-w-[34ch] text-base leading-relaxed text-ink-2">
                 A decision aid for the dCortex Air Crew Control desk. One week
                 of a real network, seven rules, and an answer you are meant to
