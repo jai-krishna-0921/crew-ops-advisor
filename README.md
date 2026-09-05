@@ -1,13 +1,48 @@
-# Extroc
+<p align="center">
+  <a href="https://extroc-jpkcqxtlma-uc.a.run.app">
+    <img src="docs/media/logo.png" alt="Extroc" width="420">
+  </a>
+</p>
 
-A conversational decision aid for an airline Crew Control desk, built for the
-dCortex "Agentic Crew Ops Advisor" hackathon.
+<p align="center"><b>A crew desk advisor that never guesses.</b></p>
+
+<p align="center">
+  The model plans and explains. Deterministic code computes.<br>
+  A guard checks every figure in the answer against what the tools returned.
+</p>
+
+<p align="center">
+  <a href="https://extroc-jpkcqxtlma-uc.a.run.app"><img alt="Live demo" src="https://img.shields.io/badge/live%20demo-extroc-4f46e5?style=flat-square"></a>
+  <a href="#quick-start"><img alt="Runs with no API key" src="https://img.shields.io/badge/runs%20with-no%20API%20key-16a34a?style=flat-square"></a>
+  <a href="docs/architecture.pdf"><img alt="Architecture diagram" src="https://img.shields.io/badge/architecture-diagram-0ea5e9?style=flat-square"></a>
+  <a href="docs/DECK.md"><img alt="Presentation deck" src="https://img.shields.io/badge/presentation-deck-f59e0b?style=flat-square"></a>
+  <img alt="Python" src="https://img.shields.io/badge/python-3.12%20%7C%203.13-3776ab?style=flat-square">
+  <img alt="Next.js" src="https://img.shields.io/badge/next.js-16-000000?style=flat-square">
+  <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-64748b?style=flat-square">
+</p>
+
+<p align="center">
+  <a href="https://extroc-jpkcqxtlma-uc.a.run.app"><b>Open the live demo</b></a> &nbsp;&middot;&nbsp;
+  <a href="docs/SETUP.md">Setup</a> &nbsp;&middot;&nbsp;
+  <a href="docs/AGENT-DESIGN.md">Agent design</a> &nbsp;&middot;&nbsp;
+  <a href="docs/FAILURE-ANALYSIS.md">What breaks</a> &nbsp;&middot;&nbsp;
+  <a href="docs/VOICE.md">Voice</a> &nbsp;&middot;&nbsp;
+  <a href="COMMANDS.md">Demo script</a>
+</p>
+
+<p align="center">
+  <a href="https://extroc-jpkcqxtlma-uc.a.run.app/ask">
+    <img src="docs/media/console-recommendation.jpg" alt="Extroc ranking legal cover options by cost, with the binding rule named" width="900">
+  </a>
+</p>
+
+---
 
 A controller asks a question in plain language. The system answers with a
 figure, the arithmetic behind it, the rules it checked, and the options it
 ranked. When it cannot answer reliably it says so, and says what was missing.
 
----
+Built for the dCortex "Agentic Crew Ops Advisor" hackathon.
 
 ## Quick start
 
@@ -20,10 +55,6 @@ make dev         # API on :8000, web on :3000
 ```
 
 Open <http://localhost:3000>. The console is at `/ask`.
-
-The console also supports hands-free voice with Sarvam transcription and TTS,
-with Gemini available as an alternate cloud provider. Choose a provider above
-the composer, then Start. Setup and controls: [Voice conversation](docs/VOICE.md).
 
 **No API key is needed.** Without one the deterministic resolver answers,
 through the same tools, the same rules engine and the same grounding check.
@@ -93,8 +124,9 @@ Next.js console  --SSE-->  FastAPI  -->  LangGraph agent
                                       SQLite projection
 ```
 
-The interactive version of this diagram, including which side of the line each
-component sits on, is at `/architecture` in the running app.
+The interactive version, including which side of the line each component sits
+on, is at `/architecture` in the running app and as
+[`docs/architecture.pdf`](docs/architecture.pdf).
 
 ### What each layer may do
 
@@ -107,6 +139,7 @@ component sits on, is at `/architecture` in the running app.
 | `api/src/crewops/store/` | SQLite projection and typed queries | no |
 | `api/src/crewops/tools/` | The tool surface the agent calls | no |
 | `api/src/crewops/agent/` | LangGraph graph, prompts, memory, guards | yes, this is the agent |
+| `api/src/crewops/agent/voice/` | Speech in and out. Selects prose, never writes it. | no |
 | `api/src/crewops/verify/` | The grounding verifier | no |
 | `api/src/crewops/resolve/` | Offline resolver, used when no API key is set | no |
 | `api/src/crewops/server/` | FastAPI, SSE streaming | no |
@@ -133,11 +166,30 @@ Fact(
 `derivation` is the point. A controller who is about to move a crew member and
 sign their name to it does not want to be told the answer, they want to be able
 to check it and argue with it. In the console, hovering any figure in the prose
-highlights the fact that attests it and shows this derivation.
+opens the fact that attests it and shows this derivation.
 
 It is also what makes the verifier possible. If a number can appear in an
 answer, a tool must have emitted a `Fact` for it. When verification fails, the
 fix is to add the missing fact to the tool. It is never to relax the check.
+
+<p align="center">
+  <img src="docs/media/console-option-detail.jpg" alt="A ranked option with its costing, trade-offs and per-day rule check" width="900">
+</p>
+
+---
+
+## Voice is a peripheral, not a second brain
+
+Speech in becomes a transcript, the transcript goes to the same `/api/chat`,
+and the answer comes back through the same tools, the same seven rules and the
+same grounding verifier. Speech out reads prose the verifier already passed:
+`agent/voice/prose.py` selects and chunks the existing headline, body and
+caveats, and returns nothing at all when verification is not `verified` or
+`repaired`, so a rejected draft is never spoken.
+
+Nothing under `agent/voice/` imports a model client. No speech provider ever
+sees the dataset, and none of them can put a figure on screen. Setup and
+controls: [`docs/VOICE.md`](docs/VOICE.md).
 
 ---
 
@@ -222,11 +274,27 @@ figures needs more room than a README should give it.
 
 ---
 
+## Deliverables
+
+Against the checklist in section 8 of the problem statement.
+
+| Deliverable | Where |
+|---|---|
+| Source code repository | This repository |
+| Architecture diagram, showing the LLM against the deterministic boundary | [`docs/architecture.pdf`](docs/architecture.pdf), interactive at `/architecture` |
+| README with setup, approach and trade-offs | This file, plus [`docs/SETUP.md`](docs/SETUP.md) |
+| Sample inputs and outputs, with a failure case and analysis | `make eval` writes to `api/.eval/`, analysed in [`docs/FAILURE-ANALYSIS.md`](docs/FAILURE-ANALYSIS.md) |
+| Presentation deck | [`docs/DECK.md`](docs/DECK.md), print ready as [`docs/deck.pdf`](docs/deck.pdf) |
+| Live demo | <https://extroc-jpkcqxtlma-uc.a.run.app> |
+
+---
+
 ## Repository
 
 | Path | What is in it |
 |---|---|
 | `docs/SETUP.md` | Install, run, configure, and what to do when it does not work |
+| `docs/DECK.md` | The presentation deck, in source form |
 | `docs/PRODUCTION.md` | Crew PII, scaling to a real airline, and business impact |
 | `COMMANDS.md` | The demo script: every command in order, with what each proves |
 | `docs/CONTRACTS.md` | The seam: tool surface, HTTP and SSE contracts |
@@ -234,6 +302,7 @@ figures needs more room than a README should give it.
 | `docs/REQUIREMENTS.md` | Every requirement, with where it is satisfied and how it is verified |
 | `docs/FAILURE-ANALYSIS.md` | What breaks, graded safe against unsafe |
 | `docs/AGENT-DESIGN.md` | The graph, the guards, and how the verifier works |
+| `docs/VOICE.md` | Speech in and out, and why it cannot invent a figure |
 
 Licensed MIT. The dataset under `data/` is provided by dCortex and is not ours
 to relicense.
