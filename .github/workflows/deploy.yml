@@ -1,0 +1,54 @@
+# Build and roll out to Cloud Run.
+#
+# ONLY THIS BRANCH. main keeps its existing CI (lint/test/dataset-guard) and
+# stays deployment-free, matching the problem statement's own instruction not
+# to spend hackathon effort on infrastructure. deploy/extroc is a separate,
+# opt-in lane for demoing the app off a laptop; pushing here is a deliberate
+# act, not a side effect of the team's normal work on main.
+#
+# NO SERVICE ACCOUNT KEY ANYWHERE. Authentication is Workload Identity
+# Federation: GitHub mints a short-lived OIDC token for this repository and
+# this branch, Google trades it for an access token, and nothing long-lived
+# is ever stored in a GitHub secret.
+name: deploy
+
+on:
+  push:
+    branches: [deploy/extroc]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-extroc
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: generative-ai-solutions
+  REGION: us-central1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: build and roll out
+        # The same script a person runs from a laptop. One code path, so a
+        # deploy from CI cannot drift from a deploy by hand.
+        run: ./deploy/release.sh
+        env:
+          TAG: ${{ github.sha }}
+
+      - name: smoke test
+        run: ./deploy/smoke.sh

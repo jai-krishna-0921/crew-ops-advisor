@@ -10,7 +10,11 @@ export async function voiceStatus(signal?: AbortSignal): Promise<VoiceStatus> {
 export function connectVoice(provider: VoiceProvider, event: (event: VoiceEvent) => void,
   closed: () => void, signal?: AbortSignal): Promise<VoiceConnection> {
   return new Promise((resolve, reject) => {
-    const url = new URL(`${API_BASE}/api/voice/session`);
+    // A base is required here: in the deployed container API_BASE is "" (the
+    // API is same-origin, behind nginx), and `new URL` throws on a relative
+    // string with no base. fetch() tolerates a relative URL on its own, which
+    // is why this is the only call site that needs one.
+    const url = new URL(`${API_BASE}/api/voice/session`, window.location.origin);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set("provider", provider);
     const socket = new WebSocket(url);

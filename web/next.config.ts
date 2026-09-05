@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
   },
+  // A self-contained server bundle for the container image: nginx fronts it
+  // and FastAPI in one process each, so this only needs node and its own
+  // node_modules, not the pnpm workspace that built it.
+  output: "standalone",
 };
 
 export default nextConfig;

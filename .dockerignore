@@ -1,0 +1,17 @@
+**/node_modules
+**/.next
+**/__pycache__
+**/*.pyc
+**/.venv
+.git
+.github
+docs
+problem-statement
+*.png
+web/.env*
+.env*
+api/.crewops
+api/tests
+web/src/**/*.test.*
+.claude
+.planning
