@@ -3042,6 +3042,21 @@ class Tools:
                 return str(member.crew_id)
         return None
 
+    def _clock_columns(self, crew_id: str) -> dict[str, Any]:
+        """The shipped duty clock for one crew member, as scalar columns.
+
+        Absent for a crew member with no clock record, rather than zero: a
+        missing figure and a figure of zero are different findings, and `max`
+        over a column of invented zeros would be quietly wrong.
+        """
+        clock = self.world.duty_clock(crew_id)
+        if clock is None:
+            return {}
+        return {
+            "duty_hours_7d": clock.duty_hours_7d,
+            "flight_hours_28d": clock.flight_hours_28d,
+        }
+
     def _aggregate_rows(self, collection: str) -> list[dict[str, Any]]:
         """Every record of one collection, flattened to scalar fields.
 
@@ -3065,6 +3080,18 @@ class Tools:
                 for f in self.world.flights
             ]
         if collection == "crew":
+            # THE DUTY CLOCKS BELONG HERE. Without them "who has the most duty
+            # hours in the last 7 days" had no tool at all: the aggregate
+            # refused the field, and the agent answered with the roster week
+            # AHEAD, which is a different question with a different winner
+            # (C-2143 at 42.51h forward, against C-3305 at 56.4h accrued).
+            #
+            # These are the shipped figures as of the snapshot, which is
+            # exactly what "the last 7 days" means from a controller's chair.
+            # They are summaries and go stale the moment a duty is simulated,
+            # so nothing that decides legality reads them: `rules/` recomputes
+            # both windows from the roster and is verified 150/150 against
+            # these. This is the reporting view, not the deciding one.
             return [
                 {
                     "crew_id": c.crew_id,
@@ -3074,6 +3101,7 @@ class Tools:
                     "seniority": c.seniority,
                     "reachability_minutes": c.reachability_minutes,
                     "status": c.status,
+                    **self._clock_columns(c.crew_id),
                 }
                 for c in self.world.crew
             ]

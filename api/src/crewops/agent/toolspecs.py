@@ -477,9 +477,14 @@ TOOL_SPECS: Final[tuple[ToolSpec, ...]] = (
         "stations'. Counting a list yourself is arithmetic, and arithmetic is "
         "not yours to do. Pairing rows carry captain, first_officer and "
         "senior_cabin_crew, so 'which captain holds the most pairings or legs' "
-        "is one call grouped by captain. An unknown field is an error naming "
-        "the fields that collection does have: read that error and re-call, "
-        "never fall back to fetching the records one at a time.",
+        "is one call grouped by captain. Crew rows carry duty_hours_7d and "
+        "flight_hours_28d as accrued at the snapshot, so 'who has the most "
+        "duty hours in the last 7 days' and 'is anyone over 70 flight hours "
+        "in 28 days' are one call each: those windows look BACKWARD from the "
+        "snapshot and are not the roster week ahead, which is a different "
+        "question with a different answer. An unknown field is an error "
+        "naming the fields that collection does have: read that error and "
+        "re-call, never fall back to fetching the records one at a time.",
         AggregateArgs,
         lambda tools, a: tools.aggregate(**a.model_dump(exclude_none=True)),
         lambda a: f"Aggregating {a.get('metric')} over {a.get('collection')}",
