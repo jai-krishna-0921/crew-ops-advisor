@@ -381,6 +381,33 @@ delivery not.
       "06:00Z" as characters. Chunks now follow paragraphs and end on a full
       stop, and `speech_for_voice` substitutes notation, never value.
 
+## Landed: the second console report
+
+- [x] **The agent dip I caused.** The enumeration guard worked and the
+      scorecard moved the wrong way with it, agent abstentions 4 to 8. Both
+      kinds of correction came out of one counter, so a turn asked to stop
+      reciting the option cards had spent its only pass and the rewrite
+      quoting one unattestable figure had nothing left to fix it.
+      `style_repairs` sits beside `repairs` now. Back to 38 correct, 3
+      abstained, 0 verdict inversions.
+- [x] **"Who is on reserve at IDR" answered about all 16 reserves.** IDR is
+      not a station, so nothing extracted it, so the plan carried no base and
+      the list came back unfiltered. "A failed lookup is not a finding of
+      'none'" already existed; this is its mirror, and stations were the gap
+      because they are filters rather than subjects.
+- [x] **"SOrry i mean INR" was refused for naming nothing.** True of the
+      words, useless to whoever typed them. Anchored on a station position or
+      a correction marker, never the shape alone, because INR is the currency
+      on every cost line here.
+- [x] **A refusal that understood everything but one token is now kept.** Only
+      answered turns were remembered. Right for a refusal that understood
+      nothing, wrong for one that read the shape, the date and every other
+      filter correctly. A controller who mistypes twice no longer retypes the
+      question.
+- [x] **The chat column was 48rem while the top bar and skeleton were 64rem.**
+      Widened, with running text held to about 68 characters so paragraphs do
+      not get worse as the cards get better.
+
 ## Open, in order
 
 - [ ] Presentation deck. The one unticked box on the problem statement's own
@@ -390,6 +417,10 @@ delivery not.
       model-side: bare refusals, one 30s timeout, S6 answering short.
 - [ ] Voice: a listen check on real audio. The chunking and the notation are
       tested; how it actually sounds is not, and cannot be from here.
+- [ ] Confirm the agent stops calling `get_world_summary` on an unknown
+      station. The tool error already names the eight, so it has no reason to,
+      but the stray "147 flights, 150 crew" table in the report came from
+      there and it has not been watched since.
 - [ ] `find_cover_options` is 223KB on the wire to the browser too. The UI
       renders all of it, so this is not wrong, but it is worth knowing.
 
